@@ -58,7 +58,7 @@ handoff: code carries `arca://` references, never values.
 
 | Crate | Role |
 | --- | --- |
-| `arca-core` | `arca://` refs, `Secret` newtype, env axis, actor/policy — pure, no I/O |
+| `arca-core` | `arca://` refs, `Secret` newtype, env axis, actor attribution — pure, no I/O |
 | `arca-config` / `-toml` | config port + impl |
 | `arca-vault` | readable-store port: get/put/list/rotate, env variants |
 | `arca-vault-age` | local age file — v1 impl |

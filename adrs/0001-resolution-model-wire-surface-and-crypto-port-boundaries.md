@@ -41,11 +41,22 @@ how a project declares its secret surface.
   records its own invocations when orchestrating); aggregation,
   retention, and compliance views are peregrin's — integrating
   the battle-tested ledger beats a weaker local one.
+- **Policy belongs to peregrin too.** Same mechanism/policy split
+  as sepia↔peregrin: arca = mechanism (vault ops, refs, redaction,
+  injection); peregrin = policy (who may invoke which op on which
+  ref in which env). Enforcement-grade access control needs a
+  trusted identity plane, which only peregrin owns — a locally
+  claimed `ARCA_ACTOR` is spoofable by construction. What stays
+  local is **guardrails**, not policy: an optional deny-by-default
+  op table in `arca.toml` (e.g. agents get `run`/`list`, never
+  `get`/`put`) — accident-prevention for standalone use, honestly
+  labeled advisory. `arca-core` keeps `Actor` as an attribution
+  string only.
 - **`serve` is a port + adapters.** `Serve` = verb dispatch over a
   wire; **ndjson JSON-RPC 2.0 on stdio is the first/default impl**
   (sepia/myco protocol family); unix socket / HTTP are later
-  adapters. Still gated: per-request actor attribution + policy
-  must exist first — whoever connects inherits vault access.
+  adapters. Its gate is a trusted actor source — peregrin's
+  identity plane or equivalent — not a local policy model.
 - **Crypto is fixed: age.** All vault impls store opaque age
   ciphertext; stores never see plaintext. Whether crypto graduates
   to a second port (`seal`/`open` with age|kms impls) is decided
@@ -55,8 +66,8 @@ how a project declares its secret surface.
 ## Consequences
 
 Refs stay portable across environments; backend swap is a config
-change. Audit has no local implementation to maintain — it
-arrives free once `serve` lands. `serve`, KMS, and envelope refs
-remain cheap to add later because vault, wire, and crypto
-boundaries already isolate them. Actor+policy (in `arca-core`,
-reviewed in P-001) is the hard dependency for `serve`.
+change. Audit and policy have no local implementation to
+maintain — both arrive via peregrin once `serve` lands. `serve`,
+KMS, and envelope refs remain cheap to add later because vault,
+wire, and crypto boundaries already isolate them. The gate for
+`serve` is peregrin's trusted-actor plane, not anything in arca.
