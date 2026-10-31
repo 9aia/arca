@@ -2,4 +2,4 @@
 
 - [ ] T-003 P4 cloud — arca-vault-cf + Worker, arca-deploy/-cf, aws spike branch · owner:devin · created:2026-10-31
 - [ ] T-004 P5 polish + ship — arca ui TUI, docs site, installable-via-git check · owner:devin · created:2026-10-31
-- [ ] T-002 P3 verbs + surfaces — put/get/list/rm/rotate/run/env, arca.toml, audit events, manifest/schema, skill · status:claimed · pri:high · owner:devin · created:2026-10-31
+- [ ] T-002 P3 verbs + surfaces — put/get/list/rm/rotate/run/env, arca.toml, audit events, manifest/schema, skill · status:in-progress · pri:high · owner:devin · created:2026-10-31
