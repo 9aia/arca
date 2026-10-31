@@ -33,6 +33,15 @@ Roadmap per P-001. Hard constraints from the owner:
   age ciphertext) · `arca-deploy` port + `arca-deploy-cf`
   (push-only targets) · *spike*: `arca-vault-aws` on a local
   branch → delete.
+  Spike verdict (SPIKE.md, branch deleted after review): the
+  `Vault` port fits a hosted secrets manager **unchanged** — a
+  Secrets Manager-shaped transport carries the full contract.
+  Stores without per-record fields need a client-side JSON
+  envelope (`ct`+version+timestamps inside SecretString); age
+  stays fixed — **no crypto port needed** (KMS would be a new
+  ADR, not a blocker). Still needed for a real impl: SigV4-signed
+  blocking transport, pagination, delete-recovery semantics,
+  `kind = "aws"` config arm.
 - [ ] **P5 — polish + ship**: `arca ui` TUI · docs site →
   `9aia.com/arca` · mimus key-resolution migration.
   Landed: TUI shipped (audited two-step reveal),
