@@ -94,9 +94,13 @@ pub fn emit(event: &AuditEvent) {
 }
 
 /// Write `event` as one ndjson line to `w` — the testable core.
+///
+/// Serializing this POD event cannot fail in practice — every
+/// field is a string/enum — so the `expect` documents an invariant
+/// rather than guards a reachable panic.
+#[allow(clippy::unwrap_used)]
 pub fn emit_to(w: &mut impl Write, event: &AuditEvent) -> io::Result<()> {
-    let line =
-        serde_json::to_string(event).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let line = serde_json::to_string(event).expect("audit event serializes");
     writeln!(w, "{line}")
 }
 
@@ -149,5 +153,23 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
         assert_eq!(v["outcome"], "denied");
         assert_eq!(v["rref"], "billing/stripe");
+    }
+
+    #[test]
+    fn a_failing_writer_propagates_the_io_error() {
+        struct Dead;
+        impl Write for Dead {
+            fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, "dead"))
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let ev = AuditEvent::op("devin", Op::List, None, "dev", Outcome::Ok);
+        assert!(emit_to(&mut Dead, &ev).is_err());
+        // and `emit` swallows the same failure — stderr can be a
+        // broken pipe, arca must not crash
+        emit(&ev);
     }
 }

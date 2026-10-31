@@ -134,5 +134,14 @@ mod tests {
         assert_eq!(serde_json::to_string(&e).unwrap(), "\"prod\"");
         assert_eq!(serde_json::from_str::<Env>("\"prod\"").unwrap(), e);
         assert!(serde_json::from_str::<Env>("\"PROD\"").is_err());
+        // a non-string fails before validation is even consulted
+        assert!(serde_json::from_str::<Env>("42").is_err());
+    }
+
+    #[test]
+    fn into_string_gives_back_the_name() {
+        let e = Env::new("staging").unwrap();
+        assert_eq!(String::from(e), "staging");
+        assert_eq!(Env::dev().to_string(), "dev");
     }
 }

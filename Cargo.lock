@@ -258,6 +258,7 @@ dependencies = [
  "arca-core",
  "arca-deploy",
  "arca-deploy-cf",
+ "arca-testkit",
  "arca-vault",
  "arca-vault-age",
  "arca-vault-cf",
@@ -289,10 +290,12 @@ version = "0.1.0"
 dependencies = [
  "arca-core",
  "arca-ops",
+ "arca-testkit",
  "arca-vault",
  "arca-vault-age",
  "crossterm",
  "ratatui",
+ "temp-env",
  "tempfile",
  "time",
 ]

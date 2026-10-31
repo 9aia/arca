@@ -15,8 +15,10 @@ ratatui.workspace = true
 crossterm.workspace = true
 
 [dev-dependencies]
+arca-testkit.workspace = true
 arca-vault-age.workspace = true
 tempfile.workspace = true
+temp-env.workspace = true
 
 [lints]
 workspace = true

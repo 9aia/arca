@@ -84,20 +84,23 @@ mod tests {
     #[test]
     fn runs_in_worktree() {
         let d = tmpdir("run");
-        let st = run(&d, "exit 0").unwrap_or_else(|_| std::process::exit(1));
+        let st = run(&d, "exit 0").unwrap();
         assert!(st.success());
-        let st = run(&d, "exit 3").unwrap_or_else(|_| std::process::exit(1));
+        let st = run(&d, "exit 3").unwrap();
         assert_eq!(st.code(), Some(3));
+        // a workdir that doesn't exist fails the spawn, no panic
+        assert!(run(Path::new("/nonexistent-dir-xyz"), "exit 0").is_err());
         let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
     fn captures_output() {
         let d = tmpdir("out");
-        let out = output(&d, "echo hi; pwd").unwrap_or_else(|_| std::process::exit(1));
+        let out = output(&d, "echo hi; pwd").unwrap();
         let text = String::from_utf8_lossy(&out.stdout);
         assert!(text.contains("hi"));
         assert!(text.contains(d.to_string_lossy().as_ref()));
+        assert!(output(Path::new("/nonexistent-dir-xyz"), "echo hi").is_err());
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -105,11 +108,11 @@ mod tests {
     fn injects_env_vars() {
         let d = tmpdir("env");
         let vars = [("ARCA_TEST_VAR".to_string(), "fake-injected".to_string())];
-        let out = output_with_env(&d, "echo $ARCA_TEST_VAR", &vars)
-            .unwrap_or_else(|_| std::process::exit(1));
+        let out = output_with_env(&d, "echo $ARCA_TEST_VAR", &vars).unwrap();
         assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "fake-injected");
         // and the var didn't leak into *our* env
         assert!(std::env::var("ARCA_TEST_VAR").is_err());
+        assert!(output_with_env(Path::new("/nonexistent-dir-xyz"), "echo x", &vars).is_err());
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -124,7 +127,7 @@ mod tests {
             &["printenv".to_string(), "ARCA_TEST_VAR".to_string()],
             &vars,
         )
-        .unwrap_or_else(|_| std::process::exit(1));
+        .unwrap();
         assert!(st.success());
         // missing program → io error, not a shell message
         assert!(exec_with_env(&d, &["definitely-not-a-binary".to_string()], &[]).is_err());

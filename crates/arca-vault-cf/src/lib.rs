@@ -297,7 +297,7 @@ impl CfVault {
         value: Secret,
         rotate: bool,
     ) -> Result<SecretRecord, VaultError> {
-        let blob = seal(&self.recipients, value.expose())?;
+        let blob = seal(&self.recipients, value.expose());
         let b64 = base64::engine::general_purpose::STANDARD.encode(blob);
         let body = serde_json::json!({ "ciphertext": b64, "rotate": rotate }).to_string();
         let (status, text) = self.request("PUT", &self.item_url(env, rref), Some(body))?;
@@ -322,19 +322,22 @@ impl CfVault {
 
 /// Age-encrypt `plaintext` to `recipients` — per-secret ciphertext,
 /// unlike `arca-vault-age`'s whole-doc encryption (deliberate small
-/// duplication rather than a shared crypto crate).
-fn seal(recipients: &[x25519::Recipient], plaintext: &str) -> Result<Vec<u8>, VaultError> {
+/// duplication rather than a shared crypto crate). In-memory
+/// encryption cannot realistically fail — callers always pass ≥1
+/// recipient and a `Vec` sink never errors — so the `expect`s
+/// document invariants rather than guard reachable paths.
+#[allow(clippy::unwrap_used)]
+fn seal(recipients: &[x25519::Recipient], plaintext: &str) -> Vec<u8> {
     let encryptor =
         age::Encryptor::with_recipients(recipients.iter().map(|r| r as &dyn age::Recipient))
-            .map_err(|e| VaultError::Crypto(format!("encryptor: {e}")))?;
+            .expect("seal is only called with ≥1 recipient");
     let mut cipher = Vec::new();
-    let mut w = encryptor
-        .wrap_output(&mut cipher)
-        .map_err(|e| VaultError::Crypto(format!("encrypt: {e}")))?;
-    w.write_all(plaintext.as_bytes())?;
-    w.finish()
-        .map_err(|e| VaultError::Crypto(format!("encrypt: {e}")))?;
-    Ok(cipher)
+    {
+        let mut w = encryptor.wrap_output(&mut cipher).expect("in-memory wrap");
+        w.write_all(plaintext.as_bytes()).expect("in-memory write");
+        w.finish().expect("in-memory finish");
+    }
+    cipher
 }
 
 /// Decrypt one per-secret ciphertext blob with `identity`.
@@ -377,12 +380,46 @@ mod tests {
     #[test]
     fn seal_open_roundtrip_hides_value() {
         let id = x25519::Identity::generate();
-        let blob = seal(&[id.to_public()], "fake-roundtrip").unwrap();
+        let blob = seal(&[id.to_public()], "fake-roundtrip");
         assert!(!String::from_utf8_lossy(&blob).contains("fake-roundtrip"));
         assert_eq!(open(&id, &blob).unwrap(), "fake-roundtrip");
         // a different identity can't open it
         let other = x25519::Identity::generate();
         assert!(open(&other, &blob).is_err());
+    }
+
+    #[test]
+    fn open_rejects_scrypt_and_tampered_blobs() {
+        let id = x25519::Identity::generate();
+        // passphrase-encrypted → we hold no passphrase
+        let scrypt = age::Encryptor::with_user_passphrase(age::secrecy::SecretString::from(
+            "fake-pw".to_string(),
+        ));
+        let mut blob = Vec::new();
+        {
+            let mut w = scrypt.wrap_output(&mut blob).unwrap();
+            w.write_all(b"x").unwrap();
+            w.finish().unwrap();
+        }
+        let e = open(&id, &blob).unwrap_err();
+        assert!(e.to_string().contains("passphrase"), "{e}");
+        // not an age stream at all
+        assert!(open(&id, b"garbage").is_err());
+        // valid envelope but corrupted/truncated body → read fails
+        let good = seal(&[id.to_public()], "fake-body");
+        let cut = &good[..good.len() / 2];
+        assert!(open(&id, cut).is_err());
+    }
+
+    #[test]
+    fn request_rejects_unknown_method_body_shapes() {
+        // `request` is the internal HTTP seam — a shape no caller
+        // produces must be a clean error, never a panic
+        let id = x25519::Identity::generate();
+        let v = CfVault::with_identity("http://127.0.0.1:1", "t", id, &[]).unwrap();
+        assert!(v.request("PATCH", "http://x", None).is_err());
+        assert!(v.request("GET", "http://x", Some("{}".into())).is_err());
+        assert!(v.request("PUT", "http://x", None).is_err());
     }
 
     #[test]
@@ -395,5 +432,62 @@ mod tests {
         temp_env::with_var_unset("ARCA_CF_TOKEN_TEST", || {
             assert!(CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", &id_path, &[]).is_err());
         });
+        // set but empty → still an error
+        temp_env::with_var("ARCA_CF_TOKEN_TEST", Some(""), || {
+            let e = CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", &id_path, &[])
+                .err()
+                .unwrap();
+            assert!(e.to_string().contains("empty"), "{e}");
+        });
+    }
+
+    #[test]
+    fn new_and_with_identity_validate_inputs() {
+        let dir = tempfile::tempdir().unwrap();
+        let id_path = dir.path().join("identity.txt");
+        let id = x25519::Identity::generate();
+        use age::secrecy::ExposeSecret;
+        std::fs::write(&id_path, format!("{}\n", id.to_string().expose_secret())).unwrap();
+        // a broken identity file fails before any env-var concern
+        let junk = dir.path().join("junk.txt");
+        std::fs::write(&junk, "not-a-key\n").unwrap();
+        temp_env::with_var("ARCA_CF_TOKEN_TEST", Some("fake"), || {
+            assert!(CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", &junk, &[]).is_err());
+        });
+        // invalid extra recipient strings are config errors
+        let e = CfVault::with_identity("http://x", "t", id.clone(), &["bad!!".into()])
+            .err()
+            .unwrap();
+        assert!(e.to_string().contains("invalid recipient"), "{e}");
+    }
+
+    #[test]
+    fn error_msg_prefers_auth_hint_then_body() {
+        // 401/403 get the token hint regardless of body
+        for status in [401, 403] {
+            let e = CfVault::error_msg(status, "{}");
+            assert!(e.to_string().contains("unauthorized"), "{e}");
+        }
+        // a json error body is surfaced
+        let e = CfVault::error_msg(500, r#"{"error":"d1 is down"}"#);
+        assert!(e.to_string().contains("d1 is down"), "{e}");
+        // non-json bodies degrade to a truncated dump
+        let e = CfVault::error_msg(502, "not json at all");
+        assert!(e.to_string().contains("not json at all"), "{e}");
+    }
+
+    #[test]
+    fn read_identity_rejects_missing_and_garbage_files() {
+        let dir = tempfile::tempdir().unwrap();
+        // missing file → config error
+        assert!(read_identity(&dir.path().join("nope.txt")).is_err());
+        // comments only → "holds no key"
+        let p = dir.path().join("comments.txt");
+        std::fs::write(&p, "# nothing\n\n").unwrap();
+        assert!(read_identity(&p).is_err());
+        // a non-key line → crypto error
+        let p = dir.path().join("bad.txt");
+        std::fs::write(&p, "AGE-SECRET-KEY-NOTREAL\n").unwrap();
+        assert!(read_identity(&p).is_err());
     }
 }

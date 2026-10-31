@@ -151,12 +151,7 @@ fn main() -> ExitCode {
         // Pure introspection — before config load, no audit event.
         Cmd::Manifest => json_out(&manifest()),
         Cmd::GenCliDocs => out(&clap_markdown::help_markdown::<Cli>()),
-        Cmd::Schema => {
-            match serde_json::to_string_pretty(&schemars::schema_for!(arca_core::Config)) {
-                Ok(s) => out(&s),
-                Err(e) => fail(&cli, &format!("schema: {e}")),
-            }
-        }
+        Cmd::Schema => out(&schema_json()),
         cmd => {
             let op = cmd_op(cmd);
             let rref = cmd_rref(cmd);
@@ -173,10 +168,14 @@ fn main() -> ExitCode {
                 if !g.allows(op) {
                     let rref = norm_rref(&ops, rref);
                     ops.emit(op, rref.as_deref(), Outcome::Denied);
+                    // guardrails only exist when a config file
+                    // loaded — config_path is always Some here
+                    #[allow(clippy::unwrap_used)]
                     let at = ops
                         .config_path()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_else(|| "config".to_string());
+                        .expect("guardrails imply a loaded config file")
+                        .display()
+                        .to_string();
                     return fail(
                         &cli,
                         &format!(
@@ -470,9 +469,7 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
                     "guardrails": guardrails,
                     "errors": report.problems,
                 }));
-                if code != ExitCode::SUCCESS {
-                    return Ok(code);
-                }
+                debug_assert_eq!(code, ExitCode::SUCCESS);
             } else {
                 match &report.config_path {
                     Some(p) => eprintln!("config: {}", p.display()),
@@ -713,11 +710,19 @@ fn out(s: &str) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Serializing a `serde_json::Value` cannot fail — the expect
+/// documents that invariant rather than guarding a real path.
+#[allow(clippy::unwrap_used)]
 fn json_out(v: &serde_json::Value) -> ExitCode {
-    match serde_json::to_string_pretty(v) {
-        Ok(s) => out(&s),
-        Err(e) => fail_quiet(&format!("json: {e}")),
-    }
+    out(&serde_json::to_string_pretty(v).expect("Value serializes"))
+}
+
+/// The `arca schema` payload — generated schema serializes
+/// infallibly, same invariant as [`json_out`].
+#[allow(clippy::unwrap_used)]
+fn schema_json() -> String {
+    serde_json::to_string_pretty(&schemars::schema_for!(arca_core::Config))
+        .expect("generated schema serializes")
 }
 
 /// Error path honoring `--json`: `{"error": …}` on stderr for
@@ -731,8 +736,41 @@ fn fail(cli: &Cli, msg: &str) -> ExitCode {
     ExitCode::FAILURE
 }
 
-/// Error path when no `Cli` is in scope.
-fn fail_quiet(msg: &str) -> ExitCode {
-    eprintln!("arca: {msg}");
-    ExitCode::FAILURE
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cmd_op_maps_introspection_verbs_for_exhaustiveness() {
+        // These verbs return before ops load — cmd_op only ever
+        // sees them if the dispatch order above is broken, but the
+        // match still has to be total.
+        assert_eq!(cmd_op(&Cmd::Manifest), Op::Manifest);
+        assert_eq!(cmd_op(&Cmd::Schema), Op::Schema);
+        assert_eq!(cmd_op(&Cmd::GenCliDocs), Op::Schema);
+    }
+
+    #[test]
+    #[should_panic(expected = "handled before ops load")]
+    fn run_cmd_on_an_introspection_verb_panics() {
+        let cli = Cli {
+            json: false,
+            env: None,
+            config: None,
+            actor: None,
+            command: Cmd::Manifest,
+        };
+        let home = tempfile::tempdir().unwrap();
+        temp_env::with_vars(
+            [
+                ("HOME", Some(home.path().to_str().unwrap())),
+                ("ARCA_CONFIG", None::<&str>),
+            ],
+            || {
+                let ops = Ops::load(LoadOpts::default()).unwrap();
+                let _ = run_cmd(&Cmd::Manifest, &cli, &ops);
+            },
+        );
+    }
 }

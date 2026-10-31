@@ -147,10 +147,13 @@ pub fn rotate_bumps(v: &dyn Vault) {
     assert!(rotated.rotated_at.is_some());
     assert_eq!(rotated.created_at, first.created_at);
 
-    match v.rotate(&env("dev"), &rref("not/here"), Secret::new(FAKE)) {
-        Err(VaultError::NotFound { .. }) => {}
-        other => panic!("rotate of missing ref must be NotFound, got {other:?}"),
-    }
+    let err = v
+        .rotate(&env("dev"), &rref("not/here"), Secret::new(FAKE))
+        .expect_err("rotate of missing ref must fail");
+    assert!(
+        matches!(err, VaultError::NotFound { .. }),
+        "rotate of missing ref must be NotFound, got {err:?}"
+    );
 }
 
 /// Envs are isolated keyspaces — same path in dev vs prod are

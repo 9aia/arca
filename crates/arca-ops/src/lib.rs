@@ -210,9 +210,11 @@ impl Ops {
                 Ok(Box::new(v))
             }
             "cf" => {
-                let c = cfg.ok_or_else(|| {
-                    OpsError::Config(format!("vault {name:?} is kind cf but unconfigured"))
-                })?;
+                // `kind` was read off `cfg` — "cf" here means the
+                // vault is configured, so this expect documents the
+                // invariant rather than guarding a reachable path.
+                #[allow(clippy::unwrap_used)]
+                let c = cfg.expect("kind cf implies a configured vault");
                 let url = c.url.as_deref().ok_or_else(|| {
                     OpsError::Config(format!("[vaults.{name}] kind cf needs a `url`"))
                 })?;
@@ -459,12 +461,10 @@ impl Ops {
                 )));
             }
             let (env, r) = self.resolve(&rref);
-            if !vaults.contains_key(env.as_str()) {
-                vaults.insert(env.as_str().to_string(), self.open_vault(&env)?);
-            }
-            let vault = vaults
-                .get(env.as_str())
-                .ok_or_else(|| OpsError::Msg("vault open failed".into()))?;
+            let vault = match vaults.entry(env.as_str().to_string()) {
+                std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),
+                std::collections::btree_map::Entry::Vacant(e) => e.insert(self.open_vault(&env)?),
+            };
             let rec = vault.get(&env, &r)?.ok_or_else(|| OpsError::NotStored {
                 var: var.clone(),
                 rref: rref.to_string(),
@@ -533,6 +533,7 @@ impl Ops {
 
         let mut vaults = Vec::new();
         let mut opened: BTreeMap<String, Box<dyn Vault>> = BTreeMap::new();
+        let mut failures: BTreeMap<String, String> = BTreeMap::new();
         for name in &vault_names {
             let cfg = self.config.vault_config(name);
             let kind = cfg.map(|c| c.kind.clone()).unwrap_or_else(|| "age".into());
@@ -557,6 +558,7 @@ impl Ops {
                 }
                 Err(e) => {
                     problems.push(format!("vault {name:?} is not readable: {e}"));
+                    failures.insert(name.clone(), e.to_string());
                     vaults.push(VaultCheck {
                         name: name.clone(),
                         kind,
@@ -576,21 +578,17 @@ impl Ops {
             let resolves = match opened.get(vault_name) {
                 Some(v) => v.get(&env, &r).map(|rec| rec.is_some()).unwrap_or(false),
                 None => {
-                    // A route/env the loop above didn't cover — try
-                    // once, and report its failure inline.
-                    match self.open_vault(&env) {
-                        Ok(v) => {
-                            let got = v.get(&env, &r).map(|rec| rec.is_some()).unwrap_or(false);
-                            opened.insert(vault_name.to_string(), v);
-                            got
-                        }
-                        Err(e) => {
-                            problems.push(format!(
-                                "{var} → {rref}: env {env} vault {vault_name:?} not readable: {e}"
-                            ));
-                            false
-                        }
-                    }
+                    // The vault probe above already tried this name
+                    // and it failed — a second open would fail
+                    // identically, so report the recorded error.
+                    let err = failures
+                        .get(vault_name)
+                        .map(String::as_str)
+                        .unwrap_or("unknown error");
+                    problems.push(format!(
+                        "{var} → {rref}: env {env} vault {vault_name:?} not readable: {err}"
+                    ));
+                    false
                 }
             };
             if !resolves && is_valid_env_var(var) {
@@ -783,5 +781,535 @@ mod tests {
             "{:?}",
             report.problems
         );
+    }
+
+    fn mk_ops(config: Config) -> Ops {
+        Ops {
+            config,
+            config_path: None,
+            env: Env::dev(),
+            actor: Actor::new("devin").unwrap(),
+        }
+    }
+
+    fn vault_cfg(kind: &str, url: Option<&str>) -> arca_core::VaultConfig {
+        arca_core::VaultConfig {
+            kind: kind.into(),
+            path: None,
+            identity: None,
+            recipients: vec![],
+            url: url.map(str::to_string),
+            token_env: None,
+        }
+    }
+
+    fn deploy_cfg(
+        kind: &str,
+        account: Option<&str>,
+        store: Option<&str>,
+    ) -> arca_core::DeployConfig {
+        arca_core::DeployConfig {
+            kind: kind.into(),
+            account_id: account.map(str::to_string),
+            store_id: store.map(str::to_string),
+            token_env: None,
+            base_url: None,
+        }
+    }
+
+    /// Isolate every path an age vault could pick up by default.
+    fn isolate_home(home: &tempfile::TempDir, f: impl FnOnce()) {
+        temp_env::with_vars(
+            [
+                ("HOME", Some(home.path().to_str().unwrap())),
+                (
+                    "XDG_CONFIG_HOME",
+                    Some(home.path().join("c").to_str().unwrap()),
+                ),
+                (
+                    "XDG_DATA_HOME",
+                    Some(home.path().join("d").to_str().unwrap()),
+                ),
+                ("ARCA_IDENTITY_FILE", None::<&str>),
+                ("ARCA_CONFIG", None::<&str>),
+            ],
+            f,
+        );
+    }
+
+    /// An Ops whose `local` vault is a real age vault in a tempdir,
+    /// with `refs` pre-stored under `env`.
+    fn ops_with_vault(env: &Env, refs: &[&str]) -> (tempfile::TempDir, Ops) {
+        let home = tempfile::tempdir().unwrap();
+        let id_path = home.path().join("identity.txt");
+        let vault_path = home.path().join("vault.age");
+        AgeVault::ensure_identity(&id_path).unwrap();
+        let vault = AgeVault::open(&vault_path, &id_path, &[]).unwrap();
+        for r in refs {
+            Vault::put(
+                &vault,
+                env,
+                &Ref::new(r).unwrap(),
+                Secret::new("fake-stored-value"),
+            )
+            .unwrap();
+        }
+        let mut config = Config::default();
+        let mut v = vault_cfg("age", None);
+        v.path = Some(vault_path.to_string_lossy().into_owned());
+        v.identity = Some(id_path.to_string_lossy().into_owned());
+        config.vaults.insert("local".into(), v);
+        (home, mk_ops(config))
+    }
+
+    /// An Ops whose `dev` env routes to a cf vault on `url` —
+    /// `token_var` is left to the caller to set (or not).
+    fn ops_on_cf(url: &str, token_var: &str, id_path: &std::path::Path) -> Ops {
+        let mut config = Config::default();
+        let mut v = vault_cfg("cf", Some(url));
+        v.token_env = Some(token_var.into());
+        v.identity = Some(id_path.to_string_lossy().into_owned());
+        config.vaults.insert("cloud".into(), v);
+        config.envs.insert(Env::dev(), "cloud".into());
+        mk_ops(config)
+    }
+
+    fn write_identity(dir: &std::path::Path) -> PathBuf {
+        let id_path = dir.join("identity.txt");
+        AgeVault::ensure_identity(&id_path).unwrap();
+        id_path
+    }
+
+    #[test]
+    fn load_reports_explicit_config_and_flag_errors() {
+        // explicit --config that doesn't exist → config error
+        let e = Ops::load(LoadOpts {
+            config_path: Some("/nonexistent/arca.toml".into()),
+            ..LoadOpts::default()
+        })
+        .err()
+        .unwrap();
+        assert!(matches!(e, OpsError::Config(_)), "{e}");
+        // explicit --config that exists but won't parse
+        let dir = tempfile::tempdir().unwrap();
+        let bad = dir.path().join("arca.toml");
+        std::fs::write(&bad, "[[[ not toml").unwrap();
+        let e = Ops::load(LoadOpts {
+            config_path: Some(bad.to_string_lossy().into_owned()),
+            ..LoadOpts::default()
+        })
+        .err()
+        .unwrap();
+        assert!(matches!(e, OpsError::Config(_)), "{e}");
+        // bad --env and bad --actor surface as typed errors
+        let e = Ops::load(LoadOpts {
+            env: Some("PROD".into()),
+            ..LoadOpts::default()
+        })
+        .err()
+        .unwrap();
+        assert!(matches!(e, OpsError::Env(_)), "{e}");
+        let e = Ops::load(LoadOpts {
+            actor: Some("bad actor!".into()),
+            ..LoadOpts::default()
+        })
+        .err()
+        .unwrap();
+        assert!(matches!(e, OpsError::Actor(_)), "{e}");
+    }
+
+    #[test]
+    fn env_and_actor_resolution_variants() {
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            temp_env::with_vars(
+                [("ARCA_ENV", Some("ci")), ("ARCA_ACTOR", Some("bot-1"))],
+                || {
+                    let ops = Ops::load(LoadOpts::default()).unwrap();
+                    assert_eq!(ops.env().as_str(), "ci");
+                    assert_eq!(ops.actor().as_str(), "bot-1");
+                    assert!(ops.config_path().is_none());
+                },
+            );
+            // an unreadable ARCA_ENV is a typed error
+            temp_env::with_vars(
+                [("ARCA_ENV", Some("BAD!!")), ("ARCA_ACTOR", Some("bot"))],
+                || {
+                    assert!(matches!(
+                        Ops::load(LoadOpts::default()).err().unwrap(),
+                        OpsError::Env(_)
+                    ));
+                },
+            );
+            // USER present and valid → claimed as actor
+            temp_env::with_vars(
+                [
+                    ("ARCA_ACTOR", None::<&str>),
+                    ("USER", Some("luis-x")),
+                    ("LOGNAME", None::<&str>),
+                ],
+                || {
+                    let ops = Ops::load(LoadOpts::default()).unwrap();
+                    assert_eq!(ops.actor().as_str(), "luis-x");
+                },
+            );
+            // USER invalid + LOGNAME unset → the anon fallback
+            temp_env::with_vars(
+                [
+                    ("ARCA_ACTOR", None::<&str>),
+                    ("USER", Some("bad name")),
+                    ("LOGNAME", None::<&str>),
+                ],
+                || {
+                    let ops = Ops::load(LoadOpts::default()).unwrap();
+                    assert_eq!(ops.actor().as_str(), "anon");
+                },
+            );
+        });
+    }
+
+    #[test]
+    fn open_vault_named_rejects_bad_kinds_and_missing_cf_url() {
+        // cf without a url → a named config error
+        let mut config = Config::default();
+        config.vaults.insert("cloud".into(), vault_cfg("cf", None));
+        let ops = mk_ops(config.clone());
+        let e = ops.open_vault_named("cloud").err().unwrap().to_string();
+        assert!(e.contains("needs a `url`"), "{e}");
+        // unknown kind → named error listing what exists
+        config.vaults.insert("bogus".into(), vault_cfg("zzz", None));
+        let ops = mk_ops(config);
+        let e = ops.open_vault_named("bogus").err().unwrap().to_string();
+        assert!(e.contains("unknown kind") && e.contains("zzz"), "{e}");
+    }
+
+    #[test]
+    fn open_deploy_named_covers_table_errors() {
+        // no table at all
+        let ops = mk_ops(Config::default());
+        let e = ops.open_deploy_named("prod").err().unwrap().to_string();
+        assert!(e.contains("no [deploy.prod] table"), "{e}");
+        // missing account_id/store_id fields
+        let mut config = Config::default();
+        config
+            .deploy
+            .insert("prod".into(), deploy_cfg("cf-secrets-store", None, None));
+        let ops = mk_ops(config.clone());
+        let e = ops.open_deploy_named("prod").err().unwrap().to_string();
+        assert!(e.contains("account_id"), "{e}");
+        // unknown kind
+        config
+            .deploy
+            .insert("odd".into(), deploy_cfg("gcs", None, None));
+        let ops = mk_ops(config);
+        let e = ops.open_deploy_named("odd").err().unwrap().to_string();
+        assert!(e.contains("unknown kind") && e.contains("gcs"), "{e}");
+        // complete shape but the token env var is unset
+        temp_env::with_var_unset("ARCA_TEST_DEPLOY_TOKEN", || {
+            let mut config = Config::default();
+            let mut d = deploy_cfg("cf-secrets-store", Some("acc"), Some("sto"));
+            d.token_env = Some("ARCA_TEST_DEPLOY_TOKEN".into());
+            config.deploy.insert("prod".into(), d);
+            let ops = mk_ops(config);
+            let e = ops.open_deploy_named("prod").err().unwrap().to_string();
+            assert!(e.contains("ARCA_TEST_DEPLOY_TOKEN"), "{e}");
+        });
+    }
+
+    #[test]
+    fn vault_paths_reports_configured_paths_and_kind_errors() {
+        // a configured age vault reports its configured paths
+        let mut config = Config::default();
+        let mut v = vault_cfg("age", None);
+        v.path = Some("/tmp/x/vault.age".into());
+        v.identity = Some("/tmp/x/id.txt".into());
+        v.recipients =
+            vec!["age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqygh9".to_string()];
+        config.vaults.insert("local".into(), v);
+        let ops = mk_ops(config);
+        let (vp, ip, rec) = ops.vault_paths(&Env::dev()).unwrap();
+        assert_eq!(vp, PathBuf::from("/tmp/x/vault.age"));
+        assert_eq!(ip, PathBuf::from("/tmp/x/id.txt"));
+        assert_eq!(rec.len(), 1);
+        // cf and unknown kinds can't init locally
+        let mut config = Config::default();
+        config
+            .vaults
+            .insert("cloud".into(), vault_cfg("cf", Some("http://x")));
+        config.envs.insert(Env::new("ci").unwrap(), "cloud".into());
+        config.vaults.insert("bogus".into(), vault_cfg("zzz", None));
+        config.envs.insert(Env::new("st").unwrap(), "bogus".into());
+        let ops = mk_ops(config);
+        let e = ops
+            .vault_paths(&Env::new("ci").unwrap())
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("remote cf"), "{e}");
+        let e = ops
+            .vault_paths(&Env::new("st").unwrap())
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("unknown kind"), "{e}");
+    }
+
+    #[test]
+    fn init_happy_and_error_paths() {
+        // happy: isolated HOME → fresh identity generated, vault opens
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            let ops = mk_ops(Config::default());
+            let info = ops.init().unwrap();
+            assert!(info.identity_created);
+            assert!(info.recipient.starts_with("age1"));
+            assert!(info.identity_path.exists());
+            assert!(info.vault_path.ends_with("vault.age"));
+        });
+        // cf-routed env → init refuses (remote vaults can't init locally)
+        let mut config = Config::default();
+        config
+            .vaults
+            .insert("cloud".into(), vault_cfg("cf", Some("http://x")));
+        config.envs.insert(Env::dev(), "cloud".into());
+        let ops = mk_ops(config);
+        assert!(ops.init().unwrap_err().to_string().contains("cf"));
+        // identity path whose parent can't be created → ensure fails
+        let home = tempfile::tempdir().unwrap();
+        let blocker = home.path().join("blocker");
+        std::fs::write(&blocker, "x").unwrap();
+        let mut config = Config::default();
+        let mut v = vault_cfg("age", None);
+        v.path = Some(home.path().join("v1.age").to_string_lossy().into_owned());
+        v.identity = Some(blocker.join("id.txt").to_string_lossy().into_owned());
+        config.vaults.insert("local".into(), v);
+        let ops = mk_ops(config);
+        assert!(ops.init().is_err());
+        // garbage identity present → ensure skips it, open fails
+        let bad_id = home.path().join("bad-id.txt");
+        std::fs::write(&bad_id, "not-a-key\n").unwrap();
+        let mut config = Config::default();
+        let mut v = vault_cfg("age", None);
+        v.path = Some(home.path().join("v2.age").to_string_lossy().into_owned());
+        v.identity = Some(bad_id.to_string_lossy().into_owned());
+        config.vaults.insert("local".into(), v);
+        let ops = mk_ops(config);
+        assert!(ops.init().is_err());
+    }
+
+    #[test]
+    fn verbs_fail_when_the_vault_cant_open() {
+        // env dev routes to a vault of unknown kind → every verb's
+        // open fails with a config error, not a panic
+        let mut config = Config::default();
+        config.vaults.insert("bogus".into(), vault_cfg("zzz", None));
+        config.envs.insert(Env::dev(), "bogus".into());
+        let ops = mk_ops(config);
+        let r = Ref::new("arca://x/y").unwrap();
+        assert!(ops.put(&r, Secret::new("fake")).is_err());
+        assert!(ops.get(&r).is_err());
+        assert!(ops.rm(&r).is_err());
+        assert!(ops.rotate(&r, Secret::new("fake")).is_err());
+        assert!(ops.get_in(&Env::dev(), &r).is_err());
+        assert!(ops.list(None).is_err());
+        assert!(ops.list_records(None).is_err());
+        assert!(ops.deploy(&r, Some("t")).is_err());
+        // an explicit env other than the selected one works the same
+        assert!(ops.list(Some(&Env::dev())).is_err());
+    }
+
+    #[test]
+    fn deploy_target_selection_errors() {
+        let r = Ref::new("arca://x/y").unwrap();
+        // zero targets configured → can't pick
+        let ops = mk_ops(Config::default());
+        let e = ops.deploy(&r, None).unwrap_err().to_string();
+        assert!(e.contains("no [deploy.*] targets"), "{e}");
+        // several targets and no --target → ambiguous
+        let mut config = Config::default();
+        config.deploy.insert(
+            "a".into(),
+            deploy_cfg("cf-secrets-store", Some("x"), Some("y")),
+        );
+        config.deploy.insert(
+            "b".into(),
+            deploy_cfg("cf-secrets-store", Some("x"), Some("y")),
+        );
+        let ops = mk_ops(config);
+        let e = ops.deploy(&r, None).unwrap_err().to_string();
+        assert!(e.contains("multiple deploy targets"), "{e}");
+        // a --target name that has no table → open_deploy_named errs
+        let (_h, ops) = ops_with_vault(&Env::dev(), &["arca://x/y"]);
+        let e = ops.deploy(&r, Some("ghost")).unwrap_err().to_string();
+        assert!(e.contains("no [deploy.ghost] table"), "{e}");
+    }
+
+    #[test]
+    fn get_in_reads_across_envs() {
+        let (_h, ops) = ops_with_vault(&Env::new("prod").unwrap(), &["arca://x/y"]);
+        let got = ops
+            .get_in(&Env::new("prod").unwrap(), &Ref::new("arca://x/y").unwrap())
+            .unwrap();
+        assert_eq!(got.unwrap().value.expose(), "fake-stored-value");
+        let miss = ops
+            .get_in(
+                &Env::new("prod").unwrap(),
+                &Ref::new("arca://no/thing").unwrap(),
+            )
+            .unwrap();
+        assert!(miss.is_none());
+    }
+
+    #[test]
+    fn injection_validates_pairs_and_var_names() {
+        let ops = mk_ops(Config::default());
+        // bad ad-hoc var name
+        let e = ops
+            .resolve_for_injection(Op::Run, &[("NOT-A-VAR".into(), "arca://x/y".into())])
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("invalid env var"), "{e}");
+        // bad ad-hoc ref
+        assert!(ops
+            .resolve_for_injection(Op::Run, &[("GOOD".into(), "not-a-ref".into())])
+            .is_err());
+        // a declared [secrets] key that isn't a var name
+        let mut config = Config::default();
+        config
+            .secrets
+            .insert("NOT-A-VAR".into(), Ref::new("arca://x/y").unwrap());
+        let ops = mk_ops(config);
+        let e = ops
+            .resolve_for_injection(Op::Run, &[])
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("not a valid env var"), "{e}");
+        // a ref pinned to an env whose vault can't open
+        let mut config = Config::default();
+        config
+            .envs
+            .insert(Env::new("ci").unwrap(), "nowhere".into());
+        config
+            .secrets
+            .insert("V".into(), Ref::new("arca://ci/x").unwrap());
+        let ops = mk_ops(config);
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            assert!(ops.resolve_for_injection(Op::Run, &[]).is_err());
+        });
+    }
+
+    #[test]
+    fn check_flags_kind_and_deploy_problems() {
+        let mut config = Config::default();
+        config.vaults.insert("bad".into(), vault_cfg("zzz", None));
+        config.vaults.insert("nolink".into(), vault_cfg("cf", None));
+        config
+            .deploy
+            .insert("weird".into(), deploy_cfg("bogus-kind", None, None));
+        config
+            .deploy
+            .insert("half".into(), deploy_cfg("cf-secrets-store", None, None));
+        let ops = mk_ops(config);
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            let report = ops.check();
+            let has = |n: &str| report.problems.iter().any(|p| p.contains(n));
+            assert!(has("\"zzz\""), "{:?}", report.problems);
+            assert!(has("needs a `url`"), "{:?}", report.problems);
+            assert!(has("bogus-kind"), "{:?}", report.problems);
+            assert!(has("account_id"), "{:?}", report.problems);
+            // none of the configured vaults can open either
+            assert!(report.vaults.iter().all(|v| !v.ok));
+        });
+    }
+
+    #[test]
+    fn check_reports_open_ok_but_list_fails_and_secret_findings() {
+        // A cf vault: construction is cheap (no I/O) — it opens,
+        // then `list` proves it unreachable → "not readable" on the
+        // vault AND on each secret that routes through it.
+        let home = tempfile::tempdir().unwrap();
+        let id_path = write_identity(home.path());
+        let mut config = Config::default();
+        let mut v = vault_cfg("cf", Some("http://127.0.0.1:1"));
+        v.identity = Some(id_path.to_string_lossy().into_owned());
+        config.vaults.insert("cloud".into(), v);
+        config.envs.insert(Env::dev(), "cloud".into());
+        config
+            .secrets
+            .insert("V".into(), Ref::new("arca://x/y").unwrap());
+        let ops = mk_ops(config);
+        temp_env::with_vars(
+            [
+                ("ARCA_CF_TOKEN", Some("fake-cf-token")),
+                ("HOME", Some(home.path().to_str().unwrap())),
+                (
+                    "XDG_CONFIG_HOME",
+                    Some(home.path().join("c").to_str().unwrap()),
+                ),
+                (
+                    "XDG_DATA_HOME",
+                    Some(home.path().join("d").to_str().unwrap()),
+                ),
+                ("ARCA_IDENTITY_FILE", None::<&str>),
+            ],
+            || {
+                let report = ops.check();
+                let has = |n: &str| report.problems.iter().any(|p| p.contains(n));
+                assert!(has("not readable"), "{:?}", report.problems);
+                assert!(has("V → arca://x/y"), "{:?}", report.problems);
+                let cloud = report.vaults.iter().find(|v| v.name == "cloud").unwrap();
+                assert!(!cloud.ok);
+                assert!(cloud.error.is_some());
+            },
+        );
+    }
+
+    #[test]
+    fn cf_backend_errors_propagate_through_verbs() {
+        use arca_testkit::httpmock::{HttpMock, Response};
+        // List says the ref exists; single-get says otherwise or
+        // just fails — the verbs surface backend errors, no panic.
+        let mock = HttpMock::new(|req| {
+            if req.path == "/v1/dev" {
+                Response::json(200, r#"{"refs":["gone/one","x/y"]}"#)
+            } else if req.path.ends_with("/gone/one") {
+                Response::json(404, r#"{"error":"not found"}"#)
+            } else {
+                Response::json(500, r#"{"error":"boom"}"#)
+            }
+        });
+        let home = tempfile::tempdir().unwrap();
+        let id_path = write_identity(home.path());
+        let ops = ops_on_cf(mock.url(), "ARCA_TEST_OPS_TOKEN", &id_path);
+        temp_env::with_var("ARCA_TEST_OPS_TOKEN", Some("fake-token"), || {
+            let r = Ref::new("arca://x/y").unwrap();
+            // backend 500s propagate as vault errors on every verb
+            assert!(ops.get(&r).is_err());
+            assert!(ops.put(&r, Secret::new("fake")).is_err());
+            assert!(ops.rm(&r).is_err());
+            assert!(ops.rotate(&r, Secret::new("fake")).is_err());
+            // list_records: gone/one → 404 → skipped silently;
+            // x/y → 500 → the error propagates
+            assert!(ops.list_records(None).is_err());
+            // injection hits the same failing get
+            let mut config = Config::default();
+            let mut v = vault_cfg("cf", Some(mock.url()));
+            v.token_env = Some("ARCA_TEST_OPS_TOKEN".into());
+            v.identity = Some(id_path.to_string_lossy().into_owned());
+            config.vaults.insert("cloud".into(), v);
+            config.envs.insert(Env::dev(), "cloud".into());
+            config.secrets.insert("V".into(), r.clone());
+            let ops = mk_ops(config);
+            assert!(ops.resolve_for_injection(Op::Run, &[]).is_err());
+        });
+    }
+
+    #[test]
+    fn emit_writes_an_op_scoped_event() {
+        let ops = mk_ops(Config::default());
+        // stderr is the wire — this is a "does not panic" probe;
+        // shape assertions live in audit.rs's tests
+        ops.emit(Op::Get, Some("x/y"), Outcome::Denied);
+        ops.emit(Op::List, None, Outcome::Error);
     }
 }

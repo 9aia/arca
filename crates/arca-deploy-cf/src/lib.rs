@@ -32,6 +32,7 @@ pub const DEFAULT_BASE: &str = "https://api.cloudflare.com/client/v4";
 pub const DEFAULT_TOKEN_ENV: &str = "CLOUDFLARE_API_TOKEN";
 
 /// A [`Deploy`] target backed by a CF account Secrets Store.
+#[derive(Debug)]
 pub struct CfSecretsStore {
     name: String,
     agent: Agent,
@@ -282,5 +283,88 @@ impl Deploy for CfSecretsStore {
             }
             None => Ok(false),
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn target() -> CfSecretsStore {
+        CfSecretsStore::with_token("prod", "acc", "sto", "fake", Some("http://127.0.0.1:1"))
+    }
+
+    #[test]
+    fn new_reads_the_token_env_var() {
+        temp_env::with_var_unset("ARCA_TEST_CF_DEPLOY_TOKEN", || {
+            let e =
+                CfSecretsStore::new("p", "a", "s", "ARCA_TEST_CF_DEPLOY_TOKEN", None).unwrap_err();
+            assert!(e.to_string().contains("unset"), "{e}");
+        });
+        temp_env::with_var("ARCA_TEST_CF_DEPLOY_TOKEN", Some(""), || {
+            let e =
+                CfSecretsStore::new("p", "a", "s", "ARCA_TEST_CF_DEPLOY_TOKEN", None).unwrap_err();
+            assert!(e.to_string().contains("empty"), "{e}");
+        });
+        temp_env::with_var("ARCA_TEST_CF_DEPLOY_TOKEN", Some("fake-tok"), || {
+            let t = CfSecretsStore::new("p", "a", "s", "ARCA_TEST_CF_DEPLOY_TOKEN", None).unwrap();
+            assert_eq!(t.name(), "p");
+            assert_eq!(t.base, DEFAULT_BASE);
+        });
+    }
+
+    #[test]
+    fn request_rejects_unknown_method_body_shapes() {
+        // the internal seam: shapes no caller produces are clean
+        // errors, never panics
+        let t = target();
+        assert!(t.request("PUT", "http://x", None, None).is_err());
+        assert!(t
+            .request("GET", "http://x", None, Some(serde_json::json!({})))
+            .is_err());
+        // a GET without a query works the no-query arm — it still
+        // fails transport here since nothing listens
+        assert!(t.request("GET", "http://127.0.0.1:1", None, None).is_err());
+    }
+
+    #[test]
+    fn envelope_reads_the_cf_contract() {
+        // 401/403 → Unauthorized regardless of body
+        for status in [401, 403] {
+            assert!(matches!(
+                CfSecretsStore::envelope(status, "{}"),
+                Err(DeployError::Unauthorized(_))
+            ));
+        }
+        // non-json body → backend error quoting the status
+        let e = CfSecretsStore::envelope(502, "proxy says no").unwrap_err();
+        assert!(e.to_string().contains("non-json"), "{e}");
+        // success:false with an errors array → joined messages
+        let e = CfSecretsStore::envelope(
+            400,
+            r#"{"success":false,"errors":[{"message":"m1"},{"message":"m2"}],"result":null}"#,
+        )
+        .unwrap_err();
+        assert!(e.to_string().contains("m1; m2"), "{e}");
+        // success:false with no errors → falls back to the raw body
+        let e = CfSecretsStore::envelope(500, r#"{"success":false,"errors":[]}"#).unwrap_err();
+        assert!(e.to_string().contains("success"), "{e}");
+        // success:true parses through
+        let v = CfSecretsStore::envelope(200, r#"{"success":true,"result":[1]}"#).unwrap();
+        assert_eq!(v["result"][0], 1);
+    }
+
+    #[test]
+    fn find_id_and_transport_errors_are_clean() {
+        // nothing listens → find_id reports Io through push/remove
+        let t = target();
+        let env = Env::dev();
+        let r = Ref::new("arca://x/y").unwrap();
+        assert!(matches!(
+            t.push(&env, &r, &Secret::new("fake")),
+            Err(DeployError::Io(_))
+        ));
+        assert!(matches!(t.remove(&env, &r), Err(DeployError::Io(_))));
     }
 }

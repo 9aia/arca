@@ -150,6 +150,8 @@ mod tests {
         assert_eq!(serde_json::to_string(&a).unwrap(), "\"devin\"");
         assert_eq!(serde_json::from_str::<Actor>("\"devin\"").unwrap(), a);
         assert!(serde_json::from_str::<Actor>("\"has space\"").is_err());
+        // a non-string can't even reach the actor check
+        assert!(serde_json::from_str::<Actor>("42").is_err());
         assert_eq!(
             "has space".parse::<Actor>().unwrap_err(),
             ParseActorError("has space".into())

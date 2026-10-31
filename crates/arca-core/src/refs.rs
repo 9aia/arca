@@ -190,6 +190,12 @@ mod tests {
         // PROD isn't a valid env name even if the predicate says yes.
         let r = Ref::new("arca://PROD/x").unwrap();
         assert!(r.env_pin(|_| true).is_none());
+        // A ref with no segments at all can't pin — unreachable via
+        // the public constructors, but the invariant guard stays.
+        let r = Ref {
+            segments: Vec::new(),
+        };
+        assert!(r.env_pin(|_| true).is_none());
     }
 
     #[test]
@@ -198,5 +204,6 @@ mod tests {
         assert_eq!(serde_json::to_string(&r).unwrap(), "\"arca://a/b\"");
         assert_eq!(serde_json::from_str::<Ref>("\"arca://a/b\"").unwrap(), r);
         assert!(serde_json::from_str::<Ref>("\"a/b\"").is_err());
+        assert!(serde_json::from_str::<Ref>("42").is_err());
     }
 }

@@ -89,3 +89,172 @@ fn sink_names_are_stable() {
         "prod_billing_stripe_key"
     );
 }
+
+/// A server that answers the first request with `first`, then
+/// drops every later connection mid-flight — the deterministic
+/// way to make a *specific* verb (PATCH/POST/DELETE) hit a
+/// transport error after `find_id`'s GET succeeded.
+fn die_after_first(first: &'static str) -> String {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for i in 0..2 {
+            if let Ok((mut s, _)) = listener.accept() {
+                if i == 0 {
+                    use std::io::Write;
+                    let mut buf = [0u8; 8192];
+                    let _ = std::io::Read::read(&mut s, &mut buf);
+                    let _ = s.write_all(
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                            first.len(),
+                            first
+                        )
+                        .as_bytes(),
+                    );
+                } // second conn: drop — connection dies mid-request
+            }
+        }
+    });
+    format!("http://127.0.0.1:{port}")
+}
+
+/// A mock whose GET search finds an existing secret — every later
+/// verb's response is `answer`ed by the caller.
+fn mock_with_existing(
+    answer: &'static str,
+) -> (
+    arca_testkit::httpmock::HttpMock,
+    std::sync::Arc<std::sync::Mutex<Vec<arca_testkit::httpmock::Request>>>,
+) {
+    use arca_testkit::httpmock::{HttpMock, Request, Response};
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let s = seen.clone();
+    let mock = HttpMock::new(move |req: &Request| {
+        s.lock().unwrap().push(req.clone());
+        if req.method == "GET" {
+            Response::json(
+                200,
+                r#"{"success":true,"errors":[],"result":[{"id":"id0001","name":"dev_x_y"}]}"#,
+            )
+        } else {
+            Response::json(200, answer)
+        }
+    });
+    (mock, seen)
+}
+
+#[test]
+fn find_id_treats_malformed_and_missing_results_as_absent() {
+    use arca_testkit::httpmock::{HttpMock, Response};
+    // result rows without a matching name → create path (POST)
+    let mock = HttpMock::new(|req: &arca_testkit::httpmock::Request| {
+        if req.method == "GET" {
+            Response::json(
+                200,
+                r#"{"success":true,"errors":[],"result":[{"id":"id9","name":"other_name"},{"name":"dev_x_y"}]}"#,
+            )
+        } else {
+            Response::json(200, r#"{"success":true,"errors":[],"result":[]}"#)
+        }
+    });
+    let t = target(mock.url());
+    let report = t
+        .push(
+            &Env::dev(),
+            &Ref::new("arca://x/y").unwrap(),
+            &Secret::new(FAKE),
+        )
+        .unwrap();
+    assert!(report.created, "no usable id → POST create, not PATCH");
+}
+
+#[test]
+fn envelope_failures_on_each_verb_are_errors() {
+    let env = Env::dev();
+    let r = Ref::new("arca://x/y").unwrap();
+    // PATCH → envelope success:false → clean error
+    let (mock, _) = mock_with_existing(r#"{"success":false,"errors":[{"message":"read-only"}]}"#);
+    let t = target(mock.url());
+    let e = t.push(&env, &r, &Secret::new(FAKE)).unwrap_err();
+    assert!(e.to_string().contains("read-only"), "{e}");
+    // DELETE → same
+    let e = t.remove(&env, &r).unwrap_err();
+    assert!(e.to_string().contains("read-only"), "{e}");
+}
+
+#[test]
+fn post_and_delete_envelope_failures_are_errors() {
+    use arca_testkit::httpmock::{HttpMock, Response};
+    // GET finds nothing, POST answers success:false
+    let mock = HttpMock::new(|req: &arca_testkit::httpmock::Request| {
+        if req.method == "GET" {
+            Response::json(200, r#"{"success":true,"errors":[],"result":[]}"#)
+        } else {
+            Response::json(500, r#"{"success":false,"errors":[{"message":"quota"}]}"#)
+        }
+    });
+    let t = target(mock.url());
+    let e = t
+        .push(
+            &Env::dev(),
+            &Ref::new("arca://x/y").unwrap(),
+            &Secret::new(FAKE),
+        )
+        .unwrap_err();
+    assert!(e.to_string().contains("quota"), "{e}");
+}
+
+#[test]
+fn transport_death_on_patch_post_and_delete_are_io_errors() {
+    let env = Env::dev();
+    let r = Ref::new("arca://x/y").unwrap();
+    // GET finds the secret, PATCH conn dies → Io, not a panic
+    let url = die_after_first(
+        r#"{"success":true,"errors":[],"result":[{"id":"id0001","name":"dev_x_y"}]}"#,
+    );
+    let t = target(&url);
+    assert!(matches!(
+        t.push(&env, &r, &Secret::new(FAKE)),
+        Err(arca_deploy::DeployError::Io(_))
+    ));
+    // GET finds nothing, POST conn dies → Io
+    let url = die_after_first(r#"{"success":true,"errors":[],"result":[]}"#);
+    let t = target(&url);
+    assert!(matches!(
+        t.push(&env, &r, &Secret::new(FAKE)),
+        Err(arca_deploy::DeployError::Io(_))
+    ));
+    // GET finds the secret, DELETE conn dies → Io
+    let url = die_after_first(
+        r#"{"success":true,"errors":[],"result":[{"id":"id0001","name":"dev_x_y"}]}"#,
+    );
+    let t = target(&url);
+    assert!(matches!(
+        t.remove(&env, &r),
+        Err(arca_deploy::DeployError::Io(_))
+    ));
+}
+
+#[test]
+fn a_body_short_of_content_length_is_an_io_error() {
+    // server promises 100 bytes, sends 5, drops — the read fails
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        let (mut s, _) = listener.accept().unwrap();
+        use std::io::Write;
+        let mut buf = [0u8; 4096];
+        let _ = std::io::Read::read(&mut s, &mut buf);
+        let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nshort");
+    });
+    let t = target(&format!("http://127.0.0.1:{port}"));
+    let e = t
+        .push(
+            &Env::dev(),
+            &Ref::new("arca://x/y").unwrap(),
+            &Secret::new(FAKE),
+        )
+        .unwrap_err();
+    assert!(matches!(e, arca_deploy::DeployError::Io(_)), "{e}");
+}

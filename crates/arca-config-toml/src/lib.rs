@@ -63,6 +63,22 @@ mod tests {
     }
 
     #[test]
+    fn located_but_unreadable_errors() {
+        // A directory exists (so `locate` picks it) but can't be
+        // read as a file — the read error surfaces, not the
+        // "not found" search error.
+        let dir = std::env::temp_dir().join(format!("arca-cfg-dir-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = TomlSource {
+            path: Some(dir.to_string_lossy().into_owned()),
+        };
+        assert_eq!(src.locate().as_deref(), Some(dir.as_path()));
+        let err = src.load().unwrap_err();
+        assert!(err.contains("read"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn parses_secrets_table() {
         let dir = std::env::temp_dir().join(format!("arca-cfg-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap_or_default();

@@ -28,9 +28,10 @@ struct VaultRow {
 }
 
 fn now() -> String {
+    // rfc3339 formatting of a valid datetime cannot fail
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into())
+        .expect("rfc3339 formatting is infallible")
 }
 
 fn row_json(s: &VaultRow) -> String {
@@ -234,4 +235,63 @@ pub fn cf_secrets_store(
         })
     };
     (mock, seen)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    /// Fire one raw HTTP request at `mock` and read the raw reply.
+    fn exchange(mock: &HttpMock, request: &str) -> String {
+        let addr = mock.url().trim_start_matches("http://");
+        let mut s = std::net::TcpStream::connect(addr).unwrap();
+        s.write_all(request.as_bytes()).unwrap();
+        s.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut out = String::new();
+        s.read_to_string(&mut out).unwrap();
+        out
+    }
+
+    const AUTH: &str = "Authorization: Bearer tok\r\n";
+
+    #[test]
+    fn vault_wire_rejects_bad_routes_and_shapes() {
+        let mock = vault_wire("tok");
+        // no /v1/ prefix → 404
+        let out = exchange(&mock, &format!("GET /bogus HTTP/1.1\r\n{AUTH}\r\n"));
+        assert!(out.contains("404"), "{out}");
+        // /v1/ with an empty env → 404
+        let out = exchange(&mock, &format!("GET /v1/ HTTP/1.1\r\n{AUTH}\r\n"));
+        assert!(out.contains("404"), "{out}");
+        // PUT without a ciphertext field → 400
+        let out = exchange(
+            &mock,
+            &format!("PUT /v1/dev/x/y HTTP/1.1\r\n{AUTH}Content-Length: 2\r\n\r\n{{}}"),
+        );
+        assert!(out.contains("400"), "{out}");
+        // a method the protocol doesn't know → 405
+        let out = exchange(&mock, &format!("PATCH /v1/dev/x HTTP/1.1\r\n{AUTH}\r\n"));
+        assert!(out.contains("405"), "{out}");
+        // sanity: a real list still works
+        let out = exchange(&mock, &format!("GET /v1/dev HTTP/1.1\r\n{AUTH}\r\n"));
+        assert!(out.contains("200") && out.contains("\"refs\""), "{out}");
+    }
+
+    #[test]
+    fn cf_store_handles_missing_ids_and_odd_methods() {
+        let (mock, _) = cf_secrets_store("acc", "sto", "tok");
+        let base = "/accounts/acc/secrets_store/stores/sto/secrets";
+        // DELETE of an id that was never created → 404 envelope
+        let out = exchange(
+            &mock,
+            &format!("DELETE {base}/id9999 HTTP/1.1\r\n{AUTH}\r\n"),
+        );
+        assert!(out.contains("404"), "{out}");
+        // a method+suffix no arm claims → the 404 fallthrough
+        let out = exchange(&mock, &format!("GET {base}/id0001 HTTP/1.1\r\n{AUTH}\r\n"));
+        assert!(out.contains("404"), "{out}");
+        let out = exchange(&mock, &format!("PUT {base} HTTP/1.1\r\n{AUTH}\r\n"));
+        assert!(out.contains("404"), "{out}");
+    }
 }

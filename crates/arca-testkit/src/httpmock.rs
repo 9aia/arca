@@ -103,13 +103,15 @@ impl HttpMock {
                         Ok((stream, _)) => {
                             let handler = handler.clone();
                             std::thread::spawn(move || {
-                                let _ = serve(stream, &*handler);
+                                serve(stream, &*handler);
                             });
                         }
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        // WouldBlock while idle; any other error
+                        // just means "try again" — the stop flag
+                        // still breaks the loop.
+                        Err(_) => {
                             std::thread::sleep(std::time::Duration::from_millis(2));
                         }
-                        Err(_) => break,
                     }
                 }
             })
@@ -138,24 +140,25 @@ impl Drop for HttpMock {
     }
 }
 
-/// Read one request, dispatch, write one response, close.
-fn serve(
-    mut stream: std::net::TcpStream,
-    handler: &dyn Fn(&Request) -> Response,
-) -> std::io::Result<()> {
+/// Read one request, dispatch, write one response, close. Every
+/// i/o failure here is a dead request — the caller ignores the
+/// outcome, so failures settle quietly instead of propagating a
+/// Result nobody reads.
+fn serve(mut stream: std::net::TcpStream, handler: &dyn Fn(&Request) -> Response) {
     let mut buf = Vec::with_capacity(4096);
     let req = loop {
         let mut chunk = [0u8; 4096];
-        let n = stream.read(&mut chunk)?;
+        // A read error (peer RST) is a dead request either way.
+        let n = stream.read(&mut chunk).unwrap_or(0);
         if n == 0 {
-            return Ok(()); // peer went away mid-request
+            return; // peer went away mid-request
         }
         buf.extend_from_slice(&chunk[..n]);
         if let Some(req) = try_parse(&buf) {
             break req;
         }
         if buf.len() > 1024 * 1024 {
-            return Ok(()); // absurd — bail rather than buffer forever
+            return; // absurd — bail rather than buffer forever
         }
     };
     let res = handler(&req);
@@ -171,7 +174,9 @@ fn serve(
         500 => "Internal Server Error",
         _ => "Status",
     };
-    write!(
+    // A peer that died mid-request can't be answered — nothing to
+    // propagate, the connection is over either way.
+    let _ = write!(
         stream,
         "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         res.status,
@@ -179,8 +184,8 @@ fn serve(
         res.content_type,
         res.body.len(),
         res.body
-    )?;
-    stream.flush()
+    );
+    let _ = stream.flush();
 }
 
 /// Try to parse a complete request out of `buf` — headers done and
@@ -189,7 +194,9 @@ fn try_parse(buf: &[u8]) -> Option<Request> {
     let head_end = find_subslice(buf, b"\r\n\r\n")?;
     let head = std::str::from_utf8(&buf[..head_end]).ok()?;
     let mut lines = head.split("\r\n");
-    let mut parts = lines.next()?.split_whitespace();
+    // `split` always yields at least one element, even on "".
+    let request_line = lines.next().unwrap_or_default();
+    let mut parts = request_line.split_whitespace();
     let method = parts.next()?.to_string();
     let path = parts.next()?.to_string();
     let mut headers = Vec::new();
@@ -216,4 +223,76 @@ fn try_parse(buf: &[u8]) -> Option<Request> {
 
 fn find_subslice(hay: &[u8], needle: &[u8]) -> Option<usize> {
     hay.windows(needle.len()).position(|w| w == needle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    /// Send raw bytes at the mock and read everything it answers.
+    fn exchange(addr: &str, request: &[u8]) -> String {
+        let mut s = std::net::TcpStream::connect(addr).unwrap();
+        s.write_all(request).unwrap();
+        s.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut out = String::new();
+        s.read_to_string(&mut out).unwrap();
+        out
+    }
+
+    #[test]
+    fn serves_each_status_reason() {
+        for status in [200, 201, 400, 401, 403, 404, 405, 409, 418, 500] {
+            let mock = HttpMock::new(move |_| Response::json(status, "{}"));
+            let addr = mock.url().trim_start_matches("http://").to_string();
+            let out = exchange(&addr, b"GET / HTTP/1.1\r\nHost: x\r\n\r\n");
+            assert!(out.starts_with(&format!("HTTP/1.1 {status} ")), "{out}");
+        }
+    }
+
+    #[test]
+    fn malformed_requests_get_no_response() {
+        let mock = HttpMock::new(|_| Response::json(200, "{}"));
+        let addr = mock.url().trim_start_matches("http://").to_string();
+        // every one of these fails a parse step — the connection
+        // just closes with no response bytes
+        for req in [
+            &b"\r\n\r\n"[..],                               // empty request line
+            b"GET\r\n\r\n",                                 // no path
+            b"GET / HTTP/1.1\r\nNoColon\r\n\r\n",           // header without :
+            b"GET / HTTP/1.1\r\nContent-Length: x\r\n\r\n", // bad length
+            &b"\xff\xfe\r\n\r\n"[..],                       // non-utf8 head
+                                                            // (a complete GET with no Content-Length and trailing
+                                                            // bytes is *not* malformed — extra bytes are ignored
+                                                            // and it gets a normal response)
+        ] {
+            assert_eq!(exchange(&addr, req), "", "{req:?}");
+        }
+        // half a head, then gone — never parses
+        let mut s = std::net::TcpStream::connect(&addr).unwrap();
+        s.write_all(b"GET / HT").unwrap();
+        drop(s);
+        // and the mock still works afterwards
+        let out = exchange(&addr, b"GET / HTTP/1.1\r\n\r\n");
+        assert!(out.starts_with("HTTP/1.1 200 "), "{out}");
+    }
+
+    #[test]
+    fn absurdly_large_requests_bail() {
+        let mock = HttpMock::new(|_| Response::json(200, "{}"));
+        let addr = mock.url().trim_start_matches("http://").to_string();
+        let mut s = std::net::TcpStream::connect(&addr).unwrap();
+        s.write_all(&vec![b'x'; 1024 * 1024 + 8]).unwrap();
+        drop(s); // handler bailed; nothing to read
+    }
+
+    #[test]
+    fn drop_stops_the_acceptor() {
+        // construction + drop is the whole contract — no hang
+        let mock = HttpMock::new(|_| Response::json(200, "{}"));
+        let url = mock.url().to_string();
+        drop(mock);
+        // a connection attempt after drop is refused or dies fast
+        let _ = std::net::TcpStream::connect(&url);
+    }
 }

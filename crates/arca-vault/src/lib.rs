@@ -89,3 +89,18 @@ impl From<std::io::Error> for VaultError {
         VaultError::Io(e.to_string())
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn io_error_maps_to_the_io_variant() {
+        let e = VaultError::from(std::io::Error::new(std::io::ErrorKind::NotFound, "gone"));
+        assert!(
+            matches!(e, VaultError::Io(ref s) if s.contains("gone")),
+            "{e}"
+        );
+    }
+}

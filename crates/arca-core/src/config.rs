@@ -302,6 +302,12 @@ mod tests {
     }
 
     #[test]
+    fn env_route_from_string_is_a_name() {
+        assert_eq!(EnvRoute::from("local".to_string()).vault(), "local");
+        assert_eq!(EnvRoute::from("cloud").vault(), "cloud");
+    }
+
+    #[test]
     fn empty_is_valid_and_routes_local() {
         let cfg: Config = toml::from_str("").unwrap();
         assert_eq!(cfg.vault_for(&Env::dev()), "local");
