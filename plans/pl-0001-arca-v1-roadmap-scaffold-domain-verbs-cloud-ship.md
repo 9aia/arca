@@ -47,10 +47,12 @@ Roadmap per P-001. Hard constraints from the owner:
   Landed: TUI shipped (audited two-step reveal),
   `gen-cli-docs`, docs site rebuilt on the `docs` orphan
   worktree (builds green), `cargo install --git` verified.
-  Open/external: docs push → Pages deploy (9aia.com/arca),
-  real CF vault deploy + deploy-sink test (credentials),
-  mimus migration (mimus repo), `spike/aws-vault` branch
-  deletion.
+  mimus migration landed in the mimus repo (`mimus-arca`
+  adapter; chain env → arca → keyring → env-file; `doctor`
+  reports store availability). `spike/aws-vault` deleted —
+  verdict preserved in the P4 annotation. Open/external:
+  docs push → Pages deploy (9aia.com/arca), real CF vault
+  deploy + deploy-sink test (credentials).
 
 ## Later ADRs
 
