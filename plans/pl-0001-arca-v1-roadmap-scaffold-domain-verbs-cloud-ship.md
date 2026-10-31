@@ -35,7 +35,7 @@ Roadmap per P-001. Hard constraints from the owner:
   branch → delete.
 - [ ] **P5 — polish + ship**: `arca ui` TUI · docs site →
   `9aia.com/arca` · mimus key-resolution migration.
-  Landed (T-004): TUI shipped (audited two-step reveal),
+  Landed: TUI shipped (audited two-step reveal),
   `gen-cli-docs`, docs site rebuilt on the `docs` orphan
   worktree (builds green), `cargo install --git` verified.
   Open/external: docs push → Pages deploy (9aia.com/arca),
