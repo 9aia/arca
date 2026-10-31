@@ -63,8 +63,9 @@ injection, redaction, audit. Neighbors own theirs:
   `arca run`. A future `arca serve` (ndjson) is a later ADR.
 - **bupha** — CI gate; asserts no plaintext secrets land in
   pipelines.
-- **mimus** — critic; its env → keyring → `~/.config/mimus/env`
-  resolution migrates to arca vaults.
+- **mimus** — critic; secrets resolve env → arca → legacy
+  (keyring, `~/.config/mimus/env`) via its `mimus-arca` adapter
+  shelling `arca` — vaults are canonical, writes land in them.
 - **sepia** — session lifecycle.
 
 A hosted vault service is in scope (it's a store impl);
