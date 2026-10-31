@@ -171,7 +171,8 @@ fn main() -> ExitCode {
             // policy; enforced before the op touches the vault.
             if let Some(g) = ops.config().guardrails.as_ref() {
                 if !g.allows(op) {
-                    ops.emit(op, rref, Outcome::Denied);
+                    let rref = norm_rref(&ops, rref);
+                    ops.emit(op, rref.as_deref(), Outcome::Denied);
                     let at = ops
                         .config_path()
                         .map(|p| p.display().to_string())
@@ -188,7 +189,8 @@ fn main() -> ExitCode {
             match run_cmd(cmd, &cli, &ops) {
                 Ok(code) => code,
                 Err(e) => {
-                    ops.emit(op, rref, Outcome::Error);
+                    let rref = norm_rref(&ops, rref);
+                    ops.emit(op, rref.as_deref(), Outcome::Error);
                     fail(&cli, &e.to_string())
                 }
             }
@@ -232,6 +234,18 @@ fn cmd_rref(cmd: &Cmd) -> Option<&str> {
     }
 }
 
+/// Normalize a requested ref to the resolved-path form success
+/// events carry (`env pin` stripped, no scheme) so the audit
+/// stream correlates regardless of outcome. Falls back to the raw
+/// arg when it doesn't parse — the honest record of a bad request.
+fn norm_rref(ops: &Ops, raw: Option<&str>) -> Option<String> {
+    raw.map(|s| {
+        Ref::new(s)
+            .map(|r| ops.resolve(&r).1.path().to_string())
+            .unwrap_or_else(|_| s.to_string())
+    })
+}
+
 /// Audit an op that never got an `Ops` (config/env/actor
 /// resolution failed) — best-effort actor + env from flags and
 /// process env.
@@ -247,7 +261,12 @@ fn audit_fallback(cli: &Cli, op: Op, rref: Option<&str>, outcome: Outcome) {
         .clone()
         .or_else(|| std::env::var("ARCA_ENV").ok())
         .unwrap_or_else(|| "dev".into());
-    arca_ops::audit::emit(&AuditEvent::op(&actor, op, rref, &env, outcome));
+    let rref = rref.map(|s| {
+        Ref::new(s)
+            .map(|r| r.path().to_string())
+            .unwrap_or_else(|_| s.to_string())
+    });
+    arca_ops::audit::emit(&AuditEvent::op(&actor, op, rref.as_deref(), &env, outcome));
 }
 
 fn load(cli: &Cli) -> Result<Ops, OpsError> {
