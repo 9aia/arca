@@ -7,13 +7,83 @@ strongbox. Agents need API keys, but every plaintext handoff is a
 leak surface: prompts, tool output, logs, `.env` pasted into
 configs. arca removes the handoff — code carries `arca://`
 references, never values; the CLI materializes secrets as env vars
-at run time; the audit ledger records every materialization.
+at run time; every materialization emits an audit event on stderr.
 
 ```
 agent ──► arca run -- cmd ──► resolve refs ──► inject env ──► child process
                 │                                  (agent never sees the key)
                 └──► --json everywhere + manifest/schema self-discovery
 ```
+
+## Quickstart
+
+```sh
+cargo install --git https://github.com/9aia/arca arca
+
+arca init                                   # age identity, 0600, once
+printf '%s' "$STRIPE_KEY" | arca put arca://billing/stripe
+
+# the agent path — the value exists only inside the child
+# (one string arg → bash -c, so $STRIPE_KEY expands there)
+arca run -- 'curl -H "Authorization: Bearer $STRIPE_KEY" \
+    https://api.stripe.com/v1/charges'
+
+# the human path
+eval "$(arca env -s STRIPE_KEY=arca://billing/stripe)"
+```
+
+Values never enter via CLI args — `put`/`rotate` read stdin or a
+hidden prompt. `arca get` is the escape hatch; prefer `run` so
+values never enter agent context.
+
+## Verbs
+
+| Verb | What it does |
+| --- | --- |
+| `arca init` | Generate the age identity (0600) if missing; verify the vault opens |
+| `arca put <ref>` | Store a secret — value via stdin or hidden `/dev/tty` prompt, never args |
+| `arca get <ref>` | Print a secret's value (the escape hatch) |
+| `arca list` | Refs stored in the selected env — names only, never values |
+| `arca rm <ref>` | Remove a secret |
+| `arca rotate <ref>` | New value via stdin/prompt; version bump + `rotated_at` |
+| `arca run [-s VAR=ref] -- cmd` | Inject `[secrets]` + ad-hoc pairs into a child. One arg → `bash -c`; several → argv exec, no shell |
+| `arca env [-s VAR=ref]` | `export VAR='…'` lines for `eval` — the human path |
+| `arca check` | Validate config, vault readability, declared-surface resolution; exit 1 on findings |
+| `arca ui` | Interactive vault browser (TUI) |
+| `arca manifest` / `arca schema` | Machine-readable capabilities / `arca.toml` JSON Schema |
+
+`--json` works on every verb (stable shapes in `arca manifest`);
+`--env`, `--config`, `--actor` are global. Audit = ndjson events
+on stderr: `{ts, actor, op, rref?, env, outcome}` — one per
+materialization, `denied` on guardrail refusal, `error` on
+failure.
+
+## Config — `arca.toml`
+
+Searched at `--config` → `$ARCA_CONFIG` → `./arca.toml` →
+`~/.config/arca/arca.toml`. `arca schema` emits the spec;
+[examples/arca.toml.example](examples/arca.toml.example) is the
+commented tour.
+
+```toml
+[vaults.local]                # the built-in age vault ("local" is implicit)
+kind = "age"
+# path, identity, recipients  # optional overrides
+
+[envs]                        # env → vault routing; unlisted envs → "local"
+prod = { vault = "local" }
+
+[secrets]                     # the declared surface run/env may inject
+STRIPE_KEY = "arca://billing/stripe"
+
+[guardrails]                  # advisory op table — accident prevention,
+deny = ["get"]                # not policy (ARCA_ACTOR is self-claimed)
+```
+
+Refs: `arca://ns/name` names the secret; `--env`/`ARCA_ENV` picks
+the resolution context (`dev` default); `arca://prod/ns/name`
+pins the env explicitly. Envs are also the routing axis — same
+ref, different backend per env.
 
 ## Features
 
@@ -24,8 +94,7 @@ agent ──► arca run -- cmd ──► resolve refs ──► inject env ─�
   `eval`. No SDK needed in the agent's runtime
 - **environments are first-class** — `dev`/`staging`/`prod`
   variants behind the same ref; env is also a routing axis:
-  `dev` → local vault, `prod` → cloud vault — same ref, different
-  backend
+  `dev` → local vault, `prod` → cloud vault
 - **ports-and-adapters vaults** — the `arca-vault` trait with
   `arca-vault-age` (local age-encrypted file) first; self-hosted
   Cloudflare (Worker + D1, client-side encrypted) and AWS SM
@@ -33,10 +102,10 @@ agent ──► arca run -- cmd ──► resolve refs ──► inject env ─�
 - **redaction by construction** — a `Secret` newtype with no
   Display/Debug of plaintext; explicit `.expose()` is the only
   way out
-- **audit ledger** — every materialization records actor
-  (`human:luis`, `devin`, `claude`), ref, env, timestamp
-- **surfaces for every actor** — skill teaches agents the verbs,
-  `--json`/`manifest`/`schema` CLI for machines, ratatui
+- **audit wire** — every materialization, denial, and failure is
+  an ndjson event on stderr: actor, ref, env, outcome, timestamp
+- **surfaces for every actor** — `.agents/skills/` teaches agents
+  the verbs, `--json`/`manifest`/`schema` for machines, ratatui
   `arca ui` for humans
 
 ## Position in the stack
@@ -44,15 +113,16 @@ agent ──► arca run -- cmd ──► resolve refs ──► inject env ─�
 arca = **secret materialization**. Neighbors: **myco** (work
 memory), **sturn** (ephemeral coordination), **kuda** (code
 memory), **peregrin** (orchestration — campaigns consume via
-`arca run`), **bupha** (CI gate), **mimus** (critic — its key
-resolution migrates to arca), **sepia** (session lifecycle).
+`arca run`; audit aggregation + policy are its), **bupha** (CI
+gate), **mimus** (critic — its key resolution migrates to arca),
+**sepia** (session lifecycle).
 
 ## Status
 
-Scaffold — the workspace anatomy is copied from
-[myco](https://github.com/9aia/myco) (ports/adapters crates,
-xtask, `docs/` + `project/` worktrees, hooks). Domain internals
-are being built per `project/proposals/`.
+Working v1 — local age vault, full verb surface, audit wire,
+agent skill. Cloud vaults (`arca-vault-cf`, `arca-deploy-cf`),
+`arca serve`, and the docs site land per
+`project/plans/` and `project/proposals/`.
 
 ## Install
 

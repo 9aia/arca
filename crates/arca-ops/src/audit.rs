@@ -1,10 +1,24 @@
 //! Audit events — the wire stand-in until `arca serve` lands.
 //!
 //! ADR-0001 moved audit ownership to peregrin: no local
-//! `audit.jsonl`. Instead arca emits one ndjson line per
-//! materialization on **stderr** — a peregrin/sepia wrapper can
-//! capture it, a human sees a breadcrumb. Keep the struct small and
-//! serializable: it's the wire contract.
+//! `audit.jsonl`. Instead arca emits ndjson lines on **stderr** —
+//! a peregrin/sepia wrapper can capture them, a human sees a
+//! breadcrumb. Keep the struct small and serializable: it's the
+//! wire contract.
+//!
+//! Every verb invocation leaves a trail, uniformly:
+//!
+//! - **ok** — one event per ref materialized or mutated
+//!   (`put`/`get`/`rotate`/`rm`, and per-ref inside `run`/`env`),
+//!   or one op-scoped event for ref-less verbs
+//!   (`init`/`list`/`check`/`ui`).
+//! - **denied** — the op was refused by `[guardrails]` (advisory).
+//! - **error** — the op ran but failed (missing secret, vault
+//!   error, bad ref).
+//!
+//! `manifest`/`schema` run before config load — pure
+//! introspection, no event. A `run` child's non-zero exit is the
+//! child's outcome, not arca's — no `error` event for it.
 
 use std::io::{self, Write};
 
@@ -13,7 +27,20 @@ use time::OffsetDateTime;
 
 use arca_core::Op;
 
-/// One materialization (or mutation) record.
+/// How an audited op ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Outcome {
+    /// The op did what was asked (a ref materialized/mutated, or a
+    /// ref-less verb completed).
+    Ok,
+    /// Refused by `[guardrails]` — the op never touched the vault.
+    Denied,
+    /// The op ran and failed (missing secret, vault i/o, bad ref).
+    Error,
+}
+
+/// One materialization, mutation, or op outcome record.
 #[derive(Debug, Clone, Serialize)]
 pub struct AuditEvent {
     /// RFC 3339 timestamp.
@@ -25,20 +52,36 @@ pub struct AuditEvent {
     /// The verb.
     pub op: Op,
     /// The resolved ref path (no env pin — `env` carries that).
-    pub rref: String,
-    /// The env the secret was materialized under.
+    /// Absent for op-scoped events (`list`, denials before parse).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rref: Option<String>,
+    /// The env the op ran under.
     pub env: String,
+    /// How it ended.
+    pub outcome: Outcome,
 }
 
 impl AuditEvent {
-    /// Stamp `now` and fill the fields.
-    pub fn new(actor: &str, op: Op, rref: &str, env: &str) -> Self {
+    /// A ref-scoped success — one materialization or mutation.
+    pub fn materialized(actor: &str, op: Op, rref: &str, env: &str) -> Self {
+        Self::new(actor, op, Some(rref), env, Outcome::Ok)
+    }
+
+    /// An op-scoped event — verbs with no single ref, denials, and
+    /// failures. `rref` carries the raw requested ref when known
+    /// (e.g. a denied `get arca://x/y`).
+    pub fn op(actor: &str, op: Op, rref: Option<&str>, env: &str, outcome: Outcome) -> Self {
+        Self::new(actor, op, rref, env, outcome)
+    }
+
+    fn new(actor: &str, op: Op, rref: Option<&str>, env: &str, outcome: Outcome) -> Self {
         AuditEvent {
             ts: OffsetDateTime::now_utc(),
             actor: actor.to_string(),
             op,
-            rref: rref.to_string(),
+            rref: rref.map(str::to_string),
             env: env.to_string(),
+            outcome,
         }
     }
 }
@@ -64,7 +107,7 @@ mod tests {
 
     #[test]
     fn event_is_ndjson() {
-        let ev = AuditEvent::new("devin", Op::Run, "billing/stripe", "prod");
+        let ev = AuditEvent::materialized("devin", Op::Run, "billing/stripe", "prod");
         let mut buf = Vec::new();
         emit_to(&mut buf, &ev).unwrap();
         let line = String::from_utf8(buf).unwrap();
@@ -74,7 +117,37 @@ mod tests {
         assert_eq!(v["op"], "run");
         assert_eq!(v["rref"], "billing/stripe");
         assert_eq!(v["env"], "prod");
+        assert_eq!(v["outcome"], "ok");
         assert!(v["ts"].is_string());
         assert!(!line.contains("value"), "audit never carries values");
+    }
+
+    #[test]
+    fn op_scoped_and_outcome_events() {
+        let mut buf = Vec::new();
+        emit_to(
+            &mut buf,
+            &AuditEvent::op("devin", Op::List, None, "dev", Outcome::Ok),
+        )
+        .unwrap();
+        emit_to(
+            &mut buf,
+            &AuditEvent::op(
+                "devin",
+                Op::Get,
+                Some("billing/stripe"),
+                "dev",
+                Outcome::Denied,
+            ),
+        )
+        .unwrap();
+        let text = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        let v: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        assert!(v.get("rref").is_none(), "op-scoped events omit rref");
+        assert_eq!(v["outcome"], "ok");
+        let v: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        assert_eq!(v["outcome"], "denied");
+        assert_eq!(v["rref"], "billing/stripe");
     }
 }

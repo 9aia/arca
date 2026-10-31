@@ -2,27 +2,34 @@
 //!
 //! Code and config carry `arca://` references, never values; `arca
 //! run` materializes declared secrets as env vars in the child only.
-//! Every materialization emits an audit ndjson line on stderr.
+//! Every materialization — and every denial/failure — emits an
+//! audit ndjson line on stderr.
 //!
-//! Values never enter via CLI args — `put`/`rotate` read stdin
-//! (args land in shell history and `/proc`). `get` is the escape
-//! hatch that prints a value to stdout; guardrails can deny it for
-//! agents once enforcement lands.
+//! Values never enter via CLI args — `put`/`rotate` read stdin or a
+//! hidden `/dev/tty` prompt (args land in shell history and
+//! `/proc`). `get` is the escape hatch that prints a value to
+//! stdout; `[guardrails]` can advisory-deny it for agents.
 
 use std::collections::BTreeMap;
 use std::io::{IsTerminal, Read, Write};
 use std::process::ExitCode;
 
 use arca_core::{Op, Ref, Secret};
-use arca_ops::{LoadOpts, Ops};
+use arca_ops::{AuditEvent, LoadOpts, Ops, OpsError, Outcome};
 use clap::{Parser, Subcommand};
 
 /// arca — secrets broker for agents: `arca://` refs, redaction,
 /// env-injection instead of plaintext.
+///
+/// Refs name logical secrets (`arca://billing/stripe`); `--env`
+/// picks the resolution context. `[secrets]` in arca.toml bounds
+/// what `run`/`env` may inject. `manifest`/`schema` describe the
+/// surface for machines; every verb honors `--json`.
 #[derive(Parser)]
-#[command(name = "arca", version, about, long_about = None)]
+#[command(name = "arca", version, about, long_about)]
 struct Cli {
-    /// Emit JSON (accepted everywhere; default output for machines).
+    /// Emit JSON — stable machine shapes on every verb; errors are
+    /// `{"error": "…"}` on stderr with a non-zero exit.
     #[arg(long, global = true)]
     json: bool,
 
@@ -48,55 +55,73 @@ struct Cli {
 #[derive(Subcommand)]
 enum Cmd {
     /// Bootstrap: generate the age identity (0600) if missing and
-    /// verify the local vault opens.
+    /// verify the vault opens.
     Init,
-    /// Store a secret. The value comes from stdin — never args.
+    /// Store a secret. The value comes from stdin (`printf … | arca
+    /// put arca://ns/name`) or a hidden terminal prompt — never
+    /// args, which land in shell history and `/proc`.
     Put {
         /// `arca://` ref, e.g. arca://billing/stripe.
         rref: String,
     },
-    /// Print a secret's value to stdout.
+    /// Print a secret's value to stdout — the escape hatch. Prefer
+    /// `arca run` so values never enter agent context; guardrails
+    /// can deny this op.
     Get {
         /// `arca://` ref.
         rref: String,
     },
-    /// List refs stored in the selected env.
+    /// List the refs stored in the selected env — names only, never
+    /// values.
     List,
-    /// Remove a secret.
+    /// Remove a secret from the selected env.
     Rm {
         /// `arca://` ref.
         rref: String,
     },
-    /// Rotate a secret to a new value (stdin); bumps version +
-    /// rotated_at.
+    /// Rotate a secret to a new value (stdin or hidden prompt, like
+    /// `put`); bumps version + rotated_at.
     Rotate {
         /// `arca://` ref.
         rref: String,
     },
     /// Run a command with declared secrets injected as env vars.
-    /// Declared surface = `[secrets]` in arca.toml plus `-s`
-    /// overrides; nothing else may be injected.
+    ///
+    /// Injection surface = `[secrets]` in arca.toml plus `-s
+    /// VAR=arca://ref` ad-hoc pairs; nothing else is injectable.
+    /// Two exec modes after `--`:
+    ///
+    /// `arca run -- 'pnpm test | tee log'` — one string → `bash -c`
+    ///
+    /// `arca run -- pnpm test --filter x` — argv → direct exec
+    ///
+    /// argv mode needs no shell quoting — prefer it when the
+    /// command has arguments. Exit code is the child's.
     Run {
         /// Extra `VAR=arca://ref` pairs to inject.
         #[arg(short = 's', long = "secret", value_name = "VAR=ARCA_REF")]
         secrets: Vec<String>,
-        /// The command line to run (after `--`).
+        /// Command to run (after `--`). One arg → `bash -c`;
+        /// several → `argv[0]` exec'd directly with the rest.
         #[arg(last = true, required = true)]
         cmd: Vec<String>,
     },
     /// Print `export VAR='…'` lines for `eval "$(arca env)"` — the
-    /// human path (`run` is the agent path).
+    /// human path (`run` is the agent path). Values print to
+    /// stdout: `--json` emits a `VAR → value` map.
     Env {
         /// Extra `VAR=arca://ref` pairs to resolve.
         #[arg(short = 's', long = "secret", value_name = "VAR=ARCA_REF")]
         secrets: Vec<String>,
     },
-    /// Validate config + the declared secret surface; report the
-    /// resolved routing. Exit 1 on findings.
+    /// Validate config + the declared surface: `[envs]` routes
+    /// point at declared vaults, vaults decrypt, every `[secrets]`
+    /// ref resolves in its routed env. Exit 1 on findings.
     Check,
     /// Interactive vault browser (requires the `tui` feature).
     Ui,
-    /// Capabilities + protocol version — agent self-discovery.
+    /// Capabilities, JSON shapes, env vars, audit contract — agent
+    /// self-discovery (always JSON).
     Manifest,
     /// JSON Schema for `arca.toml`.
     Schema,
@@ -106,21 +131,102 @@ fn main() -> ExitCode {
     sigpipe::reset();
     let cli = Cli::parse();
     match &cli.command {
+        // Pure introspection — before config load, no audit event.
         Cmd::Manifest => json_out(&manifest()),
         Cmd::Schema => {
             match serde_json::to_string_pretty(&schemars::schema_for!(arca_core::Config)) {
                 Ok(s) => out(&s),
-                Err(e) => err(&format!("schema: {e}")),
+                Err(e) => fail(&cli, &format!("schema: {e}")),
             }
         }
-        cmd => match load(&cli).and_then(|ops| run_cmd(cmd, &cli, &ops)) {
-            Ok(code) => code,
-            Err(e) => err(&e.to_string()),
-        },
+        cmd => {
+            let op = cmd_op(cmd);
+            let rref = cmd_rref(cmd);
+            let ops = match load(&cli) {
+                Ok(ops) => ops,
+                Err(e) => {
+                    audit_fallback(&cli, op, rref, Outcome::Error);
+                    return fail(&cli, &e.to_string());
+                }
+            };
+            // Advisory guardrails — accident prevention, not
+            // policy; enforced before the op touches the vault.
+            if let Some(g) = ops.config().guardrails.as_ref() {
+                if !g.allows(op) {
+                    ops.emit(op, rref, Outcome::Denied);
+                    let at = ops
+                        .config_path()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|| "config".to_string());
+                    return fail(
+                        &cli,
+                        &format!(
+                            "op '{op}' denied by guardrails in {at} \
+                             (advisory — remove/relax the rule to allow)"
+                        ),
+                    );
+                }
+            }
+            match run_cmd(cmd, &cli, &ops) {
+                Ok(code) => code,
+                Err(e) => {
+                    ops.emit(op, rref, Outcome::Error);
+                    fail(&cli, &e.to_string())
+                }
+            }
+        }
     }
 }
 
-fn load(cli: &Cli) -> Result<Ops, arca_ops::OpsError> {
+/// The [`Op`] a subcommand maps to — what guardrails and audit
+/// record.
+fn cmd_op(cmd: &Cmd) -> Op {
+    match cmd {
+        Cmd::Init => Op::Init,
+        Cmd::Put { .. } => Op::Put,
+        Cmd::Get { .. } => Op::Get,
+        Cmd::List => Op::List,
+        Cmd::Rm { .. } => Op::Rm,
+        Cmd::Rotate { .. } => Op::Rotate,
+        Cmd::Run { .. } => Op::Run,
+        Cmd::Env { .. } => Op::Env,
+        Cmd::Check => Op::Check,
+        Cmd::Ui => Op::Ui,
+        Cmd::Manifest => Op::Manifest,
+        Cmd::Schema => Op::Schema,
+    }
+}
+
+/// The raw ref arg for verbs that take one — for denied/error
+/// audit events, before (or regardless of) parse.
+fn cmd_rref(cmd: &Cmd) -> Option<&str> {
+    match cmd {
+        Cmd::Put { rref } | Cmd::Get { rref } | Cmd::Rm { rref } | Cmd::Rotate { rref } => {
+            Some(rref)
+        }
+        _ => None,
+    }
+}
+
+/// Audit an op that never got an `Ops` (config/env/actor
+/// resolution failed) — best-effort actor + env from flags and
+/// process env.
+fn audit_fallback(cli: &Cli, op: Op, rref: Option<&str>, outcome: Outcome) {
+    let actor = cli
+        .actor
+        .clone()
+        .or_else(|| std::env::var("ARCA_ACTOR").ok())
+        .or_else(|| std::env::var("USER").ok())
+        .unwrap_or_else(|| "anon".into());
+    let env = cli
+        .env
+        .clone()
+        .or_else(|| std::env::var("ARCA_ENV").ok())
+        .unwrap_or_else(|| "dev".into());
+    arca_ops::audit::emit(&AuditEvent::op(&actor, op, rref, &env, outcome));
+}
+
+fn load(cli: &Cli) -> Result<Ops, OpsError> {
     Ops::load(LoadOpts {
         config_path: cli.config.clone(),
         env: cli.env.clone(),
@@ -128,16 +234,17 @@ fn load(cli: &Cli) -> Result<Ops, arca_ops::OpsError> {
     })
 }
 
-fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, arca_ops::OpsError> {
+fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
     match cmd {
         Cmd::Init => {
             let info = ops.init()?;
+            ops.emit(Op::Init, None, Outcome::Ok);
             if cli.json {
                 return Ok(json_out(&serde_json::json!({
-                    "vault": info.vault_path,
                     "identity": info.identity_path,
-                    "identity_created": info.identity_created,
+                    "created": info.identity_created,
                     "recipient": info.recipient,
+                    "vault": info.vault_path,
                 })));
             }
             eprintln!(
@@ -154,33 +261,56 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, arca_ops::OpsErr
             Ok(ExitCode::SUCCESS)
         }
         Cmd::Put { rref } => {
-            let secret = read_secret_stdin()?;
-            let rec = ops.put(&parse_ref(rref)?, secret)?;
+            let parsed = parse_ref(rref)?;
+            let secret = read_secret(&format!("value for {rref}: "))?;
+            let rec = ops.put(&parsed, secret)?;
             if cli.json {
-                return Ok(json_out(&record_json(&rec)));
+                let mut v = record_json(ops, &parsed, &rec);
+                v["ok"] = true.into();
+                return Ok(json_out(&v));
             }
             eprintln!("stored {rref} (v{})", rec.version);
             Ok(ExitCode::SUCCESS)
         }
-        Cmd::Get { rref } => match ops.get(&parse_ref(rref)?)? {
-            Some(rec) => {
-                if cli.json {
-                    let mut v = record_json(&rec);
-                    v["value"] = rec.value.expose().into();
-                    return Ok(json_out(&v));
+        Cmd::Get { rref } => {
+            let parsed = parse_ref(rref)?;
+            match ops.get(&parsed)? {
+                Some(rec) => {
+                    if cli.json {
+                        let mut v = record_json(ops, &parsed, &rec);
+                        v["value"] = rec.value.expose().into();
+                        return Ok(json_out(&v));
+                    }
+                    if std::io::stdout().is_terminal() {
+                        eprintln!("note: secret value printed to terminal");
+                    }
+                    println!("{}", rec.value.expose());
+                    Ok(ExitCode::SUCCESS)
                 }
-                println!("{}", rec.value.expose());
-                Ok(ExitCode::SUCCESS)
+                None => Err(OpsError::Msg(format!(
+                    "{rref} is not stored in env {}",
+                    ops.resolve(&parsed).0
+                ))),
             }
-            None => Ok(err(&format!("{rref} is not stored in env {}", ops.env()))),
-        },
+        }
         Cmd::List => {
             let (env, refs) = ops.list(None)?;
+            ops.emit(Op::List, None, Outcome::Ok);
             if cli.json {
-                return Ok(json_out(&serde_json::json!({
-                    "env": env.as_str(),
-                    "refs": refs.iter().map(ToString::to_string).collect::<Vec<_>>(),
-                })));
+                let (_, records) = ops.list_records(None)?;
+                let arr: Vec<serde_json::Value> = records
+                    .iter()
+                    .map(|(r, rec)| {
+                        serde_json::json!({
+                            "ref": r.to_string(),
+                            "env": env.as_str(),
+                            "version": rec.version,
+                            "created_at": rec.created_at.to_string(),
+                            "rotated_at": rec.rotated_at.map(|t| t.to_string()),
+                        })
+                    })
+                    .collect();
+                return Ok(json_out(&serde_json::Value::Array(arr)));
             }
             for r in refs {
                 println!("{r}");
@@ -188,22 +318,30 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, arca_ops::OpsErr
             Ok(ExitCode::SUCCESS)
         }
         Cmd::Rm { rref } => {
-            let removed = ops.rm(&parse_ref(rref)?)?;
-            if cli.json {
-                return Ok(json_out(&serde_json::json!({ "removed": removed })));
+            let parsed = parse_ref(rref)?;
+            let (env, _) = ops.resolve(&parsed);
+            if !ops.rm(&parsed)? {
+                return Err(OpsError::Msg(format!("{rref} is not stored in env {env}")));
             }
-            eprintln!("{}", if removed { "removed" } else { "not stored" });
-            Ok(if removed {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
-            })
+            if cli.json {
+                return Ok(json_out(&serde_json::json!({
+                    "ok": true,
+                    "removed": true,
+                    "ref": parsed.to_string(),
+                    "env": env.as_str(),
+                })));
+            }
+            eprintln!("removed {rref}");
+            Ok(ExitCode::SUCCESS)
         }
         Cmd::Rotate { rref } => {
-            let secret = read_secret_stdin()?;
-            let rec = ops.rotate(&parse_ref(rref)?, secret)?;
+            let parsed = parse_ref(rref)?;
+            let secret = read_secret(&format!("new value for {rref}: "))?;
+            let rec = ops.rotate(&parsed, secret)?;
             if cli.json {
-                return Ok(json_out(&record_json(&rec)));
+                let mut v = record_json(ops, &parsed, &rec);
+                v["ok"] = true.into();
+                return Ok(json_out(&v));
             }
             eprintln!("rotated {rref} (v{})", rec.version);
             Ok(ExitCode::SUCCESS)
@@ -215,7 +353,13 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, arca_ops::OpsErr
                 .map(|(k, v)| (k.clone(), v.expose().to_string()))
                 .collect();
             let cwd = std::env::current_dir()?;
-            let status = arca_shell::run_with_env(&cwd, &cmd.join(" "), &exposed)?;
+            // One arg → `bash -c` (shell syntax); several → exec
+            // argv[0] directly, no shell quoting.
+            let status = if cmd.len() == 1 {
+                arca_shell::run_with_env(&cwd, &cmd[0], &exposed)?
+            } else {
+                arca_shell::exec_with_env(&cwd, cmd, &exposed)?
+            };
             Ok(ExitCode::from(status.code().unwrap_or(1) as u8))
         }
         Cmd::Env { secrets } => {
@@ -228,54 +372,108 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, arca_ops::OpsErr
             let stdout = std::io::stdout();
             let mut w = stdout.lock();
             for (k, v) in &vars {
-                if writeln!(w, "export {k}={}", sh_escape(v.expose())).is_err() {
-                    return Ok(ExitCode::FAILURE);
-                }
+                writeln!(w, "export {k}={}", sh_escape(v.expose()))?;
             }
             Ok(ExitCode::SUCCESS)
         }
         Cmd::Check => {
             let report = ops.check();
+            ops.emit(Op::Check, None, Outcome::Ok);
+            let ok = report.problems.is_empty();
             if cli.json {
-                let ok = report.problems.is_empty();
+                let secrets: serde_json::Map<String, serde_json::Value> = report
+                    .secrets
+                    .iter()
+                    .map(|s| {
+                        (
+                            s.var.clone(),
+                            serde_json::json!({
+                                "ref": s.rref,
+                                "env": s.env,
+                                "resolves": s.resolves,
+                            }),
+                        )
+                    })
+                    .collect();
+                let vaults: Vec<serde_json::Value> = report
+                    .vaults
+                    .iter()
+                    .map(|v| {
+                        serde_json::json!({
+                            "name": v.name,
+                            "kind": v.kind,
+                            "path": v.path,
+                            "ok": v.ok,
+                            "error": v.error,
+                        })
+                    })
+                    .collect();
+                let guardrails = report.guardrails.as_ref().map(|g| {
+                    serde_json::json!({
+                        "default": match g.default {
+                            arca_core::GuardDefault::Allow => "allow",
+                            arca_core::GuardDefault::Deny => "deny",
+                        },
+                        "allow": g.allow.iter().map(|o| o.as_str()).collect::<Vec<_>>(),
+                        "deny": g.deny.iter().map(|o| o.as_str()).collect::<Vec<_>>(),
+                    })
+                });
                 let code = json_out(&serde_json::json!({
                     "config": report.config_path,
                     "env": report.env.as_str(),
                     "vault": report.vault,
-                    "secrets": report.secrets,
-                    "problems": report.problems,
+                    "vaults": vaults,
+                    "secrets": secrets,
+                    "guardrails": guardrails,
+                    "errors": report.problems,
                 }));
                 if code != ExitCode::SUCCESS {
                     return Ok(code);
                 }
-                return Ok(if ok {
-                    ExitCode::SUCCESS
-                } else {
-                    ExitCode::FAILURE
-                });
-            }
-            match &report.config_path {
-                Some(p) => eprintln!("config: {}", p.display()),
-                None => eprintln!("config: (none found — defaults)"),
-            }
-            eprintln!(
-                "env: {} → vault {:?} · {} declared secret(s)",
-                report.env, report.vault, report.secrets
-            );
-            if report.problems.is_empty() {
-                eprintln!("ok");
-                Ok(ExitCode::SUCCESS)
             } else {
-                for p in &report.problems {
-                    eprintln!("problem: {p}");
+                match &report.config_path {
+                    Some(p) => eprintln!("config: {}", p.display()),
+                    None => eprintln!("config: (none found — defaults)"),
                 }
-                Ok(ExitCode::FAILURE)
+                eprintln!("env: {} → vault {:?}", report.env, report.vault,);
+                for v in &report.vaults {
+                    match &v.error {
+                        None => eprintln!("vault {:?} ({}): readable", v.name, v.kind),
+                        Some(e) => eprintln!("vault {:?} ({}): {e}", v.name, v.kind),
+                    }
+                }
+                for s in &report.secrets {
+                    eprintln!(
+                        "secret {} → {} (env {}): {}",
+                        s.var,
+                        s.rref,
+                        s.env,
+                        if s.resolves { "resolves" } else { "NOT STORED" }
+                    );
+                }
+                if let Some(g) = &report.guardrails {
+                    let deny: Vec<_> = g.deny.iter().map(|o| o.as_str()).collect();
+                    eprintln!("guardrails: configured (deny: {})", deny.join(", "));
+                }
+                if report.problems.is_empty() {
+                    eprintln!("ok");
+                } else {
+                    for p in &report.problems {
+                        eprintln!("problem: {p}");
+                    }
+                }
             }
+            Ok(if ok {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            })
         }
         Cmd::Ui => {
             #[cfg(feature = "tui")]
             {
                 arca_tui::run(ops)?;
+                ops.emit(Op::Ui, None, Outcome::Ok);
                 Ok(ExitCode::SUCCESS)
             }
             #[cfg(not(feature = "tui"))]
@@ -288,71 +486,149 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, arca_ops::OpsErr
     }
 }
 
-fn parse_ref(s: &str) -> Result<Ref, arca_ops::OpsError> {
+fn parse_ref(s: &str) -> Result<Ref, OpsError> {
     Ok(s.parse::<Ref>()?)
 }
 
 /// `-s VAR=arca://ref` pairs.
-fn parse_pairs(raw: &[String]) -> Result<Vec<(String, String)>, arca_ops::OpsError> {
+fn parse_pairs(raw: &[String]) -> Result<Vec<(String, String)>, OpsError> {
     raw.iter()
         .map(|s| {
             s.split_once('=')
                 .map(|(k, v)| (k.to_string(), v.to_string()))
-                .ok_or_else(|| {
-                    arca_ops::OpsError::Msg(format!("-s wants VAR=arca://ref, got {s:?}"))
-                })
+                .ok_or_else(|| OpsError::Msg(format!("-s wants VAR=arca://ref, got {s:?}")))
         })
         .collect()
 }
 
-/// Secrets arrive on stdin only — one trailing line terminator is
-/// stripped, the rest is the value verbatim (newlines allowed).
-fn read_secret_stdin() -> Result<Secret, arca_ops::OpsError> {
+/// Secrets arrive on stdin (the scripted path) or a hidden
+/// `/dev/tty` prompt (the human path) — never args. One trailing
+/// line terminator is stripped; the rest is the value verbatim
+/// (newlines allowed on the pipe path).
+fn read_secret(prompt: &str) -> Result<Secret, OpsError> {
     let stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        return Err(arca_ops::OpsError::Msg(
-            "stdin is a terminal — pipe the value (secrets never enter via args)".into(),
-        ));
-    }
-    let mut buf = String::new();
-    stdin
-        .lock()
-        .read_to_string(&mut buf)
-        .map_err(|e| arca_ops::OpsError::Msg(format!("read stdin: {e}")))?;
-    let v = buf
+    let raw = if stdin.is_terminal() {
+        rpassword::prompt_password(prompt)
+            .map_err(|e| OpsError::Msg(format!("read secret: {e}")))?
+    } else {
+        let mut buf = String::new();
+        stdin
+            .lock()
+            .read_to_string(&mut buf)
+            .map_err(|e| OpsError::Msg(format!("read stdin: {e}")))?;
+        buf
+    };
+    let v = raw
         .strip_suffix("\r\n")
-        .or_else(|| buf.strip_suffix('\n'))
-        .unwrap_or(&buf);
+        .or_else(|| raw.strip_suffix('\n'))
+        .unwrap_or(&raw);
     if v.is_empty() {
-        return Err(arca_ops::OpsError::Msg("empty secret on stdin".into()));
+        return Err(OpsError::Msg("empty secret".into()));
     }
     Ok(Secret::new(v))
 }
 
-/// Shell single-quote escape for `arca env` output.
+/// Shell single-quote escape for `arca env` output — `'` becomes
+/// `'\''`, so any value is safe inside the quotes.
 fn sh_escape(v: &str) -> String {
     format!("'{}'", v.replace('\'', "'\\''"))
 }
 
-fn record_json(rec: &arca_vault::SecretRecord) -> serde_json::Value {
+/// The canonical record shape: resolved ref + env plus record
+/// metadata. Callers add `value`/`ok` as needed — never by
+/// default.
+fn record_json(ops: &Ops, parsed: &Ref, rec: &arca_vault::SecretRecord) -> serde_json::Value {
+    let (env, r) = ops.resolve(parsed);
     serde_json::json!({
+        "ref": r.to_string(),
+        "env": env.as_str(),
         "version": rec.version,
         "created_at": rec.created_at.to_string(),
         "rotated_at": rec.rotated_at.map(|t| t.to_string()),
     })
 }
 
+/// The machine-readable capability doc — verbs, JSON shapes, env
+/// vars, the audit contract. Keep honest: this is what the binary
+/// actually does, not what it plans to.
 fn manifest() -> serde_json::Value {
     serde_json::json!({
         "name": "arca",
         "version": env!("CARGO_PKG_VERSION"),
+        "description": "secrets broker for agents — arca:// refs in code/config, env-var injection at run time, ndjson audit on stderr",
+        "repository": "https://github.com/9aia/arca",
         "protocol": "arca/1",
         "ops": arca_core::Op::ALL.iter().map(|o| o.as_str()).collect::<Vec<_>>(),
+        "verbs": {
+            "init": "generate the age identity (0600) if missing; verify the vault opens",
+            "put": "store a secret — value via stdin or hidden /dev/tty prompt, never args",
+            "get": "print a secret's value (the escape hatch — prefer run)",
+            "list": "refs stored in the selected env — names only, never values",
+            "rm": "remove a secret",
+            "rotate": "new value via stdin/prompt; version bump + rotated_at",
+            "run": "inject [secrets]+`-s` into a child — one arg → bash -c, several → argv exec (no shell)",
+            "env": "export lines for eval (human path); --json → VAR→value map",
+            "check": "validate config, vault readability, declared-surface resolution; exit 1 on findings",
+            "ui": "interactive vault browser (tui feature)",
+            "manifest": "this document (always JSON; before config load, no audit event)",
+            "schema": "JSON Schema for arca.toml (before config load)",
+        },
+        "flags": {
+            "--json": "stable shapes below; errors are {\"error\": \"…\"} on stderr, non-zero exit",
+            "--env ENV": "resolution context (dev/staging/prod/custom; overrides ARCA_ENV)",
+            "--config PATH": "config override (else $ARCA_CONFIG → ./arca.toml → ~/.config/arca/arca.toml)",
+            "--actor ACTOR": "audit attribution (else ARCA_ACTOR → $USER → anon)",
+            "-s VAR=arca://ref": "ad-hoc injection pair on run/env (repeatable)",
+        },
+        "json_shapes": {
+            "init": {"identity": "path", "created": true, "recipient": "age1…", "vault": "path"},
+            "put": {"ok": true, "ref": "arca://ns/name", "env": "dev", "version": 1, "created_at": "rfc3339", "rotated_at": "rfc3339|null"},
+            "rotate": "same as put",
+            "get": {"ref": "arca://ns/name", "env": "dev", "value": "plaintext", "version": 1, "created_at": "rfc3339", "rotated_at": "rfc3339|null"},
+            "list": [{"ref": "arca://ns/name", "env": "dev", "version": 1, "created_at": "rfc3339", "rotated_at": "rfc3339|null"}],
+            "rm": {"ok": true, "removed": true, "ref": "arca://ns/name", "env": "dev"},
+            "env": {"VAR": "plaintext value"},
+            "check": {
+                "config": "path|null", "env": "dev", "vault": "local",
+                "vaults": [{"name": "local", "kind": "age", "path": "path|null", "ok": true, "error": "…|null"}],
+                "secrets": {"VAR": {"ref": "arca://ns/name", "env": "dev", "resolves": true}},
+                "guardrails": {"default": "allow|deny", "allow": ["run"], "deny": ["get"]},
+                "errors": ["finding…"],
+            },
+            "run": "passthrough — child stdout/stderr/exit code; --json changes nothing",
+            "error": {"error": "message (stderr, non-zero exit)"},
+        },
+        "run_modes": {
+            "shell": "arca run -- 'cmd | pipeline' — a single arg runs via bash -c",
+            "argv": "arca run -- prog arg… — multiple args exec argv[0] directly, no shell",
+        },
+        "env_vars": {
+            "ARCA_CONFIG": "config file override",
+            "ARCA_ENV": "env context (default dev)",
+            "ARCA_ACTOR": "audit actor attribution",
+            "ARCA_IDENTITY_FILE": "age identity file override",
+        },
+        "config": {
+            "search": ["--config", "$ARCA_CONFIG", "./arca.toml", "~/.config/arca/arca.toml"],
+            "tables": ["vaults", "envs", "secrets", "guardrails"],
+            "schema": "arca schema",
+            "env_pin": "arca://prod/ns/name pins the env regardless of context",
+        },
+        "vault_kinds": ["age"],
+        "audit": {
+            "wire": "ndjson lines on stderr",
+            "event": {"ts": "rfc3339", "actor": "…", "op": "…", "rref": "…|absent when op-scoped", "env": "…", "outcome": "ok|denied|error"},
+            "shape": "per-ref event per materialized/mutated ref (put/get/rotate/rm, run/env); op-scoped event for init/list/check/ui; denied on guardrail refusal; error on op failure; manifest/schema emit none; a run child's exit code is not an arca failure",
+        },
         "features": {
             "tui": cfg!(feature = "tui"),
         },
-        "env_vars": ["ARCA_CONFIG", "ARCA_ENV", "ARCA_ACTOR", "ARCA_IDENTITY_FILE"],
-        "audit": "ndjson events on stderr",
+        "notes": [
+            "values never enter via CLI args — put/rotate read stdin or a hidden /dev/tty prompt",
+            "[secrets] bounds what run/env may inject (least privilege); -s covers one-offs",
+            "guardrails are advisory — accident prevention, not policy; ARCA_ACTOR is self-claimed",
+            "list never carries values; get/env are the only surfaces that print them",
+        ],
     })
 }
 
@@ -364,11 +640,23 @@ fn out(s: &str) -> ExitCode {
 fn json_out(v: &serde_json::Value) -> ExitCode {
     match serde_json::to_string_pretty(v) {
         Ok(s) => out(&s),
-        Err(e) => err(&format!("json: {e}")),
+        Err(e) => fail_quiet(&format!("json: {e}")),
     }
 }
 
-fn err(msg: &str) -> ExitCode {
+/// Error path honoring `--json`: `{"error": …}` on stderr for
+/// machines, `arca: …` for humans.
+fn fail(cli: &Cli, msg: &str) -> ExitCode {
+    if cli.json {
+        eprintln!("{}", serde_json::json!({ "error": msg }));
+    } else {
+        eprintln!("arca: {msg}");
+    }
+    ExitCode::FAILURE
+}
+
+/// Error path when no `Cli` is in scope.
+fn fail_quiet(msg: &str) -> ExitCode {
     eprintln!("arca: {msg}");
     ExitCode::FAILURE
 }

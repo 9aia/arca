@@ -11,7 +11,7 @@
 pub mod audit;
 mod error;
 
-pub use audit::AuditEvent;
+pub use audit::{AuditEvent, Outcome};
 pub use error::OpsError;
 
 use std::collections::BTreeMap;
@@ -47,6 +47,36 @@ pub struct InitInfo {
     pub recipient: String,
 }
 
+/// What `check` reports about one vault — the backend is
+/// decryptable/readable, or why not.
+#[derive(Debug)]
+pub struct VaultCheck {
+    /// Vault name from `[vaults]` (or the implicit `local`).
+    pub name: String,
+    /// Backend kind (`age`; anything else is a problem).
+    pub kind: String,
+    /// Vault file path for file-backed impls (`None` when the kind
+    /// is unknown or unset).
+    pub path: Option<PathBuf>,
+    /// The vault opened (identity present, ciphertext decrypts).
+    pub ok: bool,
+    /// Why it didn't (`None` when `ok`).
+    pub error: Option<String>,
+}
+
+/// What `check` reports about one declared `[secrets]` entry.
+#[derive(Debug)]
+pub struct SecretCheck {
+    /// The env-var name.
+    pub var: String,
+    /// The declared `arca://` ref, env pin stripped if present.
+    pub rref: String,
+    /// The env it resolves under (pin-aware).
+    pub env: String,
+    /// A record exists at that `(env, ref)`.
+    pub resolves: bool,
+}
+
 /// What `check` reports back.
 #[derive(Debug)]
 pub struct CheckReport {
@@ -56,8 +86,12 @@ pub struct CheckReport {
     pub env: Env,
     /// Vault name `env` routes to.
     pub vault: String,
-    /// Count of declared `[secrets]`.
-    pub secrets: usize,
+    /// Every configured or routed vault, with readability status.
+    pub vaults: Vec<VaultCheck>,
+    /// Every declared `[secrets]` entry, with resolution status.
+    pub secrets: Vec<SecretCheck>,
+    /// The configured guardrails table, if any.
+    pub guardrails: Option<arca_core::Guardrails>,
     /// Findings — non-empty means "problems to fix" (exit 1).
     pub problems: Vec<String>,
 }
@@ -135,7 +169,12 @@ impl Ops {
     /// Open the vault an env routes to. `local` (the implicit
     /// default) is always the age backend.
     pub fn open_vault(&self, env: &Env) -> Result<Box<dyn Vault>, OpsError> {
-        let name = self.config.vault_for(env);
+        self.open_vault_named(self.config.vault_for(env))
+    }
+
+    /// Open a vault by `[vaults]` name (`local` resolves to its
+    /// implicit defaults when unconfigured).
+    pub fn open_vault_named(&self, name: &str) -> Result<Box<dyn Vault>, OpsError> {
         let cfg = self.config.vault_config(name);
         let kind = cfg.map(|c| c.kind.as_str()).unwrap_or("age");
         match kind {
@@ -238,6 +277,24 @@ impl Ops {
         Ok((env, refs))
     }
 
+    /// Refs plus their records (metadata) in the selected env —
+    /// backs `list --json`. Values come along inside
+    /// [`SecretRecord`]s but are never printed.
+    pub fn list_records(
+        &self,
+        env: Option<&Env>,
+    ) -> Result<(Env, Vec<(Ref, SecretRecord)>), OpsError> {
+        let (env, refs) = self.list(env)?;
+        let vault = self.open_vault(&env)?;
+        let mut out = Vec::new();
+        for r in refs {
+            if let Some(rec) = vault.get(&env, &r)? {
+                out.push((r, rec));
+            }
+        }
+        Ok((env, out))
+    }
+
     /// Resolve every declared + ad-hoc `VAR = arca://ref` pair into
     /// a `VAR → Secret` map for injection. Emits one
     /// materialization event per resolved ref. Missing refs and bad
@@ -282,8 +339,10 @@ impl Ops {
         Ok(out)
     }
 
-    /// `arca check` — validate the config + declared surface without
-    /// touching the vault (no identity generation, no writes).
+    /// `arca check` — validate the config, the declared surface,
+    /// and vault readability. Opens vaults read-only (no identity
+    /// generation, no writes); declared secrets that don't resolve
+    /// and undecryptable vaults are findings.
     pub fn check(&self) -> CheckReport {
         let mut problems = Vec::new();
         for var in self.config.secrets.keys() {
@@ -307,17 +366,115 @@ impl Ops {
                 ));
             }
         }
+
+        // Every vault worth reporting on: configured names plus
+        // every route's target (the implicit `local` included).
+        let mut vault_names: Vec<String> = self.config.vaults.keys().cloned().collect();
+        for route in self.config.envs.values() {
+            let name = route.vault().to_string();
+            if !vault_names.contains(&name) {
+                vault_names.push(name);
+            }
+        }
+        let selected_vault = self.config.vault_for(&self.env).to_string();
+        if !vault_names.contains(&selected_vault) {
+            vault_names.push(selected_vault.clone());
+        }
+        vault_names.sort();
+        vault_names.dedup();
+
+        let mut vaults = Vec::new();
+        let mut opened: BTreeMap<String, Box<dyn Vault>> = BTreeMap::new();
+        for name in &vault_names {
+            let cfg = self.config.vault_config(name);
+            let kind = cfg.map(|c| c.kind.clone()).unwrap_or_else(|| "age".into());
+            let path = cfg.and_then(|c| c.path.as_ref()).map(PathBuf::from);
+            match self.open_vault_named(name) {
+                Ok(v) => {
+                    opened.insert(name.clone(), v);
+                    vaults.push(VaultCheck {
+                        name: name.clone(),
+                        kind,
+                        path,
+                        ok: true,
+                        error: None,
+                    });
+                }
+                Err(e) => {
+                    problems.push(format!("vault {name:?} is not readable: {e}"));
+                    vaults.push(VaultCheck {
+                        name: name.clone(),
+                        kind,
+                        path,
+                        ok: false,
+                        error: Some(e.to_string()),
+                    });
+                }
+            }
+        }
+
+        // Declared surface: does each VAR's ref resolve in its env?
+        let mut secrets = Vec::new();
+        for (var, rref) in &self.config.secrets {
+            let (env, r) = self.resolve(rref);
+            let vault_name = self.config.vault_for(&env);
+            let resolves = match opened.get(vault_name) {
+                Some(v) => v.get(&env, &r).map(|rec| rec.is_some()).unwrap_or(false),
+                None => {
+                    // A route/env the loop above didn't cover — try
+                    // once, and report its failure inline.
+                    match self.open_vault(&env) {
+                        Ok(v) => {
+                            let got = v.get(&env, &r).map(|rec| rec.is_some()).unwrap_or(false);
+                            opened.insert(vault_name.to_string(), v);
+                            got
+                        }
+                        Err(e) => {
+                            problems.push(format!(
+                                "{var} → {rref}: env {env} vault {vault_name:?} not readable: {e}"
+                            ));
+                            false
+                        }
+                    }
+                }
+            };
+            if !resolves && is_valid_env_var(var) {
+                problems.push(format!("{var} → {rref} is not stored in env {env}"));
+            }
+            secrets.push(SecretCheck {
+                var: var.clone(),
+                rref: r.to_string(),
+                env: env.as_str().to_string(),
+                resolves,
+            });
+        }
+
         CheckReport {
             config_path: self.config_path.clone(),
             env: self.env.clone(),
-            vault: self.config.vault_for(&self.env).to_string(),
-            secrets: self.config.secrets.len(),
+            vault: selected_vault,
+            vaults,
+            secrets,
+            guardrails: self.config.guardrails.clone(),
             problems,
         }
     }
 
+    /// Emit an op-scoped audit event — denials, failures, and
+    /// ref-less verb completions the front-end knows about.
+    /// `rref` is the raw requested ref when the verb takes one.
+    pub fn emit(&self, op: Op, rref: Option<&str>, outcome: Outcome) {
+        audit::emit(&AuditEvent::op(
+            self.actor.as_str(),
+            op,
+            rref,
+            self.env.as_str(),
+            outcome,
+        ));
+    }
+
     fn audit(&self, op: Op, rref: &Ref, env: &Env) {
-        audit::emit(&AuditEvent::new(
+        audit::emit(&AuditEvent::materialized(
             self.actor.as_str(),
             op,
             &rref.path(),
@@ -396,7 +553,78 @@ mod tests {
             env: Env::dev(),
             actor: Actor::new("devin").unwrap(),
         };
+        // Isolate HOME so default vault paths miss deterministically.
+        let home = tempfile::tempdir().unwrap();
+        temp_env::with_vars(
+            [
+                ("HOME", Some(home.path().to_str().unwrap())),
+                ("XDG_CONFIG_HOME", Some(home.path().to_str().unwrap())),
+                ("XDG_DATA_HOME", Some(home.path().to_str().unwrap())),
+                ("ARCA_IDENTITY_FILE", None::<&str>),
+            ],
+            || {
+                let report = ops.check();
+                let has = |needle: &str| report.problems.iter().any(|p| p.contains(needle));
+                assert!(has("not a valid env var"), "{:?}", report.problems);
+                assert!(has("unconfigured vault"), "{:?}", report.problems);
+                // vaults can't open without an identity → reported
+                assert!(report.vaults.iter().all(|v| !v.ok));
+                assert!(has("not readable"), "{:?}", report.problems);
+            },
+        );
+    }
+
+    #[test]
+    fn check_reports_resolving_secrets() {
+        let home = tempfile::tempdir().unwrap();
+        let id_path = home.path().join("identity.txt");
+        let vault_path = home.path().join("vault.age");
+        AgeVault::ensure_identity(&id_path).unwrap();
+        let vault = AgeVault::open(&vault_path, &id_path, &[]).unwrap();
+        Vault::put(
+            &vault,
+            &Env::dev(),
+            &Ref::new("arca://billing/stripe").unwrap(),
+            Secret::new("fake-check-value"),
+        )
+        .unwrap();
+
+        let mut config = Config::default();
+        config.vaults.insert(
+            "local".into(),
+            arca_core::VaultConfig {
+                kind: "age".into(),
+                path: Some(vault_path.to_string_lossy().into_owned()),
+                identity: Some(id_path.to_string_lossy().into_owned()),
+                recipients: vec![],
+            },
+        );
+        config.secrets.insert(
+            "STRIPE_KEY".into(),
+            Ref::new("arca://billing/stripe").unwrap(),
+        );
+        config
+            .secrets
+            .insert("MISSING".into(), Ref::new("arca://not/here").unwrap());
+        let ops = Ops {
+            config,
+            config_path: None,
+            env: Env::dev(),
+            actor: Actor::new("devin").unwrap(),
+        };
         let report = ops.check();
-        assert_eq!(report.problems.len(), 2, "{:?}", report.problems);
+        assert!(report.vaults.iter().all(|v| v.ok), "{:?}", report.vaults);
+        let stripe = report.secrets.iter().find(|s| s.var == "STRIPE_KEY");
+        assert_eq!(stripe.map(|s| s.resolves), Some(true));
+        let missing = report.secrets.iter().find(|s| s.var == "MISSING");
+        assert_eq!(missing.map(|s| s.resolves), Some(false));
+        assert!(
+            report
+                .problems
+                .iter()
+                .any(|p| p.contains("MISSING") && p.contains("not stored")),
+            "{:?}",
+            report.problems
+        );
     }
 }

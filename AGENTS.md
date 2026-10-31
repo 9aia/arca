@@ -4,7 +4,7 @@ Secrets broker for agents — sealed, not spilled. Named for *Arca
 noae* (the ark clam) and Latin *arca*, the strongbox. Code and
 config carry `arca://` references, never values; the `arca` CLI
 materializes secrets as env vars at run time; every
-materialization hits the audit ledger. The skill
+materialization emits an audit ndjson event on stderr. The skill
 (`.agents/skills/`) teaches agents the verbs, not file formats.
 
 <!-- arca:agent-awareness -->
@@ -102,7 +102,8 @@ commit their contents to `main`.
   or docs — fixtures use fake values.
 - `Secret` never exposes plaintext: no `Display`/`Debug` of the
   value; explicit `.expose()` is the only way out.
-- Every materialization is auditable: actor, ref, env, timestamp.
+- Every materialization is auditable: actor, ref, env, outcome,
+  timestamp — ndjson on stderr.
 - Secrets never enter via CLI args (args land in shell history and
   `/proc`) — stdin, prompt, or keychain only.
 - Agents never hand-edit `project/` when a `myco` verb exists.

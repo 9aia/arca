@@ -9,8 +9,7 @@
 #
 # [vaults.local]
 # kind = "age"                                  # the only kind for v1
-# path = "~" is NOT expanded — write full paths
-# path = "/home/you/.local/share/arca/vault.age"
+# path = "/home/you/.local/share/arca/vault.age"   # "~" is NOT expanded — full paths
 # identity = "/home/you/.config/arca/identity.txt"   # $ARCA_IDENTITY_FILE also works
 # recipients = ["age1…"]                        # extra public keys to encrypt to
 
