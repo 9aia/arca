@@ -20,21 +20,28 @@ Roadmap per P-001. Hard constraints from the owner:
 
 - [x] **P1 — scaffold**: myco anatomy copy → rename → compile →
   commit → `myco init` → P-001.
-- [ ] **P2 — domain core**: `arca-core` (arca:// ref, Secret
+- [x] **P2 — domain core**: `arca-core` (arca:// ref, Secret
   newtype, env axis, actor/policy) · `arca-vault` port ·
   `arca-vault-age` impl · `arca-testkit` conformance ·
   re-map/drop vestigial crates (arca-git, arca-index*,
   arca-store*).
-- [ ] **P3 — verbs + surfaces**: `put/get/list/rm/rotate` (stdin
+- [x] **P3 — verbs + surfaces**: `put/get/list/rm/rotate` (stdin
   only) · `run`/`env` injection · `arca.toml` env→vault
   association + ref→env-name map · audit ledger ·
   `--json`/`manifest`/`schema` · `.agents/skills/arca`.
-- [ ] **P4 — cloud**: `arca-vault-cf` (Worker + D1, client-side
+- [x] **P4 — cloud**: `arca-vault-cf` (Worker + D1, client-side
   age ciphertext) · `arca-deploy` port + `arca-deploy-cf`
   (push-only targets) · *spike*: `arca-vault-aws` on a local
   branch → delete.
 - [ ] **P5 — polish + ship**: `arca ui` TUI · docs site →
   `9aia.com/arca` · mimus key-resolution migration.
+  Landed (T-004): TUI shipped (audited two-step reveal),
+  `gen-cli-docs`, docs site rebuilt on the `docs` orphan
+  worktree (builds green), `cargo install --git` verified.
+  Open/external: docs push → Pages deploy (9aia.com/arca),
+  real CF vault deploy + deploy-sink test (credentials),
+  mimus migration (mimus repo), `spike/aws-vault` branch
+  deletion.
 
 ## Later ADRs
 
