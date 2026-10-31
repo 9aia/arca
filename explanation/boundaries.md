@@ -11,7 +11,7 @@ kind of memory or authority, it belongs to a neighbor.
 | **kuda** | code memory — symbol/index knowledge | arca refs name *secrets*, not code entities |
 | **peregrin** | orchestration — campaigns, multi-actor arbitration, policy | campaigns consume secrets via `arca run`; audit aggregation + real policy are peregrin's (`ARCA_ACTOR` is self-claimed inside arca); a future `arca serve` ndjson wire is its embedding point |
 | **bupha** | CI gate | asserts no plaintext secrets land in pipelines; `arca check` in pipeline steps |
-| **mimus** | critic | its env → keyring → `~/.config/mimus/env` key resolution migrates onto arca vaults |
+| **mimus** | critic | secrets resolve env → arca → legacy (keyring, `~/.config/mimus/env`) via `mimus-arca` shelling `arca`; vaults are canonical, writes land in them |
 | **sepia** | session lifecycle | session wrappers can capture arca's stderr audit stream |
 
 ## What that means in practice
