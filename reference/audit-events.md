@@ -1,0 +1,52 @@
+# Audit events
+
+The audit wire: one ndjson line on **stderr** per op outcome.
+arca keeps no local ledger (ADR-0001 — aggregation is peregrin's);
+the stderr stream *is* the contract, so a wrapper — peregrin,
+sepia, your own harness — can capture it, and a human sees a
+breadcrumb.
+
+## Shape
+
+```json
+{"ts":"2026-01-01T00:00:00Z","actor":"devin","op":"run","rref":"billing/stripe","env":"dev","outcome":"ok"}
+```
+
+| field | notes |
+| --- | --- |
+| `ts` | RFC 3339, UTC |
+| `actor` | `--actor` → `ARCA_ACTOR` → `$USER`/`$LOGNAME` → `anon`. Self-claimed — attribution, not identity |
+| `op` | the verb: `init put get list rm rotate run env check deploy ui serve manifest schema` |
+| `rref` | the resolved ref path, env pin stripped. **Absent** on op-scoped events |
+| `env` | the env the op ran under |
+| `outcome` | `ok` \| `denied` \| `error` |
+
+## When events fire
+
+| event | meaning |
+| --- | --- |
+| `ok`, ref-scoped | one **per ref** materialized or mutated — `put`, `get`, `rotate`, `rm`, `deploy`, and per resolved ref inside `run`/`env` |
+| `ok`, op-scoped | ref-less verb completed — `init`, `list`, `check`, `ui` |
+| `denied` | `[guardrails]` refused the op before it touched the vault; `rref` carries the raw requested ref when there was one |
+| `error` | the op ran and failed — missing secret, vault i/o, bad ref; also emitted when config load itself fails (best-effort actor/env from flags + process env) |
+
+Two deliberate silences:
+
+- `manifest`, `schema`, `gen-cli-docs` run before config load —
+  pure introspection, no event.
+- A `run` child's non-zero exit is the *child's* outcome — no
+  `error` event for it. arca's own exit code is the child's.
+
+## `ui` and the TUI
+
+`arca ui` emits one op-scoped `ok` when the browser exits cleanly.
+Inside it, browsing is silent — listing refs and metadata is not
+a materialization. The `r`→`r` reveal goes through the audited
+`get` path: a real `{"op":"get","rref":…,"outcome":"ok"}` event
+per value shown.
+
+## Failure posture
+
+Audit emission is best-effort: a closed stderr (broken pipe)
+never takes the broker down — the write error is swallowed by
+design.
