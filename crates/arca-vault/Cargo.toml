@@ -1,0 +1,17 @@
+[package]
+name = "arca-vault"
+description = "Vault port: readable secret stores — get/put/rm/list/rotate, per-env; every impl stores opaque ciphertext"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["secrets", "arca"]
+categories = ["development-tools"]
+
+[dependencies]
+arca-core.workspace = true
+thiserror.workspace = true
+time.workspace = true
+
+[lints]
+workspace = true

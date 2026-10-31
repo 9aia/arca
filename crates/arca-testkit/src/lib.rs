@@ -1,342 +1,209 @@
-//! arca-testkit — golden fixtures + conformance for the `project/`
-//! file spec. `fixtures/` holds canonical and malformed files;
-//! [`strat`] holds proptest strategies; later crates reuse both
-//! (conformance is shared, not per-crate).
+//! arca-testkit — the vault conformance suite.
 //!
-//! Tests here freeze the spec:
+//! Every [`arca_vault::Vault`] impl must satisfy the same contract
+//! (documented on the trait). [`vault_conformance!`] expands into
+//! one `#[test]` per check, each given a fresh vault:
 //!
-//! - insta snapshots — `emit(parse(fixture))` byte-for-byte
-//! - proptest — `parse(emit(doc)) == doc` and emit idempotence
+//! ```ignore
+//! arca_testkit::vault_conformance!(|| {
+//!     AgeVault::open(&vault_path, &identity_path, &[]).unwrap()
+//! });
+//! ```
+//!
+//! Values here are fake by rule — no real secret ever appears in a
+//! test fixture.
 
-use std::path::{Path, PathBuf};
+#![allow(clippy::unwrap_used)]
 
-/// Absolute path to `fixtures/` (works from any test cwd).
-pub fn fixtures_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures")
-}
+use arca_core::{Env, Ref, Secret};
+use arca_vault::{Vault, VaultError};
 
-/// Read a fixture file, e.g. `fixture("todo/basic.md")`.
-pub fn fixture(rel: &str) -> String {
-    let path = fixtures_dir().join(rel);
-    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("fixture {rel} unreadable: {e}"))
-}
+/// Fake value used across the suite — obviously not a real secret.
+pub const FAKE: &str = "fake-value-not-a-real-secret";
 
-/// Fixture paths (relative to `fixtures/`) under `dir`
-/// (e.g. `"todo/invalid"`), sorted, `*.md`/`*.toml` only.
-pub fn fixtures_under(dir: &str) -> Vec<String> {
-    let root = fixtures_dir();
-    let mut out = Vec::new();
-    collect(&root, &root.join(dir), &mut out);
-    out.sort();
-    out
-}
-
-fn collect(root: &Path, dir: &Path, out: &mut Vec<String>) {
-    let Ok(read) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in read.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect(root, &path, out);
-        } else if matches!(
-            path.extension().and_then(|e| e.to_str()),
-            Some("md") | Some("toml")
-        ) {
-            let rel = path
-                .strip_prefix(root)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .replace('\\', "/");
-            out.push(rel);
+/// Generate the conformance `#[test]` fns. `$make` is a thunk
+/// returning a fresh, empty vault.
+#[macro_export]
+macro_rules! vault_conformance {
+    ($make:expr) => {
+        #[test]
+        fn conform_put_get_roundtrip() {
+            let v = ($make)();
+            $crate::put_get_roundtrip(&v);
         }
-    }
-}
 
-/// proptest strategies for `arca-core` models — constrained to what
-/// the canonical grammar can express (see each fn's docs).
-pub mod strat {
-    use arca_core::{
-        Actor, BacklogDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, NextCounters, Priority,
-        ProjectMeta, Section, Status, TodoDoc,
-    };
-    use proptest::prelude::*;
-    use time::Date;
-
-    /// Any kind.
-    pub fn item_kind() -> impl Strategy<Value = ItemKind> {
-        prop::sample::select(ItemKind::ALL.to_vec())
-    }
-
-    /// A file-backed kind (no `Task` — tasks live in TODO/BACKLOG).
-    pub fn file_kind() -> impl Strategy<Value = ItemKind> {
-        prop::sample::select(vec![
-            ItemKind::Issue,
-            ItemKind::Proposal,
-            ItemKind::Adr,
-            ItemKind::Plan,
-        ])
-    }
-
-    /// `1..=9999` — padded ids stay in spec range.
-    pub fn item_id(kind: ItemKind) -> impl Strategy<Value = ItemId> {
-        (1u32..=9999).prop_map(move |n| ItemId::new(kind, n))
-    }
-
-    /// Any status.
-    pub fn status() -> impl Strategy<Value = Status> {
-        prop::sample::select(Status::ALL.to_vec())
-    }
-
-    /// Any priority.
-    pub fn priority() -> impl Strategy<Value = Priority> {
-        prop::sample::select(Priority::ALL.to_vec())
-    }
-
-    /// `[a-z0-9._-]{1,12}` optionally `human:`/`agent:` prefixed.
-    pub fn actor() -> impl Strategy<Value = Actor> {
-        (
-            prop::sample::select(vec!["", "human:", "agent:"]),
-            "[a-z0-9._-]{1,12}",
-        )
-            .prop_map(|(p, s)| Actor::new(&format!("{p}{s}")).expect("valid actor"))
-    }
-
-    /// `[a-z0-9_-]{1,10}` — a valid `#label`.
-    pub fn label() -> impl Strategy<Value = String> {
-        "[a-z0-9_-]{1,10}"
-    }
-
-    /// A `YYYY-MM-DD` date in the 2000s.
-    pub fn date() -> impl Strategy<Value = Date> {
-        (2000i32..=2099, 1u8..=12, 1u8..=28).prop_map(|(y, m, d)| {
-            Date::from_calendar_date(y, time::Month::try_from(m).expect("1..=12"), d)
-                .expect("valid date")
-        })
-    }
-
-    /// Trimmed, nonempty, no `·`, no newlines — a legal title.
-    /// Includes markdown specials to exercise inline escaping.
-    pub fn title() -> impl Strategy<Value = String> {
-        "[a-zA-Z0-9*#_\\[\\](),.:' -]{1,60}".prop_map(|s| s.trim().to_string())
-    }
-
-    /// Optional trimmed section name (same rules as titles).
-    pub fn section_name() -> impl Strategy<Value = String> {
-        "[a-zA-Z0-9 _.-]{1,20}"
-            .prop_map(|s| s.trim().to_string())
-            .prop_filter("nonempty after trim", |s| !s.is_empty())
-    }
-
-    /// `[a-z0-9._-]{1,12}` — a valid `epic:`/`ms:` group name.
-    pub fn group_name() -> impl Strategy<Value = String> {
-        "[a-z0-9._-]{1,12}"
-    }
-
-    /// A line-safe `note:` value — trimmed text without `·` or
-    /// newlines (`src/x.rs:12`-style provenance strings).
-    pub fn line_note() -> impl Strategy<Value = String> {
-        "[a-z0-9 .:/_-]{1,40}".prop_map(|s| s.trim().to_string())
-    }
-
-    /// A leaf line item — full metadata, no children.
-    fn leaf_item(forbid: &'static [Status]) -> impl Strategy<Value = Item> {
-        (
-            item_id(ItemKind::Task),
-            title(),
-            prop::sample::select(
-                Status::ALL
-                    .into_iter()
-                    .filter(|s| !forbid.contains(s))
-                    .collect::<Vec<_>>(),
-            ),
-            priority(),
-            prop::option::of(actor()),
-            prop::collection::btree_set(label(), 0..3),
-            prop::collection::btree_set(item_id(ItemKind::Task), 0..3),
-            prop::option::of(date()),
-            prop::option::of(group_name()),
-            prop::option::of(group_name()),
-            prop::option::of(line_note()),
-        )
-            .prop_map(
-                |(id, title, status, priority, owner, labels, blocks, created, epic, ms, note)| {
-                    let mut item = Item::new(id, title).status(status).priority(priority);
-                    item.owner = owner;
-                    item.labels = labels;
-                    item.blocks = blocks;
-                    item.created = created;
-                    item.epic = epic;
-                    item.milestone = ms;
-                    item.note = note.filter(|n| !n.is_empty());
-                    item
-                },
-            )
-    }
-
-    /// A task item valid for a line grammar — notes are the
-    /// trimmed `note:` token kind only, and status avoids `forbid`
-    /// at every level. Children are full items too; generated
-    /// depth is ≤ 2 (one nesting level — the recommended shape,
-    /// deeper nesting is legal but rare).
-    pub fn line_item(forbid: &'static [Status]) -> impl Strategy<Value = Item> {
-        (
-            leaf_item(forbid),
-            prop::collection::vec(leaf_item(forbid), 0..3),
-        )
-            .prop_map(|(mut item, children)| {
-                item.children = children;
-                item
-            })
-    }
-
-    /// Set `status` on a whole subtree (deferred propagates to
-    /// children — BACKLOG.md is deferred-only).
-    fn status_tree(item: &mut Item, status: Status) {
-        item.status = status;
-        for c in &mut item.children {
-            status_tree(c, status);
+        #[test]
+        fn conform_get_missing_is_none() {
+            let v = ($make)();
+            $crate::get_missing_is_none(&v);
         }
-    }
 
-    fn sections(items: impl Strategy<Value = Item>) -> impl Strategy<Value = Vec<Section>> {
-        prop::collection::vec(
-            (
-                prop::option::of(section_name()),
-                prop::collection::vec(items, 0..4),
-            ),
-            0..4,
-        )
-        .prop_map(|v| {
-            let mut out: Vec<Section> = Vec::new();
-            let mut first_unsectioned = true;
-            for (name, items) in v {
-                match name {
-                    Some(n) => out.push(Section {
-                        name: Some(n),
-                        items,
-                    }),
-                    None => {
-                        // unsectioned only legal at index 0, and
-                        // needs items to be representable
-                        if first_unsectioned && out.is_empty() && !items.is_empty() {
-                            out.push(Section { name: None, items });
-                            first_unsectioned = false;
-                        }
-                    }
-                }
-            }
-            out
-        })
-    }
+        #[test]
+        fn conform_list_refs() {
+            let v = ($make)();
+            $crate::list_refs(&v);
+        }
 
-    /// A `TodoDoc` — statuses exclude `Done`, task ids only.
-    pub fn todo_doc() -> impl Strategy<Value = TodoDoc> {
-        ("[a-z0-9-]{1,16}", sections(line_item(&[Status::Done])))
-            .prop_map(|(repo, sections)| TodoDoc { repo, sections })
-    }
+        #[test]
+        fn conform_rm_semantics() {
+            let v = ($make)();
+            $crate::rm_semantics(&v);
+        }
 
-    /// A `BacklogDoc` — every item (children included) `Deferred`.
-    pub fn backlog_doc() -> impl Strategy<Value = BacklogDoc> {
-        sections(line_item(&[]).prop_map(|mut i| {
-            status_tree(&mut i, Status::Deferred);
-            i
-        }))
-        .prop_map(|sections| BacklogDoc { sections })
-    }
+        #[test]
+        fn conform_rotate_bumps() {
+            let v = ($make)();
+            $crate::rotate_bumps(&v);
+        }
 
-    /// A `ProjectMeta` — arbitrary counters.
-    pub fn project_meta() -> impl Strategy<Value = ProjectMeta> {
-        (
-            "[a-z0-9-]{1,16}",
-            (1u32..=999, 1u32..=999, 1u32..=999, 1u32..=999, 1u32..=999),
-        )
-            .prop_map(|(name, (t, i, p, adr, pl))| ProjectMeta {
-                name,
-                next: NextCounters { t, i, p, adr, pl },
-            })
-    }
+        #[test]
+        fn conform_env_isolation() {
+            let v = ($make)();
+            $crate::env_isolation(&v);
+        }
 
-    /// A session id — `[a-z0-9:-]{1,12}` (no `·`, no newline).
-    pub fn session() -> impl Strategy<Value = String> {
-        "[a-z0-9:-]{1,12}"
-    }
+        #[test]
+        fn conform_unicode_and_long_values() {
+            let v = ($make)();
+            $crate::unicode_and_long_values(&v);
+        }
 
-    /// A `HandoffEntry` — notes are plain text lines (never a `##`
-    /// heading, which the grammar can't carry inside a note).
-    pub fn handoff_entry() -> impl Strategy<Value = HandoffEntry> {
-        (
-            date(),
-            actor(),
-            prop::option::of(session()),
-            prop::collection::vec("[a-z0-9.:]([a-z0-9 .:]{0,38}[a-z0-9.:])?", 0..4),
-        )
-            .prop_map(|(date, actor, session, lines)| HandoffEntry {
-                date,
-                actor,
-                session,
-                note: lines.join("\n"),
-            })
-    }
+        #[test]
+        fn conform_overwrite_semantics() {
+            let v = ($make)();
+            $crate::overwrite_semantics(&v);
+        }
+    };
+}
 
-    /// An `ItemFile` — any status, note allowed, trimmed body of
-    /// simple markdown lines.
-    pub fn item_file() -> impl Strategy<Value = ItemFile> {
-        (
-            file_kind().prop_flat_map(item_id),
-            title(),
-            status(),
-            priority(),
-            prop::option::of(actor()),
-            prop::collection::btree_set(label(), 0..3),
-            prop::collection::btree_set(item_id(ItemKind::Task), 0..2),
-            prop::option::of(date()),
-            prop::option::of("[a-z0-9 .-]{0,40}"),
-            prop::option::of(group_name()),
-            prop::option::of(group_name()),
-            prop::collection::vec("(#+ |[a-z0-9 .-]+|- \\[[ x]\\] )[a-z0-9 .-]{0,30}", 0..6),
-        )
-            .prop_map(
-                |(
-                    id,
-                    title,
-                    status,
-                    priority,
-                    owner,
-                    labels,
-                    blocks,
-                    created,
-                    note,
-                    epic,
-                    ms,
-                    lines,
-                )| {
-                    let mut item = Item::new(id, title).status(status).priority(priority);
-                    item.owner = owner;
-                    item.labels = labels;
-                    item.blocks = blocks;
-                    item.created = created;
-                    item.note = note;
-                    item.epic = epic;
-                    item.milestone = ms;
-                    let mut file = ItemFile::new(item);
-                    file.body = lines.join("\n\n").trim().to_string();
-                    file
-                },
-            )
+fn env(name: &str) -> Env {
+    Env::new(name).unwrap()
+}
+
+fn rref(path: &str) -> Ref {
+    Ref::new(&format!("arca://{path}")).unwrap()
+}
+
+fn paths(refs: &[Ref]) -> Vec<String> {
+    refs.iter().map(|r| r.path()).collect()
+}
+
+/// put → get returns the value, version 1, timestamps set.
+pub fn put_get_roundtrip(v: &dyn Vault) {
+    let r = rref("billing/stripe");
+    let rec = v.put(&env("dev"), &r, Secret::new(FAKE)).unwrap();
+    assert_eq!(rec.value.expose(), FAKE);
+    assert_eq!(rec.version, 1);
+    assert!(rec.rotated_at.is_none());
+
+    let got = v.get(&env("dev"), &r).unwrap().unwrap();
+    assert_eq!(got.value.expose(), FAKE);
+    assert_eq!(got.version, 1);
+    assert_eq!(got.created_at, rec.created_at);
+}
+
+/// get on a missing ref is `Ok(None)`.
+pub fn get_missing_is_none(v: &dyn Vault) {
+    assert!(v.get(&env("dev"), &rref("nothing/here")).unwrap().is_none());
+}
+
+/// list returns the stored refs, sorted; empty env → empty list.
+pub fn list_refs(v: &dyn Vault) {
+    assert!(v.list(&env("dev")).unwrap().is_empty());
+    v.put(&env("dev"), &rref("b/two"), Secret::new(FAKE))
+        .unwrap();
+    v.put(&env("dev"), &rref("a/one"), Secret::new(FAKE))
+        .unwrap();
+    v.put(&env("dev"), &rref("lone"), Secret::new(FAKE))
+        .unwrap();
+    assert_eq!(
+        paths(&v.list(&env("dev")).unwrap()),
+        vec!["a/one", "b/two", "lone"]
+    );
+}
+
+/// rm → true once, get → None, rm again → false.
+pub fn rm_semantics(v: &dyn Vault) {
+    let r = rref("gone/soon");
+    v.put(&env("dev"), &r, Secret::new(FAKE)).unwrap();
+    assert!(v.rm(&env("dev"), &r).unwrap());
+    assert!(v.get(&env("dev"), &r).unwrap().is_none());
+    assert!(!v.rm(&env("dev"), &r).unwrap());
+}
+
+/// rotate on an existing ref bumps version, sets rotated_at, swaps
+/// the value; on a missing ref it's `Err(NotFound)`.
+pub fn rotate_bumps(v: &dyn Vault) {
+    let r = rref("spin/this");
+    let first = v.put(&env("dev"), &r, Secret::new(FAKE)).unwrap();
+    let rotated = v
+        .rotate(&env("dev"), &r, Secret::new("fake-rotated-value"))
+        .unwrap();
+    assert_eq!(rotated.value.expose(), "fake-rotated-value");
+    assert_eq!(rotated.version, first.version + 1);
+    assert!(rotated.rotated_at.is_some());
+    assert_eq!(rotated.created_at, first.created_at);
+
+    match v.rotate(&env("dev"), &rref("not/here"), Secret::new(FAKE)) {
+        Err(VaultError::NotFound { .. }) => {}
+        other => panic!("rotate of missing ref must be NotFound, got {other:?}"),
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Envs are isolated keyspaces — same path in dev vs prod are
+/// independent records.
+pub fn env_isolation(v: &dyn Vault) {
+    let r = rref("shared/name");
+    v.put(&env("dev"), &r, Secret::new("fake-dev-value"))
+        .unwrap();
 
-    #[test]
-    fn fixtures_exist() {
-        assert!(fixtures_dir().is_dir());
-        assert!(!fixture("todo/basic.md").is_empty());
-        assert!(!fixtures_under("todo/invalid").is_empty());
-        // missing dirs yield nothing, not an error
-        assert!(fixtures_under("nonexistent-dir").is_empty());
-    }
+    assert!(v.get(&env("prod"), &r).unwrap().is_none());
+    assert!(v.list(&env("prod")).unwrap().is_empty());
+    assert!(!v.rm(&env("prod"), &r).unwrap());
+
+    v.put(&env("prod"), &r, Secret::new("fake-prod-value"))
+        .unwrap();
+    assert_eq!(
+        v.get(&env("dev"), &r).unwrap().unwrap().value.expose(),
+        "fake-dev-value"
+    );
+    assert_eq!(
+        v.get(&env("prod"), &r).unwrap().unwrap().value.expose(),
+        "fake-prod-value"
+    );
+
+    assert!(v.rm(&env("prod"), &r).unwrap());
+    assert!(v.get(&env("dev"), &r).unwrap().is_some());
+}
+
+/// Non-ASCII and large values round-trip intact.
+pub fn unicode_and_long_values(v: &dyn Vault) {
+    let uni = "🔐 fáke ünïcodé  — not real";
+    let long = "fake-".repeat(4096); // ~20 KiB
+    let r1 = rref("unicode/value");
+    let r2 = rref("long/value");
+    v.put(&env("dev"), &r1, Secret::new(uni)).unwrap();
+    v.put(&env("dev"), &r2, Secret::new(long.clone())).unwrap();
+    assert_eq!(
+        v.get(&env("dev"), &r1).unwrap().unwrap().value.expose(),
+        uni
+    );
+    assert_eq!(
+        v.get(&env("dev"), &r2).unwrap().unwrap().value.expose(),
+        long
+    );
+}
+
+/// Re-put of an existing ref overwrites the value, bumps version,
+/// preserves created_at, and does *not* mark a rotation.
+pub fn overwrite_semantics(v: &dyn Vault) {
+    let r = rref("over/written");
+    let first = v.put(&env("dev"), &r, Secret::new(FAKE)).unwrap();
+    let second = v
+        .put(&env("dev"), &r, Secret::new("fake-overwritten"))
+        .unwrap();
+    assert_eq!(second.value.expose(), "fake-overwritten");
+    assert_eq!(second.version, first.version + 1);
+    assert_eq!(second.created_at, first.created_at);
+    assert!(second.rotated_at.is_none());
 }

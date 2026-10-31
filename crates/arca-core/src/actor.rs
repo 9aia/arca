@@ -1,11 +1,13 @@
-//! Actor ids — `owner:`/`assignee:` values like `devin`,
-//! `human:luis`, `claude`. A validated non-empty string; the
-//! `human:`/`agent:`-style prefix is allowed but not required.
+//! Actor ids — attribution strings like `devin`, `human:luis`,
+//! `claude` carried on audit events. A validated non-empty string;
+//! the `human:`/`agent:`-style prefix is allowed but not required.
+//! Attribution only — never an identity or policy boundary
+//! (`ARCA_ACTOR` is self-claimed and spoofable by construction).
 
 use std::fmt;
 use std::str::FromStr;
 
-/// A work actor (human or agent).
+/// An actor (human or agent) — attribution only, not identity.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Actor(String);
 

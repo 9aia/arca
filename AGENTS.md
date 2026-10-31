@@ -37,8 +37,8 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/arca-vault` | Vault port — readable secret stores: `get/put/list/rotate`, per-env variants |
 | `crates/arca-vault-age` | Local vault impl — age-encrypted file (v1) |
 | `crates/arca-shell` | `bash -c <cmd>` + env injection — the `arca run` path |
-| `crates/arca-ops` | Ops I/O — vault open/save, ref resolution, audit ledger, verb plumbing |
-| `crates/arca-testkit` | Golden fixtures + conformance — every vault impl passes the same contract tests |
+| `crates/arca-ops` | Ops I/O — vault open/save, ref resolution, audit events, verb plumbing |
+| `crates/arca-testkit` | Vault conformance suite — every impl passes the same contract tests |
 | `crates/arca-tui` | Interactive vault TUI (ratatui) — thin front-end over arca-ops; `arca ui`, feature-gated |
 | `crates/arca-cli` | The `arca` binary — clap, `--json` everywhere, `manifest`/`schema` |
 | `xtask` | check / test / coverage / install / site |
@@ -48,11 +48,6 @@ age-encrypted), `arca-deploy` + `arca-deploy-cf` (write-only push
 targets — CF Secrets Store, Workers secrets), `arca-vault-aws`.
 No `arca-sdk` by default — env vars are the interface; revisit
 only if a Rust-native embed is ever needed.
-
-Scaffold note: the workspace was copied from the `myco` anatomy —
-`arca-git`, `arca-index(-redb)`, `arca-store(-md)` are vestigial
-renames of the PM stack, kept or re-mapped per
-`project/proposals/`.
 
 ## Boundary
 

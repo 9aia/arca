@@ -1,0 +1,25 @@
+[package]
+name = "arca-vault-age"
+description = "Local vault impl: one age-x25519-encrypted JSON doc — the v1 default backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["secrets", "arca", "age"]
+categories = ["development-tools"]
+
+[dependencies]
+age.workspace = true
+arca-core.workspace = true
+arca-vault.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+arca-testkit.workspace = true
+tempfile.workspace = true
+temp-env.workspace = true
+
+[lints]
+workspace = true

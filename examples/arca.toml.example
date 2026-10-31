@@ -1,6 +1,40 @@
-# arca.toml — per-repo config for the arca CLI. Copy to the repo root
-# or pass via --config / $ARCA_CONFIG. `arca schema` (phase 2) emits
-# the full spec.
+# arca.toml — per-repo config for the arca CLI. Search order:
+# --config → $ARCA_CONFIG → ./arca.toml → ~/.config/arca/arca.toml.
+# `arca schema` emits the full machine-readable spec. Unknown keys
+# fail loud. Secrets are refs, never values.
 
-# Path of the project worktree, relative to the repo root.
-# project_dir = "project"
+# Named vault backends. "local" is the built-in age vault and the
+# default for every env that doesn't say otherwise; an entry only
+# overrides its paths or adds extra recipients.
+#
+# [vaults.local]
+# kind = "age"                                  # the only kind for v1
+# path = "~" is NOT expanded — write full paths
+# path = "/home/you/.local/share/arca/vault.age"
+# identity = "/home/you/.config/arca/identity.txt"   # $ARCA_IDENTITY_FILE also works
+# recipients = ["age1…"]                        # extra public keys to encrypt to
+
+# env → vault routing. dev/staging/prod always exist; unlisted envs
+# route to "local". `dev = "local"` shorthand also works.
+#
+# [envs]
+# dev = { vault = "local" }
+# staging = { vault = "local" }
+# prod = { vault = "prod" }      # once a second vault exists
+
+# The declared secret surface: env-var name → arca:// ref. This is
+# what `arca run`/`arca env` may inject — least privilege, reviewable,
+# `arca check`-able. Ad-hoc `-s VAR=arca://ref` covers one-offs.
+#
+# [secrets]
+# STRIPE_API_KEY = "arca://billing/stripe"
+# DATABASE_URL = "arca://db/url"
+
+# Guardrails — advisory, deny-listed ops always lose. Accident
+# prevention for standalone use, NOT a policy boundary (ARCA_ACTOR
+# is self-claimed; real enforcement is peregrin's).
+#
+# [guardrails]
+# default = "allow"              # or "deny" — ops in neither list
+# allow = ["run", "list"]
+# deny = ["get", "put"]

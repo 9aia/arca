@@ -5,15 +5,12 @@ members = [
     "crates/arca-config",
     "crates/arca-config-toml",
     "crates/arca-core",
-    "crates/arca-git",
-    "crates/arca-index",
-    "crates/arca-index-redb",
     "crates/arca-ops",
     "crates/arca-shell",
-    "crates/arca-store",
-    "crates/arca-store-md",
     "crates/arca-testkit",
     "crates/arca-tui",
+    "crates/arca-vault",
+    "crates/arca-vault-age",
     "xtask",
 ]
 
@@ -34,40 +31,27 @@ arca = { path = "crates/arca-cli", version = "0.1.0" }
 arca-config = { path = "crates/arca-config", version = "0.1.0" }
 arca-config-toml = { path = "crates/arca-config-toml", version = "0.1.0" }
 arca-core = { path = "crates/arca-core", version = "0.1.0" }
-arca-git = { path = "crates/arca-git", version = "0.1.0" }
-arca-index = { path = "crates/arca-index", version = "0.1.0" }
-arca-index-redb = { path = "crates/arca-index-redb", version = "0.1.0" }
 arca-ops = { path = "crates/arca-ops", version = "0.1.0" }
 arca-shell = { path = "crates/arca-shell", version = "0.1.0" }
-arca-store = { path = "crates/arca-store", version = "0.1.0" }
-arca-store-md = { path = "crates/arca-store-md", version = "0.1.0" }
 arca-testkit = { path = "crates/arca-testkit", version = "0.1.0" }
 arca-tui = { path = "crates/arca-tui", version = "0.1.0" }
+arca-vault = { path = "crates/arca-vault", version = "0.1.0" }
+arca-vault-age = { path = "crates/arca-vault-age", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
 clap = { version = "4", features = ["derive"] }
-clap-markdown = "0.1.5"
 thiserror = "2"
 time = { version = "0.3", features = ["serde", "parsing", "formatting", "macros"] }
-camino = { version = "1", features = ["serde1"] }
-slug = "0.1"
-markdown = "1"
-mdast_util_to_markdown = "0.0.2"
 schemars = "1"
-miette = "7"
-insta = "1"
-proptest = "1"
 tempfile = "3"
 temp-env = "0.3"
-redb = "3"
-tabled = "0.20"
-ratatui = "0.30"
-crossterm = "0.29"
-terminal_size = "0.4"
-unicode-width = "0.2"
-csv = "1"
 sigpipe = "0.1"
+zeroize = "1"
+# age (rage's Rust impl) — the fixed crypto choice per ADR-0001.
+# default-features off: no async/armor/plugin/ssh — binary
+# ciphertext, sync API, light dep tree.
+age = { version = "0.12", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -1,7 +1,0 @@
----
-source: crates/arca-cli/tests/items.rs
-assertion_line: 211
-expression: stdout(&out)
----
-T-001 open pri:high alpha
-T-002 open pri:med owner:devin #x beta
