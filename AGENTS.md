@@ -9,20 +9,19 @@ materialization hits the audit ledger. The skill
 
 <!-- arca:agent-awareness -->
 
+<!-- myco:agent-awareness -->
+
 ## Agent awareness
 
-- This repo's PM is dogfooded by **myco** — session start / any
-  work discussion: `myco status --prompt` before proposing next
-  steps; capture new work with `myco todo add` / `issue new` /
-  `proposal new`; `myco handoff`/`resume` around sessions.
-- Consuming arca as an agent: `arca run -- <cmd>` and `arca env`
-  are the materialization path — secrets arrive as env vars,
-  never in context. `arca get`/`reveal` are explicit, auditable
-  escape hatches, not the default.
-- Never paste secret values into prompts, files, commits, or
-  `project/` — references only.
+- Session start / any work discussion: run `myco status --prompt`
+  before proposing next steps — know the board first.
+- User describes new work → offer to capture it (`myco todo add`,
+  `issue new`, `proposal new`). Don't wait to be asked.
+- Picking up a task: `myco resume <ID>` is the briefing.
+- Wrapping up: `myco handoff <ID>` anything resumable; keep statuses
+  honest (claimed → in-progress → blocked/done).
 
-<!-- /arca:agent-awareness -->
+<!-- /myco:agent-awareness -->
 
 ## Layout
 
