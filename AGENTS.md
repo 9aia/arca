@@ -31,7 +31,7 @@ domain (no I/O); ports are traits, impls are separate crates;
 
 | Crate | Role |
 | --- | --- |
-| `crates/arca-core` | `arca://` refs, `Secret` redacting newtype, env axis (dev/staging/prod), actor/policy model — pure, no I/O |
+| `crates/arca-core` | `arca://` refs, `Secret` redacting newtype, env axis (dev/staging/prod), actor attribution — pure, no I/O |
 | `crates/arca-config` | Config port — where `arca.toml`-shaped config comes from |
 | `crates/arca-config-toml` | Config impl — explicit path → `$ARCA_CONFIG` → `./arca.toml` → `~/.config/arca/` |
 | `crates/arca-vault` | Vault port — readable secret stores: `get/put/list/rotate`, per-env variants |
