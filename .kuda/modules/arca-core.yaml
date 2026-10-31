@@ -1,0 +1,4 @@
+name: arca-core
+path: crates/arca-core/Cargo.toml
+purpose: arca domain core — pure, no I/O
+api: []

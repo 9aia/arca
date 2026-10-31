@@ -1,0 +1,6 @@
+# arca.toml — per-repo config for the arca CLI. Copy to the repo root
+# or pass via --config / $ARCA_CONFIG. `arca schema` (phase 2) emits
+# the full spec.
+
+# Path of the project worktree, relative to the repo root.
+# project_dir = "project"

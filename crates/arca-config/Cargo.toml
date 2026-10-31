@@ -1,0 +1,15 @@
+[package]
+name = "arca-config"
+description = "Config port: where arca.toml-shaped config comes from"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["pm", "arca"]
+categories = ["development-tools"]
+
+[dependencies]
+arca-core.workspace = true
+
+[lints]
+workspace = true

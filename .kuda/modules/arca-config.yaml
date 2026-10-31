@@ -1,0 +1,4 @@
+name: arca-config
+path: crates/arca-config/Cargo.toml
+purpose: Config port: where arca.toml-shaped config comes from
+api: []

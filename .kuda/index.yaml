@@ -1,0 +1,27 @@
+name: arca
+root: /home/luis/GitHub/9aia/arca
+purpose: '*Project management, grown not built.*'
+modules:
+- _root
+- arca
+- arca-cli
+- arca-config
+- arca-config-toml
+- arca-core
+- arca-git
+- arca-shell
+- xtask
+commands:
+- cargo check
+- cargo test --workspace
+- cargo xtask check
+provenance:
+  files:
+  - Cargo.toml
+  - crates/arca-cli/Cargo.toml
+  - crates/arca-config/Cargo.toml
+  - crates/arca-config-toml/Cargo.toml
+  - crates/arca-core/Cargo.toml
+  - crates/arca-git/Cargo.toml
+  - crates/arca-shell/Cargo.toml
+  - xtask/Cargo.toml

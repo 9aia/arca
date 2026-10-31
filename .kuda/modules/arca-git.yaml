@@ -1,0 +1,4 @@
+name: arca-git
+path: crates/arca-git/Cargo.toml
+purpose: Git plumbing — shells out to the git CLI
+api: []

@@ -1,0 +1,4 @@
+name: arca-config-toml
+path: crates/arca-config-toml/Cargo.toml
+purpose: Config impl: arca.toml file
+api: []

@@ -1,0 +1,4 @@
+name: xtask
+path: xtask/Cargo.toml
+purpose: Repo chores: check / test / coverage / install / site
+api: []

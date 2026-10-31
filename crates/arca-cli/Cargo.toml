@@ -1,0 +1,52 @@
+[package]
+name = "arca"
+description = "arca — secrets broker for agents: reference URIs, redaction, env-injection CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["secrets", "arca"]
+categories = ["development-tools"]
+
+[[bin]]
+name = "arca"
+path = "src/main.rs"
+
+[dependencies]
+arca-core = { workspace = true, features = ["schema"] }
+arca-config.workspace = true
+arca-config-toml.workspace = true
+arca-git.workspace = true
+arca-index.workspace = true
+arca-index-redb.workspace = true
+arca-ops.workspace = true
+arca-shell.workspace = true
+arca-store.workspace = true
+arca-store-md.workspace = true
+arca-tui = { workspace = true, optional = true }
+clap.workspace = true
+clap-markdown.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+tabled.workspace = true
+terminal_size.workspace = true
+unicode-width.workspace = true
+camino.workspace = true
+miette.workspace = true
+time.workspace = true
+csv.workspace = true
+sigpipe.workspace = true
+
+[features]
+default = ["tui"]
+## `arca ui` — interactive board TUI (ratatui/crossterm).
+## `--no-default-features` keeps the lean agent binary.
+tui = ["dep:arca-tui"]
+
+[dev-dependencies]
+tempfile.workspace = true
+insta.workspace = true
+
+[lints]
+workspace = true

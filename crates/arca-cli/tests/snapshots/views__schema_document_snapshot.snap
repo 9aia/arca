@@ -1,0 +1,1441 @@
+---
+source: crates/arca-cli/tests/views.rs
+expression: "serde_json::to_string_pretty(&v).unwrap()"
+---
+{
+  "files": {
+    "BACKLOG.md": {
+      "children": "a `-` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
+      "default_status": "deferred",
+      "format": "markdown",
+      "line": "- T-NNN <title>[ · <token>]…",
+      "schema": "BacklogDoc"
+    },
+    "TODO.md": {
+      "checkbox": "[ ] open — done items are removed, git history keeps them",
+      "children": "a `- [ ]` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
+      "default_status": "open",
+      "format": "markdown",
+      "line": "- [ ] T-NNN <title>[ · <token>]…",
+      "schema": "TodoDoc",
+      "section": "## <name>",
+      "title": "# TODO — <repo>"
+    },
+    "handoffs": {
+      "append_only": true,
+      "archive": "handoffs/archive/ — files whose item was removed (`check --fix` moves them here)",
+      "dir": "handoffs/",
+      "entry": "## <YYYY-MM-DD> · <actor>[ · session:<id>] + freeform note body",
+      "file": "<ID>.md — one append-only file per item, uniform across kinds",
+      "frontmatter_keys": [
+        "item"
+      ],
+      "pattern": "<PREFIX>-NNN.md (e.g. T-001.md, ADR-0004.md)",
+      "title": "# Handoffs — <ID>"
+    },
+    "index.md": {
+      "format": "markdown",
+      "verbatim": true
+    },
+    "item_file": {
+      "format": "`+++` TOML frontmatter + free-form markdown body",
+      "frontmatter_keys": [
+        "id",
+        "title",
+        "status",
+        "created",
+        "owner",
+        "priority",
+        "labels",
+        "blocks",
+        "note",
+        "superseded_by",
+        "supersedes",
+        "epic",
+        "milestone"
+      ]
+    },
+    "kinds": {
+      "adrs": {
+        "archive": "adrs/archive/",
+        "dir": "adrs/",
+        "pattern": "NNNN-<slug>.md"
+      },
+      "issues": {
+        "archive": "issues/archive/",
+        "dir": "issues/",
+        "pattern": "issue-NNNN-<slug>.md"
+      },
+      "plans": {
+        "archive": "plans/archive/",
+        "dir": "plans/",
+        "pattern": "pl-NNNN-<slug>.md"
+      },
+      "proposals": {
+        "archive": "proposals/archive/",
+        "dir": "proposals/",
+        "pattern": "proposal-NNNN-<slug>.md"
+      }
+    },
+    "meta.toml": {
+      "format": "toml",
+      "keys": {
+        "name": "project/repo name",
+        "next": "per-kind next-id counters (t, i, p, adr, pl)"
+      },
+      "schema": "ProjectMeta"
+    }
+  },
+  "ids": {
+    "file_backed": [
+      "I",
+      "P",
+      "ADR",
+      "PL"
+    ],
+    "kinds": {
+      "ADR": {
+        "counter": "adr",
+        "kind": "Adr",
+        "width": 4
+      },
+      "I": {
+        "counter": "i",
+        "kind": "Issue",
+        "width": 3
+      },
+      "P": {
+        "counter": "p",
+        "kind": "Proposal",
+        "width": 3
+      },
+      "PL": {
+        "counter": "pl",
+        "kind": "Plan",
+        "width": 3
+      },
+      "T": {
+        "counter": "t",
+        "kind": "Task",
+        "width": 3
+      }
+    },
+    "shape": "<prefix>-<number>, zero-padded per kind"
+  },
+  "line_grammar": {
+    "actor_pattern": "[A-Za-z0-9._:-]+ (no leading/trailing ':', no '::')",
+    "defaults": {
+      "pri": "med",
+      "status": "doc default (open|deferred)"
+    },
+    "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms names — `ms` is the milestone token)",
+    "label_pattern": "[A-Za-z0-9_-]+",
+    "nesting": "an item's children are a `-`/`[ ]` list indented under it (canonical 2 spaces per level; one level recommended). Children carry the same token grammar — `done`/`defer` on a parent act on the whole subtree, on a child just that node",
+    "separator": "·",
+    "shape": "<id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>] [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…] [· epic:<name>] [· ms:<name>] [· note:<text>]",
+    "token_order": [
+      "status",
+      "pri",
+      "owner",
+      "created",
+      "#label",
+      "blocks",
+      "epic",
+      "ms",
+      "note"
+    ]
+  },
+  "priorities": [
+    "low",
+    "med",
+    "high",
+    "crit"
+  ],
+  "statuses": [
+    "open",
+    "claimed",
+    "in-progress",
+    "blocked",
+    "done",
+    "deferred"
+  ],
+  "transitions": {
+    "blocked": [
+      "in-progress",
+      "open",
+      "deferred"
+    ],
+    "claimed": [
+      "in-progress",
+      "open",
+      "deferred"
+    ],
+    "deferred": [
+      "open"
+    ],
+    "done": [],
+    "in-progress": [
+      "blocked",
+      "done",
+      "deferred",
+      "open"
+    ],
+    "open": [
+      "claimed",
+      "in-progress",
+      "deferred"
+    ]
+  },
+  "types": {
+    "BacklogDoc": {
+      "$defs": {
+        "Item": {
+          "description": "A work item's metadata.\n\n`created` is `Option<Date>` — the spec grammar\n(`- [ ] T-012 title · pri:high · #tag`) has no date slot, so a\nmissing `created` must stay representable; `arca check` can flag\nit later. Emit always writes `created:` when present.\n\n`note` is reserved for handoffs (`arca handoff --note`); kept in\nthe model now so phase 6 doesn't re-shape it.",
+          "properties": {
+            "blocks": {
+              "description": "`blocks:` — ids this item blocks. Sorted set.",
+              "items": {
+                "$ref": "#/$defs/ItemId"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "children": {
+              "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
+            },
+            "created": {
+              "default": null,
+              "description": "`created:` — `YYYY-MM-DD` when known.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "epic": {
+              "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "Typed id — determines kind, sort, filename."
+            },
+            "labels": {
+              "description": "`#label`s — a sorted set, duplicates impossible.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "milestone": {
+              "description": "`milestone:` — the milestone this item targets. Line token\n`ms:<name>` (kept short — lines stay readable).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "description": "Free-form note — handoff/resume payload (phase 6).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "owner": {
+              "description": "`owner:` — `devin`, `human:luis`, …",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "priority": {
+              "$ref": "#/$defs/Priority",
+              "default": "medium",
+              "description": "`pri:` — defaults to [`Priority::Medium`]."
+            },
+            "status": {
+              "$ref": "#/$defs/Status",
+              "description": "Lifecycle state — transitions are validated by the caller\nvia [`Status::transition_to`]."
+            },
+            "superseded_by": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ItemId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`superseded_by:` — the item that replaced this one (ADRs)."
+            },
+            "supersedes": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ItemId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`supersedes:` — the item this one replaces (ADRs)."
+            },
+            "title": {
+              "description": "One-line summary. No `·`, no newlines in line-grammar\ncontexts (enforced at emit, not here — `Item` is a value,\nnot a validator).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "status"
+          ],
+          "type": "object"
+        },
+        "ItemId": {
+          "type": "string"
+        },
+        "Priority": {
+          "description": "How urgent an item is.",
+          "oneOf": [
+            {
+              "const": "low",
+              "description": "`pri:low`",
+              "type": "string"
+            },
+            {
+              "const": "medium",
+              "description": "`pri:med` — the default when no `pri:` token is present.",
+              "type": "string"
+            },
+            {
+              "const": "high",
+              "description": "`pri:high`",
+              "type": "string"
+            },
+            {
+              "const": "critical",
+              "description": "`pri:crit`",
+              "type": "string"
+            }
+          ]
+        },
+        "Section": {
+          "description": "A named run of items under a `## <section>` heading.",
+          "properties": {
+            "items": {
+              "description": "Items in file order.",
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
+            },
+            "name": {
+              "description": "Heading text; `None` = items before the first `##`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "type": "object"
+        },
+        "Status": {
+          "description": "Lifecycle status of an [`crate::Item`].",
+          "oneOf": [
+            {
+              "const": "open",
+              "description": "Filed, unowned.",
+              "type": "string"
+            },
+            {
+              "const": "claimed",
+              "description": "Owned by an actor, not yet started.",
+              "type": "string"
+            },
+            {
+              "const": "in-progress",
+              "description": "Actively worked.",
+              "type": "string"
+            },
+            {
+              "const": "blocked",
+              "description": "Work started but stuck on a dependency.",
+              "type": "string"
+            },
+            {
+              "const": "done",
+              "description": "Finished — terminal; done tasks leave `TODO.md`.",
+              "type": "string"
+            },
+            {
+              "const": "deferred",
+              "description": "Parked — lives in `BACKLOG.md`.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "`BACKLOG.md` — `# Backlog` plus optional `##` sections of\n`- T-NNN …` items (no checkbox; items are `Deferred`).",
+      "properties": {
+        "sections": {
+          "description": "Sections in file order.",
+          "items": {
+            "$ref": "#/$defs/Section"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sections"
+      ],
+      "title": "BacklogDoc",
+      "type": "object"
+    },
+    "HandoffEntry": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "One `## <date> · <actor>[ · session:<id>]` entry — a dated note\nfrom one actor's session. `session` is provenance only: a sepia\nsession id, `cli:<pid>`, whatever wrote the entry — arca records\nit, never interprets it.",
+      "properties": {
+        "actor": {
+          "description": "Who wrote it — `devin`, `human:luis`, `claude`, …",
+          "type": "string"
+        },
+        "date": {
+          "description": "Entry date — `YYYY-MM-DD` in the `## ` heading.",
+          "type": "string"
+        },
+        "note": {
+          "description": "Freeform note body — done/next/open, verbatim.",
+          "type": "string"
+        },
+        "session": {
+          "description": "Session provenance (`session:<id>` in the heading); absent\nwhen the writer didn't supply one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "date",
+        "actor",
+        "note"
+      ],
+      "title": "HandoffEntry",
+      "type": "object"
+    },
+    "Item": {
+      "$defs": {
+        "ItemId": {
+          "type": "string"
+        },
+        "Priority": {
+          "description": "How urgent an item is.",
+          "oneOf": [
+            {
+              "const": "low",
+              "description": "`pri:low`",
+              "type": "string"
+            },
+            {
+              "const": "medium",
+              "description": "`pri:med` — the default when no `pri:` token is present.",
+              "type": "string"
+            },
+            {
+              "const": "high",
+              "description": "`pri:high`",
+              "type": "string"
+            },
+            {
+              "const": "critical",
+              "description": "`pri:crit`",
+              "type": "string"
+            }
+          ]
+        },
+        "Status": {
+          "description": "Lifecycle status of an [`crate::Item`].",
+          "oneOf": [
+            {
+              "const": "open",
+              "description": "Filed, unowned.",
+              "type": "string"
+            },
+            {
+              "const": "claimed",
+              "description": "Owned by an actor, not yet started.",
+              "type": "string"
+            },
+            {
+              "const": "in-progress",
+              "description": "Actively worked.",
+              "type": "string"
+            },
+            {
+              "const": "blocked",
+              "description": "Work started but stuck on a dependency.",
+              "type": "string"
+            },
+            {
+              "const": "done",
+              "description": "Finished — terminal; done tasks leave `TODO.md`.",
+              "type": "string"
+            },
+            {
+              "const": "deferred",
+              "description": "Parked — lives in `BACKLOG.md`.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "A work item's metadata.\n\n`created` is `Option<Date>` — the spec grammar\n(`- [ ] T-012 title · pri:high · #tag`) has no date slot, so a\nmissing `created` must stay representable; `arca check` can flag\nit later. Emit always writes `created:` when present.\n\n`note` is reserved for handoffs (`arca handoff --note`); kept in\nthe model now so phase 6 doesn't re-shape it.",
+      "properties": {
+        "blocks": {
+          "description": "`blocks:` — ids this item blocks. Sorted set.",
+          "items": {
+            "$ref": "#/$defs/ItemId"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "children": {
+          "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
+          "items": {
+            "$ref": "#"
+          },
+          "type": "array"
+        },
+        "created": {
+          "default": null,
+          "description": "`created:` — `YYYY-MM-DD` when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epic": {
+          "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/ItemId",
+          "description": "Typed id — determines kind, sort, filename."
+        },
+        "labels": {
+          "description": "`#label`s — a sorted set, duplicates impossible.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "milestone": {
+          "description": "`milestone:` — the milestone this item targets. Line token\n`ms:<name>` (kept short — lines stay readable).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "description": "Free-form note — handoff/resume payload (phase 6).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "owner": {
+          "description": "`owner:` — `devin`, `human:luis`, …",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "$ref": "#/$defs/Priority",
+          "default": "medium",
+          "description": "`pri:` — defaults to [`Priority::Medium`]."
+        },
+        "status": {
+          "$ref": "#/$defs/Status",
+          "description": "Lifecycle state — transitions are validated by the caller\nvia [`Status::transition_to`]."
+        },
+        "superseded_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`superseded_by:` — the item that replaced this one (ADRs)."
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`supersedes:` — the item this one replaces (ADRs)."
+        },
+        "title": {
+          "description": "One-line summary. No `·`, no newlines in line-grammar\ncontexts (enforced at emit, not here — `Item` is a value,\nnot a validator).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "status"
+      ],
+      "title": "Item",
+      "type": "object"
+    },
+    "ItemFile": {
+      "$defs": {
+        "Item": {
+          "description": "A work item's metadata.\n\n`created` is `Option<Date>` — the spec grammar\n(`- [ ] T-012 title · pri:high · #tag`) has no date slot, so a\nmissing `created` must stay representable; `arca check` can flag\nit later. Emit always writes `created:` when present.\n\n`note` is reserved for handoffs (`arca handoff --note`); kept in\nthe model now so phase 6 doesn't re-shape it.",
+          "properties": {
+            "blocks": {
+              "description": "`blocks:` — ids this item blocks. Sorted set.",
+              "items": {
+                "$ref": "#/$defs/ItemId"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "children": {
+              "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
+            },
+            "created": {
+              "default": null,
+              "description": "`created:` — `YYYY-MM-DD` when known.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "epic": {
+              "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "Typed id — determines kind, sort, filename."
+            },
+            "labels": {
+              "description": "`#label`s — a sorted set, duplicates impossible.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "milestone": {
+              "description": "`milestone:` — the milestone this item targets. Line token\n`ms:<name>` (kept short — lines stay readable).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "description": "Free-form note — handoff/resume payload (phase 6).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "owner": {
+              "description": "`owner:` — `devin`, `human:luis`, …",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "priority": {
+              "$ref": "#/$defs/Priority",
+              "default": "medium",
+              "description": "`pri:` — defaults to [`Priority::Medium`]."
+            },
+            "status": {
+              "$ref": "#/$defs/Status",
+              "description": "Lifecycle state — transitions are validated by the caller\nvia [`Status::transition_to`]."
+            },
+            "superseded_by": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ItemId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`superseded_by:` — the item that replaced this one (ADRs)."
+            },
+            "supersedes": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ItemId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`supersedes:` — the item this one replaces (ADRs)."
+            },
+            "title": {
+              "description": "One-line summary. No `·`, no newlines in line-grammar\ncontexts (enforced at emit, not here — `Item` is a value,\nnot a validator).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "status"
+          ],
+          "type": "object"
+        },
+        "ItemId": {
+          "type": "string"
+        },
+        "Priority": {
+          "description": "How urgent an item is.",
+          "oneOf": [
+            {
+              "const": "low",
+              "description": "`pri:low`",
+              "type": "string"
+            },
+            {
+              "const": "medium",
+              "description": "`pri:med` — the default when no `pri:` token is present.",
+              "type": "string"
+            },
+            {
+              "const": "high",
+              "description": "`pri:high`",
+              "type": "string"
+            },
+            {
+              "const": "critical",
+              "description": "`pri:crit`",
+              "type": "string"
+            }
+          ]
+        },
+        "Status": {
+          "description": "Lifecycle status of an [`crate::Item`].",
+          "oneOf": [
+            {
+              "const": "open",
+              "description": "Filed, unowned.",
+              "type": "string"
+            },
+            {
+              "const": "claimed",
+              "description": "Owned by an actor, not yet started.",
+              "type": "string"
+            },
+            {
+              "const": "in-progress",
+              "description": "Actively worked.",
+              "type": "string"
+            },
+            {
+              "const": "blocked",
+              "description": "Work started but stuck on a dependency.",
+              "type": "string"
+            },
+            {
+              "const": "done",
+              "description": "Finished — terminal; done tasks leave `TODO.md`.",
+              "type": "string"
+            },
+            {
+              "const": "deferred",
+              "description": "Parked — lives in `BACKLOG.md`.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "One `issues|proposals|adrs|plans/*.md` file — TOML frontmatter\nin `+++` fences + a free-form markdown body.",
+      "properties": {
+        "body": {
+          "description": "Markdown body, verbatim (normalized: trimmed). Kind-specific\nsection templates are `arca-template`'s job, not the store's.",
+          "type": "string"
+        },
+        "meta": {
+          "$ref": "#/$defs/Item",
+          "description": "Frontmatter (`id`, `title`, `status`, `created`, `owner`,\n`priority`, `labels`, `blocks`, `note`)."
+        }
+      },
+      "required": [
+        "meta",
+        "body"
+      ],
+      "title": "ItemFile",
+      "type": "object"
+    },
+    "ItemId": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ItemId",
+      "type": "string"
+    },
+    "ItemKind": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "The kind of work item an [`ItemId`] addresses.",
+      "oneOf": [
+        {
+          "const": "task",
+          "description": "`T-NNN` — tasks live in `TODO.md` / `BACKLOG.md`, no file.",
+          "type": "string"
+        },
+        {
+          "const": "issue",
+          "description": "`I-NNN` — one file each under `issues/`.",
+          "type": "string"
+        },
+        {
+          "const": "proposal",
+          "description": "`P-NNN` — one file each under `proposals/`.",
+          "type": "string"
+        },
+        {
+          "const": "adr",
+          "description": "`ADR-NNNN` — one file each under `adrs/`.",
+          "type": "string"
+        },
+        {
+          "const": "plan",
+          "description": "`PL-NNN` — one file each under `plans/`.",
+          "type": "string"
+        }
+      ],
+      "title": "ItemKind"
+    },
+    "NextCounters": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "Per-kind next-counters — `meta.toml`'s `[next]` table.\nMissing keys default to 1 so a partial `[next]` survives a\nhand-edit.",
+      "properties": {
+        "adr": {
+          "default": 1,
+          "description": "Next `ADR-NNNN`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "i": {
+          "default": 1,
+          "description": "Next `I-NNN`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "p": {
+          "default": 1,
+          "description": "Next `P-NNN`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pl": {
+          "default": 1,
+          "description": "Next `PL-NNN`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "t": {
+          "default": 1,
+          "description": "Next `T-NNN`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "title": "NextCounters",
+      "type": "object"
+    },
+    "Priority": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "How urgent an item is.",
+      "oneOf": [
+        {
+          "const": "low",
+          "description": "`pri:low`",
+          "type": "string"
+        },
+        {
+          "const": "medium",
+          "description": "`pri:med` — the default when no `pri:` token is present.",
+          "type": "string"
+        },
+        {
+          "const": "high",
+          "description": "`pri:high`",
+          "type": "string"
+        },
+        {
+          "const": "critical",
+          "description": "`pri:crit`",
+          "type": "string"
+        }
+      ],
+      "title": "Priority"
+    },
+    "ProjectMeta": {
+      "$defs": {
+        "NextCounters": {
+          "description": "Per-kind next-counters — `meta.toml`'s `[next]` table.\nMissing keys default to 1 so a partial `[next]` survives a\nhand-edit.",
+          "properties": {
+            "adr": {
+              "default": 1,
+              "description": "Next `ADR-NNNN`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "i": {
+              "default": 1,
+              "description": "Next `I-NNN`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "p": {
+              "default": 1,
+              "description": "Next `P-NNN`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "pl": {
+              "default": 1,
+              "description": "Next `PL-NNN`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "t": {
+              "default": 1,
+              "description": "Next `T-NNN`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "`meta.toml` — the one piece of project state that isn't\nderivable from the item files.",
+      "properties": {
+        "name": {
+          "description": "Repo/project name — used in `# TODO — <name>` and views.",
+          "type": "string"
+        },
+        "next": {
+          "$ref": "#/$defs/NextCounters",
+          "default": {
+            "adr": 1,
+            "i": 1,
+            "p": 1,
+            "pl": 1,
+            "t": 1
+          },
+          "description": "Next-id counters per kind."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ProjectMeta",
+      "type": "object"
+    },
+    "Section": {
+      "$defs": {
+        "Item": {
+          "description": "A work item's metadata.\n\n`created` is `Option<Date>` — the spec grammar\n(`- [ ] T-012 title · pri:high · #tag`) has no date slot, so a\nmissing `created` must stay representable; `arca check` can flag\nit later. Emit always writes `created:` when present.\n\n`note` is reserved for handoffs (`arca handoff --note`); kept in\nthe model now so phase 6 doesn't re-shape it.",
+          "properties": {
+            "blocks": {
+              "description": "`blocks:` — ids this item blocks. Sorted set.",
+              "items": {
+                "$ref": "#/$defs/ItemId"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "children": {
+              "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
+            },
+            "created": {
+              "default": null,
+              "description": "`created:` — `YYYY-MM-DD` when known.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "epic": {
+              "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "Typed id — determines kind, sort, filename."
+            },
+            "labels": {
+              "description": "`#label`s — a sorted set, duplicates impossible.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "milestone": {
+              "description": "`milestone:` — the milestone this item targets. Line token\n`ms:<name>` (kept short — lines stay readable).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "description": "Free-form note — handoff/resume payload (phase 6).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "owner": {
+              "description": "`owner:` — `devin`, `human:luis`, …",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "priority": {
+              "$ref": "#/$defs/Priority",
+              "default": "medium",
+              "description": "`pri:` — defaults to [`Priority::Medium`]."
+            },
+            "status": {
+              "$ref": "#/$defs/Status",
+              "description": "Lifecycle state — transitions are validated by the caller\nvia [`Status::transition_to`]."
+            },
+            "superseded_by": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ItemId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`superseded_by:` — the item that replaced this one (ADRs)."
+            },
+            "supersedes": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ItemId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`supersedes:` — the item this one replaces (ADRs)."
+            },
+            "title": {
+              "description": "One-line summary. No `·`, no newlines in line-grammar\ncontexts (enforced at emit, not here — `Item` is a value,\nnot a validator).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "status"
+          ],
+          "type": "object"
+        },
+        "ItemId": {
+          "type": "string"
+        },
+        "Priority": {
+          "description": "How urgent an item is.",
+          "oneOf": [
+            {
+              "const": "low",
+              "description": "`pri:low`",
+              "type": "string"
+            },
+            {
+              "const": "medium",
+              "description": "`pri:med` — the default when no `pri:` token is present.",
+              "type": "string"
+            },
+            {
+              "const": "high",
+              "description": "`pri:high`",
+              "type": "string"
+            },
+            {
+              "const": "critical",
+              "description": "`pri:crit`",
+              "type": "string"
+            }
+          ]
+        },
+        "Status": {
+          "description": "Lifecycle status of an [`crate::Item`].",
+          "oneOf": [
+            {
+              "const": "open",
+              "description": "Filed, unowned.",
+              "type": "string"
+            },
+            {
+              "const": "claimed",
+              "description": "Owned by an actor, not yet started.",
+              "type": "string"
+            },
+            {
+              "const": "in-progress",
+              "description": "Actively worked.",
+              "type": "string"
+            },
+            {
+              "const": "blocked",
+              "description": "Work started but stuck on a dependency.",
+              "type": "string"
+            },
+            {
+              "const": "done",
+              "description": "Finished — terminal; done tasks leave `TODO.md`.",
+              "type": "string"
+            },
+            {
+              "const": "deferred",
+              "description": "Parked — lives in `BACKLOG.md`.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "A named run of items under a `## <section>` heading.",
+      "properties": {
+        "items": {
+          "description": "Items in file order.",
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Heading text; `None` = items before the first `##`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "Section",
+      "type": "object"
+    },
+    "Status": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "Lifecycle status of an [`crate::Item`].",
+      "oneOf": [
+        {
+          "const": "open",
+          "description": "Filed, unowned.",
+          "type": "string"
+        },
+        {
+          "const": "claimed",
+          "description": "Owned by an actor, not yet started.",
+          "type": "string"
+        },
+        {
+          "const": "in-progress",
+          "description": "Actively worked.",
+          "type": "string"
+        },
+        {
+          "const": "blocked",
+          "description": "Work started but stuck on a dependency.",
+          "type": "string"
+        },
+        {
+          "const": "done",
+          "description": "Finished — terminal; done tasks leave `TODO.md`.",
+          "type": "string"
+        },
+        {
+          "const": "deferred",
+          "description": "Parked — lives in `BACKLOG.md`.",
+          "type": "string"
+        }
+      ],
+      "title": "Status"
+    },
+    "TodoDoc": {
+      "$defs": {
+        "Item": {
+          "description": "A work item's metadata.\n\n`created` is `Option<Date>` — the spec grammar\n(`- [ ] T-012 title · pri:high · #tag`) has no date slot, so a\nmissing `created` must stay representable; `arca check` can flag\nit later. Emit always writes `created:` when present.\n\n`note` is reserved for handoffs (`arca handoff --note`); kept in\nthe model now so phase 6 doesn't re-shape it.",
+          "properties": {
+            "blocks": {
+              "description": "`blocks:` — ids this item blocks. Sorted set.",
+              "items": {
+                "$ref": "#/$defs/ItemId"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "children": {
+              "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
+            },
+            "created": {
+              "default": null,
+              "description": "`created:` — `YYYY-MM-DD` when known.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "epic": {
+              "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "Typed id — determines kind, sort, filename."
+            },
+            "labels": {
+              "description": "`#label`s — a sorted set, duplicates impossible.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "milestone": {
+              "description": "`milestone:` — the milestone this item targets. Line token\n`ms:<name>` (kept short — lines stay readable).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "description": "Free-form note — handoff/resume payload (phase 6).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "owner": {
+              "description": "`owner:` — `devin`, `human:luis`, …",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "priority": {
+              "$ref": "#/$defs/Priority",
+              "default": "medium",
+              "description": "`pri:` — defaults to [`Priority::Medium`]."
+            },
+            "status": {
+              "$ref": "#/$defs/Status",
+              "description": "Lifecycle state — transitions are validated by the caller\nvia [`Status::transition_to`]."
+            },
+            "superseded_by": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ItemId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`superseded_by:` — the item that replaced this one (ADRs)."
+            },
+            "supersedes": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ItemId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`supersedes:` — the item this one replaces (ADRs)."
+            },
+            "title": {
+              "description": "One-line summary. No `·`, no newlines in line-grammar\ncontexts (enforced at emit, not here — `Item` is a value,\nnot a validator).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "status"
+          ],
+          "type": "object"
+        },
+        "ItemId": {
+          "type": "string"
+        },
+        "Priority": {
+          "description": "How urgent an item is.",
+          "oneOf": [
+            {
+              "const": "low",
+              "description": "`pri:low`",
+              "type": "string"
+            },
+            {
+              "const": "medium",
+              "description": "`pri:med` — the default when no `pri:` token is present.",
+              "type": "string"
+            },
+            {
+              "const": "high",
+              "description": "`pri:high`",
+              "type": "string"
+            },
+            {
+              "const": "critical",
+              "description": "`pri:crit`",
+              "type": "string"
+            }
+          ]
+        },
+        "Section": {
+          "description": "A named run of items under a `## <section>` heading.",
+          "properties": {
+            "items": {
+              "description": "Items in file order.",
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
+            },
+            "name": {
+              "description": "Heading text; `None` = items before the first `##`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "type": "object"
+        },
+        "Status": {
+          "description": "Lifecycle status of an [`crate::Item`].",
+          "oneOf": [
+            {
+              "const": "open",
+              "description": "Filed, unowned.",
+              "type": "string"
+            },
+            {
+              "const": "claimed",
+              "description": "Owned by an actor, not yet started.",
+              "type": "string"
+            },
+            {
+              "const": "in-progress",
+              "description": "Actively worked.",
+              "type": "string"
+            },
+            {
+              "const": "blocked",
+              "description": "Work started but stuck on a dependency.",
+              "type": "string"
+            },
+            {
+              "const": "done",
+              "description": "Finished — terminal; done tasks leave `TODO.md`.",
+              "type": "string"
+            },
+            {
+              "const": "deferred",
+              "description": "Parked — lives in `BACKLOG.md`.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "`TODO.md` — `# TODO — <repo>` plus `## <section>` runs of\n`- [ ] T-NNN …` task items.",
+      "properties": {
+        "repo": {
+          "description": "Repo name from the `# TODO — <repo>` title.",
+          "type": "string"
+        },
+        "sections": {
+          "description": "Sections in file order.",
+          "items": {
+            "$ref": "#/$defs/Section"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "repo",
+        "sections"
+      ],
+      "title": "TodoDoc",
+      "type": "object"
+    }
+  },
+  "version": 1
+}

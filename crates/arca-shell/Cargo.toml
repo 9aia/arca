@@ -1,0 +1,14 @@
+[package]
+name = "arca-shell"
+description = "Run a command in a working directory via bash -c — the generic shell-out helper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["pm", "arca"]
+categories = ["development-tools"]
+
+[dependencies]
+
+[lints]
+workspace = true

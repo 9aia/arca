@@ -1,0 +1,25 @@
+[package]
+name = "arca-ops"
+description = "arca — ops I/O shell: project discovery, store open/save, commit-per-mutation, verb plumbing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+arca-core.workspace = true
+arca-config.workspace = true
+arca-config-toml.workspace = true
+arca-git.workspace = true
+arca-store.workspace = true
+arca-store-md.workspace = true
+serde_json.workspace = true
+camino.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+temp-env.workspace = true
+
+[lints]
+workspace = true

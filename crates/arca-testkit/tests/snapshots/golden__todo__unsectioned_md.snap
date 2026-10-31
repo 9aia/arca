@@ -1,0 +1,11 @@
+---
+source: crates/arca-testkit/tests/golden.rs
+expression: out
+---
+# TODO — arca
+
+- [ ] T-001 Loose task
+
+## Now
+
+- [ ] T-002 Sectioned

@@ -1,0 +1,4 @@
+name: arca-shell
+path: crates/arca-shell/Cargo.toml
+purpose: bash -c shell-out helper
+api: []

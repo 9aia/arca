@@ -1,0 +1,22 @@
+[package]
+name = "arca-tui"
+description = "arca — interactive board TUI (ratatui); a thin front-end over arca-ops"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+arca-core.workspace = true
+arca-ops.workspace = true
+arca-store.workspace = true
+arca-store-md.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+camino.workspace = true
+
+[lints]
+workspace = true

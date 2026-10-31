@@ -1,0 +1,29 @@
+[package]
+name = "arca-store-md"
+description = "Markdown adapter for the store port — strict parse/emit of project/ files, round-trip stable; owns the file spec"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["pm", "arca"]
+categories = ["development-tools"]
+
+[dependencies]
+arca-core.workspace = true
+arca-store.workspace = true
+markdown.workspace = true
+mdast_util_to_markdown.workspace = true
+toml.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+miette.workspace = true
+camino.workspace = true
+slug.workspace = true
+
+[dev-dependencies]
+arca-core = { path = "../arca-core", features = ["schema"] }
+serde_json.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

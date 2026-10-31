@@ -1,0 +1,4 @@
+name: _root
+path: Cargo.toml
+purpose: *Project management, grown not built.*
+api: []
