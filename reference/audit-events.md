@@ -17,7 +17,7 @@ breadcrumb.
 | `ts` | RFC 3339, UTC |
 | `actor` | `--actor` → `ARCA_ACTOR` → `$USER`/`$LOGNAME` → `anon`. Self-claimed — attribution, not identity |
 | `op` | the verb: `init put get list rm rotate run env check deploy ui serve manifest schema` |
-| `rref` | the resolved ref path, env pin stripped. **Absent** on op-scoped events |
+| `rref` | the resolved ref path, env pin stripped — same on `denied`/`error` when the arg parses, else the raw arg verbatim. **Absent** on op-scoped events |
 | `env` | the env the op ran under |
 | `outcome` | `ok` \| `denied` \| `error` |
 
@@ -27,7 +27,7 @@ breadcrumb.
 | --- | --- |
 | `ok`, ref-scoped | one **per ref** materialized or mutated — `put`, `get`, `rotate`, `rm`, `deploy`, and per resolved ref inside `run`/`env` |
 | `ok`, op-scoped | ref-less verb completed — `init`, `list`, `check`, `ui` |
-| `denied` | `[guardrails]` refused the op before it touched the vault; `rref` carries the raw requested ref when there was one |
+| `denied` | `[guardrails]` refused the op before it touched the vault; `rref` is the requested ref (normalized when parseable) |
 | `error` | the op ran and failed — missing secret, vault i/o, bad ref; also emitted when config load itself fails (best-effort actor/env from flags + process env) |
 
 Two deliberate silences:
