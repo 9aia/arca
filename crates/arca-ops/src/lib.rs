@@ -395,6 +395,18 @@ impl Ops {
         })
     }
 
+    /// Read a secret in an explicit env — the audited read for
+    /// callers that already know the env (the TUI's reveal, which
+    /// browses envs other than the selected one). Same event
+    /// [`get`](Self::get) emits: one materialization per value out.
+    pub fn get_in(&self, env: &Env, rref: &Ref) -> Result<Option<SecretRecord>, OpsError> {
+        let rec = self.open_vault(env)?.get(env, rref)?;
+        if rec.is_some() {
+            self.audit(Op::Get, rref, env);
+        }
+        Ok(rec)
+    }
+
     /// Refs stored in the selected env (or an explicit one).
     pub fn list(&self, env: Option<&Env>) -> Result<(Env, Vec<Ref>), OpsError> {
         let env = env.cloned().unwrap_or_else(|| self.env.clone());

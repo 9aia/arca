@@ -138,6 +138,10 @@ enum Cmd {
     Manifest,
     /// JSON Schema for `arca.toml`.
     Schema,
+    /// Print the CLI reference as markdown (docs pipeline —
+    /// `bun run docs:cli` pipes it to `docs/reference/cli.md`).
+    #[command(hide = true, name = "gen-cli-docs")]
+    GenCliDocs,
 }
 
 fn main() -> ExitCode {
@@ -146,6 +150,7 @@ fn main() -> ExitCode {
     match &cli.command {
         // Pure introspection — before config load, no audit event.
         Cmd::Manifest => json_out(&manifest()),
+        Cmd::GenCliDocs => out(&clap_markdown::help_markdown::<Cli>()),
         Cmd::Schema => {
             match serde_json::to_string_pretty(&schemars::schema_for!(arca_core::Config)) {
                 Ok(s) => out(&s),
@@ -208,6 +213,9 @@ fn cmd_op(cmd: &Cmd) -> Op {
         Cmd::Ui => Op::Ui,
         Cmd::Manifest => Op::Manifest,
         Cmd::Schema => Op::Schema,
+        // Handled before ops load — this arm is only for
+        // exhaustiveness, never reached.
+        Cmd::GenCliDocs => Op::Schema,
     }
 }
 
@@ -520,7 +528,9 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
                 Ok(ExitCode::FAILURE)
             }
         }
-        Cmd::Manifest | Cmd::Schema => unreachable!("handled before ops load"),
+        Cmd::Manifest | Cmd::Schema | Cmd::GenCliDocs => {
+            unreachable!("handled before ops load")
+        }
     }
 }
 
@@ -611,6 +621,7 @@ fn manifest() -> serde_json::Value {
             "ui": "interactive vault browser (tui feature)",
             "manifest": "this document (always JSON; before config load, no audit event)",
             "schema": "JSON Schema for arca.toml (before config load)",
+            "gen-cli-docs": "hidden — the CLI reference as markdown (docs pipeline)",
         },
         "flags": {
             "--json": "stable shapes below; errors are {\"error\": \"…\"} on stderr, non-zero exit",

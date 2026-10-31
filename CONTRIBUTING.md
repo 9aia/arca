@@ -6,9 +6,10 @@ dogfoods its own PM ledger (`project/`). Fork freely under MIT.
 ## Layout
 
 `crates/` — flat rust workspace, ports-and-adapters. `arca-core` is
-pure domain (no I/O); `arca-config` is a port, `arca-config-toml` its
-file impl; `arca-git` and `arca-shell` shell out; `arca`
-(`crates/arca-cli`) is the composition root. `xtask/` is repo chores.
+pure domain (no I/O); `arca-config`/`arca-vault`/`arca-deploy` are
+ports, `-toml`/`-age`/`-cf` crates their impls; `arca-ops` is the ops
+shell; `arca` (`crates/arca-cli`) is the composition root. `xtask/`
+is repo chores.
 
 ## Rules of thumb
 
@@ -18,15 +19,17 @@ file impl; `arca-git` and `arca-shell` shell out; `arca`
   `target/llvm-cov/html`; pass `--fail-under-lines 100` to gate.
 - Keep the binary dependency-light and sync; no async runtime.
 - Commits: conventional prefixes (`feat:`/`fix:`/`refactor:`/`docs:`/`chore:`).
-- Never commit secrets — `arca.toml` takes names of env vars, not values.
-- Never hand-edit `project/` when a `arca` verb exists — verbs are the
-  audit trail.
+- Never commit secrets — `arca.toml` takes names of env vars, not
+  values; no plaintext secret in tests, fixtures, docs, or logs.
+- Never hand-edit `project/` when a `myco` verb exists — the ledger
+  is myco's, verbs are the audit trail.
 
 ## Releasing
 
-`scripts/release.sh` runs on `main` pushes via bupha's dogfood loop —
-bump, publish, tag (`{crate}-v{ver}`), dist binaries. See
-`docs/explanation/release-model.md` once the docs site lands.
+No crates.io publish, no git tags — the install path is
+`cargo install --git https://github.com/9aia/arca arca`. Keep the
+workspace building under plain `cargo install` (default features
+include the TUI; `--no-default-features` must stay lean).
 
 ## Docs
 

@@ -21,6 +21,7 @@ arca-shell.workspace = true
 arca-vault.workspace = true
 arca-tui = { workspace = true, optional = true }
 clap.workspace = true
+clap-markdown.workspace = true
 serde_json.workspace = true
 schemars.workspace = true
 sigpipe.workspace = true

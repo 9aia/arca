@@ -96,9 +96,10 @@ ref, different backend per env.
   variants behind the same ref; env is also a routing axis:
   `dev` → local vault, `prod` → cloud vault
 - **ports-and-adapters vaults** — the `arca-vault` trait with
-  `arca-vault-age` (local age-encrypted file) first; self-hosted
-  Cloudflare (Worker + D1, client-side encrypted) and AWS SM
-  later; `arca-deploy` covers write-only push targets
+  `arca-vault-age` (local age-encrypted file) and `arca-vault-cf`
+  (self-hosted Worker + D1, client-side age ciphertext) today;
+  `arca-deploy` covers write-only push targets (`arca-deploy-cf`
+  → CF Secrets Store)
 - **redaction by construction** — a `Secret` newtype with no
   Display/Debug of plaintext; explicit `.expose()` is the only
   way out
@@ -119,9 +120,10 @@ gate), **mimus** (critic — its key resolution migrates to arca),
 
 ## Status
 
-Working v1 — local age vault, full verb surface, audit wire,
-agent skill. Cloud vaults (`arca-vault-cf`, `arca-deploy-cf`),
-`arca serve`, and the docs site land per
+Working v1 — local age vault + remote `cf` vault (self-hosted
+Worker + D1), deploy sinks, the full verb surface, TUI browser,
+audit wire, agent skill, docs site. `arca serve` (ndjson IPC for
+peregrin) and a KMS-backed crypto port are later ADRs per
 `project/plans/` and `project/proposals/`.
 
 ## Install
@@ -133,8 +135,9 @@ cargo xtask install        # from a checkout → ~/.cargo/bin
 
 ## Docs
 
-Docs site lands on the `docs` branch (VitePress + Diátaxis →
-GitHub Pages). Repo docs:
+The docs site lives on the `docs` branch as a worktree (VitePress
++ Diátaxis → `9aia.com/arca`); `cargo xtask site` builds it.
+Repo docs:
 [AGENTS](AGENTS.md) · [CONTRIBUTING](CONTRIBUTING.md) ·
 [SECURITY](SECURITY.md) · [LICENSE](LICENSE) (MIT) ·
 [project](project/index.md) — TODO, backlog, ADRs, proposals

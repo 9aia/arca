@@ -7,14 +7,17 @@ Do not open public issues for security reports.
 
 ## Scope
 
-- `arca` writes only inside the repo's `project/` worktree — every
-  mutation is one atomic, attributable commit on the `project`
-  branch; history is the audit trail.
-- Config (`arca.toml`) holds names and paths, never secrets; secrets
-  resolve via env var → OS keyring → `~/.config/arca/env` (chmod 600)
-  when a phase needs them.
-- Item IDs and revisions are path-validated before they touch file
-  paths or git args — no `..`, no `/`, bounded length.
+- arca materializes secrets — `arca://` refs in code/config,
+  age-encrypted vaults, env-var injection, an ndjson audit wire on
+  stderr. See `docs/explanation/threat-model.md` (docs branch) for
+  what it does and does not defend against.
+- `arca.toml` holds names, paths, and routing — never values;
+  credentials reach vaults via env vars (`token_env` names, not
+  inline).
+- `identity.txt` (0600) is the master key for every vault impl —
+  treat it like a private SSH key.
+- Refs and env/actor names are validated before they touch store
+  keys — strict segment rules, bounded length, no traversal.
 
 ## Notes
 
