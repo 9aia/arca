@@ -33,6 +33,7 @@ default = ["tui"]
 tui = ["dep:arca-tui"]
 
 [dev-dependencies]
+arca-testkit.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 temp-env.workspace = true

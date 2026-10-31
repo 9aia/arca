@@ -1,6 +1,7 @@
 //! `OpsError` — one error type for the front-ends to match.
 
 use arca_core::{ParseActorError, ParseEnvError, ParseRefError};
+use arca_deploy::DeployError;
 use arca_vault::VaultError;
 
 /// Everything ops can fail with — config, resolution, vault.
@@ -21,6 +22,9 @@ pub enum OpsError {
     /// Vault backend failure.
     #[error(transparent)]
     Vault(#[from] VaultError),
+    /// Deploy target failure.
+    #[error(transparent)]
+    Deploy(#[from] DeployError),
     /// A declared/ad-hoc secret isn't in the vault.
     #[error("{var} → {rref} is not stored in env {env}")]
     NotStored {

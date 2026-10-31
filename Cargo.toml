@@ -5,12 +5,15 @@ members = [
     "crates/arca-config",
     "crates/arca-config-toml",
     "crates/arca-core",
+    "crates/arca-deploy",
+    "crates/arca-deploy-cf",
     "crates/arca-ops",
     "crates/arca-shell",
     "crates/arca-testkit",
     "crates/arca-tui",
     "crates/arca-vault",
     "crates/arca-vault-age",
+    "crates/arca-vault-cf",
     "xtask",
 ]
 
@@ -31,12 +34,15 @@ arca = { path = "crates/arca-cli", version = "0.1.0" }
 arca-config = { path = "crates/arca-config", version = "0.1.0" }
 arca-config-toml = { path = "crates/arca-config-toml", version = "0.1.0" }
 arca-core = { path = "crates/arca-core", version = "0.1.0" }
+arca-deploy = { path = "crates/arca-deploy", version = "0.1.0" }
+arca-deploy-cf = { path = "crates/arca-deploy-cf", version = "0.1.0" }
 arca-ops = { path = "crates/arca-ops", version = "0.1.0" }
 arca-shell = { path = "crates/arca-shell", version = "0.1.0" }
 arca-testkit = { path = "crates/arca-testkit", version = "0.1.0" }
 arca-tui = { path = "crates/arca-tui", version = "0.1.0" }
 arca-vault = { path = "crates/arca-vault", version = "0.1.0" }
 arca-vault-age = { path = "crates/arca-vault-age", version = "0.1.0" }
+arca-vault-cf = { path = "crates/arca-vault-cf", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
@@ -53,6 +59,10 @@ zeroize = "1"
 # default-features off: no async/armor/plugin/ssh — binary
 # ciphertext, sync API, light dep tree.
 age = { version = "0.12", default-features = false }
+# Blocking HTTP for remote vaults/deploys — sync only, no async
+# runtime (AGENTS.md). Pinned to a >7-day-old release on purpose.
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
+base64 = "0.23"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

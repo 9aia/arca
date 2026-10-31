@@ -8,10 +8,22 @@
 # overrides its paths or adds extra recipients.
 #
 # [vaults.local]
-# kind = "age"                                  # the only kind for v1
+# kind = "age"                                  # built-in local vault
 # path = "/home/you/.local/share/arca/vault.age"   # "~" is NOT expanded — full paths
 # identity = "/home/you/.config/arca/identity.txt"   # $ARCA_IDENTITY_FILE also works
 # recipients = ["age1…"]                        # extra public keys to encrypt to
+
+# A remote vault: self-hosted Cloudflare Worker + D1 holding
+# per-secret age ciphertext — the worker never sees plaintext.
+# Deploy it from crates/arca-vault-cf/worker/ first; the bearer
+# token comes via the env var named by token_env, never inline.
+#
+# [vaults.cloud]
+# kind = "cf"
+# url = "https://arca-vault.you.workers.dev"
+# token_env = "ARCA_CF_TOKEN"                    # env var NAME, not the token
+# identity = "/home/you/.config/arca/identity.txt"   # optional; same default as local
+# recipients = ["age1…"]                        # optional extra encrypt-to keys
 
 # env → vault routing. dev/staging/prod always exist; unlisted envs
 # route to "local". `dev = "local"` shorthand also works.
@@ -19,7 +31,19 @@
 # [envs]
 # dev = { vault = "local" }
 # staging = { vault = "local" }
-# prod = { vault = "prod" }      # once a second vault exists
+# prod = { vault = "cloud" }     # prod secrets live in the cf vault
+
+# Deploy targets — write-only sinks `arca deploy` pushes to.
+# CF's account Secrets Store is the primary kind; the API token
+# arrives via the env var named by token_env (default
+# CLOUDFLARE_API_TOKEN). `arca deploy arca://x/y --target prod`.
+#
+# [deploy.prod]
+# kind = "cf-secrets-store"
+# account_id = "…"                               # CF account id
+# store_id = "…"                                 # Secrets Store id
+# token_env = "CLOUDFLARE_API_TOKEN"             # optional; this is the default
+# base_url = "https://api.cloudflare.com/client/v4"   # optional override
 
 # The declared secret surface: env-var name → arca:// ref. This is
 # what `arca run`/`arca env` may inject — least privilege, reviewable,

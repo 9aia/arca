@@ -1,5 +1,5 @@
 //! The `arca.toml`-shaped config model every `arca-config` source
-//! loads. Four tables:
+//! loads. Five tables:
 //!
 //! ```toml
 //! [vaults.local]                 # named vault backends ("local" is
@@ -10,6 +10,9 @@
 //!
 //! [secrets]                      # the declared surface run may
 //! STRIPE_KEY = "arca://billing/stripe"   #   inject: VAR → ref
+//!
+//! [deploy.prod]                  # write-only push targets (sinks)
+//! kind = "cf-secrets-store"
 //!
 //! [guardrails]                   # advisory op table — accident
 //! default = "allow"              #   prevention, not policy
@@ -47,6 +50,10 @@ pub struct Config {
     /// ambient vault dump.
     #[serde(default)]
     pub secrets: BTreeMap<String, Ref>,
+    /// Named deploy targets — write-only sinks (`arca deploy`
+    /// pushes a stored value in; nothing ever reads one back).
+    #[serde(default)]
+    pub deploy: BTreeMap<String, DeployConfig>,
     /// Advisory op guardrails — accident prevention for standalone
     /// use, honestly *not* a policy boundary (a locally claimed
     /// actor is spoofable by construction).
@@ -73,6 +80,11 @@ impl Config {
     pub fn vault_config(&self, name: &str) -> Option<&VaultConfig> {
         self.vaults.get(name)
     }
+
+    /// The [`DeployConfig`] for a deploy target name.
+    pub fn deploy_config(&self, name: &str) -> Option<&DeployConfig> {
+        self.deploy.get(name)
+    }
 }
 
 /// One `[vaults.<name>]` entry.
@@ -80,23 +92,64 @@ impl Config {
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct VaultConfig {
-    /// Backend kind — `"age"` (built-in); `cf`/`aws` are later impls.
+    /// Backend kind — `"age"` (built-in, local file) or `"cf"`
+    /// (self-hosted Cloudflare Worker + D1, `arca-vault-cf`).
     #[serde(default = "default_kind")]
     pub kind: String,
     /// Vault file path override (age impl; `~` is *not* expanded —
     /// write the path in full).
     pub path: Option<String>,
     /// Age identity file override (`ARCA_IDENTITY_FILE` wins over
-    /// this; see `arca-ops`).
+    /// this; see `arca-ops`). `cf` vaults decrypt with the same
+    /// keyfile — all vault impls store age ciphertext (ADR-0001).
     pub identity: Option<String>,
     /// Extra age recipients to encrypt to, beyond the identity's
     /// public key (`age1…` strings).
     #[serde(default)]
     pub recipients: Vec<String>,
+    /// Worker base URL (`cf` impl), e.g.
+    /// `https://arca-vault.you.workers.dev`.
+    pub url: Option<String>,
+    /// Name of the env var holding the bearer token (`cf` impl) —
+    /// the token *name* lives in config, the token *value* only in
+    /// the process env.
+    pub token_env: Option<String>,
 }
 
 fn default_kind() -> String {
     "age".into()
+}
+
+/// One `[deploy.<name>]` entry — a write-only push target.
+///
+/// Deploy targets are **sinks**, not sources: `arca deploy` pushes a
+/// vault-stored value in and nothing is ever read back (CF Secrets
+/// Store values are write-only by design). Credentials always arrive
+/// via the env var named by `token_env`, never inline.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct DeployConfig {
+    /// Target kind — `"cf-secrets-store"` (Cloudflare account
+    /// Secrets Store, `arca-deploy-cf`).
+    #[serde(default = "default_deploy_kind")]
+    pub kind: String,
+    /// Cloudflare account id (`cf-secrets-store`).
+    pub account_id: Option<String>,
+    /// Secrets Store id (`cf-secrets-store`).
+    pub store_id: Option<String>,
+    /// Name of the env var holding the API token — never the token
+    /// itself (`cf-secrets-store` defaults to
+    /// `CLOUDFLARE_API_TOKEN`).
+    pub token_env: Option<String>,
+    /// API base URL override — for tests, gateways, and
+    /// self-hosted proxies. Defaults to
+    /// `https://api.cloudflare.com/client/v4`.
+    pub base_url: Option<String>,
+}
+
+fn default_deploy_kind() -> String {
+    "cf-secrets-store".into()
 }
 
 /// How an env routes to its vault — `dev = "local"` shorthand or
@@ -208,6 +261,16 @@ mod tests {
             [secrets]
             STRIPE_KEY = "arca://billing/stripe"
 
+            [vaults.cloud]
+            kind = "cf"
+            url = "https://arca-vault.example.workers.dev"
+            token_env = "ARCA_CF_TOKEN"
+
+            [deploy.prod]
+            kind = "cf-secrets-store"
+            account_id = "0000000000000000000000000000dead"
+            store_id = "0000000000000000000000000000beef"
+
             [guardrails]
             default = "deny"
             allow = ["run", "list"]
@@ -223,6 +286,14 @@ mod tests {
             cfg.secrets["STRIPE_KEY"].to_string(),
             "arca://billing/stripe"
         );
+        assert_eq!(cfg.vaults["cloud"].kind, "cf");
+        assert_eq!(
+            cfg.vaults["cloud"].token_env.as_deref(),
+            Some("ARCA_CF_TOKEN")
+        );
+        let d = &cfg.deploy["prod"];
+        assert_eq!(d.kind, "cf-secrets-store");
+        assert!(d.account_id.is_some() && d.token_env.is_none());
         let g = cfg.guardrails.unwrap();
         assert_eq!(g.default, GuardDefault::Deny);
         assert!(g.allows(Op::Run));

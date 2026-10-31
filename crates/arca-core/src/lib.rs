@@ -12,7 +12,9 @@ pub mod refs;
 pub mod secret;
 
 pub use actor::{is_valid_actor, Actor, ParseActorError};
-pub use config::{Config, EnvRoute, EnvRouteTable, GuardDefault, Guardrails, VaultConfig};
+pub use config::{
+    Config, DeployConfig, EnvRoute, EnvRouteTable, GuardDefault, Guardrails, VaultConfig,
+};
 pub use env::{is_valid_env, Env, ParseEnvError};
 pub use op::{Op, ParseOpError};
 pub use refs::{is_valid_segment, ParseRefError, Ref};

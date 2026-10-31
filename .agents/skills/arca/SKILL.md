@@ -65,6 +65,7 @@ arca <verb> --help   # every verb, self-documenting
 | Run with secrets (the way to consume) | `arca run -- prog arg…` (argv exec) · `arca run -- 'shell line'` (bash -c) |
 | Ad-hoc injection | `arca run -s VAR=arca://ref -- cmd` (repeatable) |
 | Exports for a human shell | `arca env [-s VAR=ref]` → `export VAR='…'` lines for `eval` |
+| Push to a write-only sink | `arca deploy <ref> [--target NAME]` |
 | Validate config + surface | `arca check [--json]` — exit 1 on findings |
 | Bootstrap | `arca init` |
 
@@ -91,11 +92,21 @@ Interactive humans get a hidden prompt instead.
 [vaults.local]            # the built-in age vault; entry only overrides
 kind = "age"
 
+[vaults.cloud]            # a remote vault — self-hosted CF Worker + D1
+kind = "cf"               # holding per-secret age ciphertext
+url = "https://…workers.dev"
+token_env = "ARCA_CF_TOKEN"   # env var NAME — the token is never in toml
+
 [envs]                    # env → vault routing; unlisted envs → "local"
-prod = { vault = "local" }
+prod = { vault = "cloud" }
 
 [secrets]                 # the declared surface run/env may inject
 STRIPE_KEY = "arca://billing/stripe"
+
+[deploy.prod]             # write-only sinks `arca deploy` pushes to
+kind = "cf-secrets-store" #   (value goes in, never comes back)
+account_id = "…"
+store_id = "…"
 
 [guardrails]              # advisory: accident prevention, NOT policy
 deny = ["get"]            # deny wins; default = "allow" for unlisted
@@ -104,6 +115,27 @@ deny = ["get"]            # deny wins; default = "allow" for unlisted
 If a guardrail denies your op, that's the owner saying "agents
 don't do this" — don't work around it; use the allowed verb or
 surface the denial to the human.
+
+## Cloud vaults (`kind = "cf"`)
+
+A `cf` vault talks HTTPS to a self-hosted Cloudflare Worker + D1
+(deployed from `crates/arca-vault-cf/worker/`). Same verbs, same
+identity — values are age-encrypted client-side and the store holds
+ciphertext only. Two requirements beyond `local`:
+
+- the worker must be **deployed** — an unreachable `url` makes
+  every verb fail with an I/O error (`arca check` reports the vault
+  `ok: false`, never a panic);
+- the bearer token must be in the env var `token_env` names
+  (`ARCA_CF_TOKEN` by default) — ask the human for it, don't
+  invent one.
+
+`arca deploy arca://ref [--target NAME]` pushes a *stored* value to
+a write-only sink (`[deploy.NAME]`, e.g. a CF Secrets Store). The
+value crosses to the sink in plaintext and can never be fetched
+back — the vault stays the source of truth. It's a push, not a
+sync: use it when a runtime must consume the secret directly from
+Cloudflare's own store.
 
 ## Audit
 

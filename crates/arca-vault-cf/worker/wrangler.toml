@@ -1,0 +1,14 @@
+name = "arca-vault"
+main = "index.js"
+compatibility_date = "2025-10-01"
+
+# Create the database first:
+#   wrangler d1 create arca-vault
+# then paste the real database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "arca-vault"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+# The bearer token is NOT here — set it with:
+#   wrangler secret put ARCA_VAULT_TOKEN

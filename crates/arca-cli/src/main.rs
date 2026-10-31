@@ -118,6 +118,19 @@ enum Cmd {
     /// point at declared vaults, vaults decrypt, every `[secrets]`
     /// ref resolves in its routed env. Exit 1 on findings.
     Check,
+    /// Push a stored secret to a write-only deploy target
+    /// (`[deploy.NAME]` in arca.toml, e.g. a CF Secrets Store).
+    /// The vault is the source of truth; the sink never gives the
+    /// value back. With one configured target, `--target` may be
+    /// omitted.
+    Deploy {
+        /// `arca://` ref to push.
+        rref: String,
+        /// Deploy target name (`[deploy.NAME]`); required when
+        /// several are configured.
+        #[arg(long, value_name = "NAME")]
+        target: Option<String>,
+    },
     /// Interactive vault browser (requires the `tui` feature).
     Ui,
     /// Capabilities, JSON shapes, env vars, audit contract — agent
@@ -191,6 +204,7 @@ fn cmd_op(cmd: &Cmd) -> Op {
         Cmd::Run { .. } => Op::Run,
         Cmd::Env { .. } => Op::Env,
         Cmd::Check => Op::Check,
+        Cmd::Deploy { .. } => Op::Deploy,
         Cmd::Ui => Op::Ui,
         Cmd::Manifest => Op::Manifest,
         Cmd::Schema => Op::Schema,
@@ -201,9 +215,11 @@ fn cmd_op(cmd: &Cmd) -> Op {
 /// audit events, before (or regardless of) parse.
 fn cmd_rref(cmd: &Cmd) -> Option<&str> {
     match cmd {
-        Cmd::Put { rref } | Cmd::Get { rref } | Cmd::Rm { rref } | Cmd::Rotate { rref } => {
-            Some(rref)
-        }
+        Cmd::Put { rref }
+        | Cmd::Get { rref }
+        | Cmd::Rm { rref }
+        | Cmd::Rotate { rref }
+        | Cmd::Deploy { rref, .. } => Some(rref),
         _ => None,
     }
 }
@@ -469,6 +485,28 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
                 ExitCode::FAILURE
             })
         }
+        Cmd::Deploy { rref, target } => {
+            let parsed = parse_ref(rref)?;
+            let report = ops.deploy(&parsed, target.as_deref())?;
+            if cli.json {
+                return Ok(json_out(&serde_json::json!({
+                    "ok": true,
+                    "ref": report.rref.to_string(),
+                    "env": report.env.as_str(),
+                    "target": report.target,
+                    "secret_name": report.secret_name,
+                    "created": report.created,
+                })));
+            }
+            eprintln!(
+                "deployed {} → {:?} as {} ({})",
+                report.rref,
+                report.target,
+                report.secret_name,
+                if report.created { "created" } else { "updated" }
+            );
+            Ok(ExitCode::SUCCESS)
+        }
         Cmd::Ui => {
             #[cfg(feature = "tui")]
             {
@@ -569,6 +607,7 @@ fn manifest() -> serde_json::Value {
             "run": "inject [secrets]+`-s` into a child — one arg → bash -c, several → argv exec (no shell)",
             "env": "export lines for eval (human path); --json → VAR→value map",
             "check": "validate config, vault readability, declared-surface resolution; exit 1 on findings",
+            "deploy": "push a stored value to a write-only [deploy.NAME] target (sink, never a source)",
             "ui": "interactive vault browser (tui feature)",
             "manifest": "this document (always JSON; before config load, no audit event)",
             "schema": "JSON Schema for arca.toml (before config load)",
@@ -579,6 +618,7 @@ fn manifest() -> serde_json::Value {
             "--config PATH": "config override (else $ARCA_CONFIG → ./arca.toml → ~/.config/arca/arca.toml)",
             "--actor ACTOR": "audit attribution (else ARCA_ACTOR → $USER → anon)",
             "-s VAR=arca://ref": "ad-hoc injection pair on run/env (repeatable)",
+            "--target NAME": "deploy target on `arca deploy` (required when several [deploy.*] tables exist)",
         },
         "json_shapes": {
             "init": {"identity": "path", "created": true, "recipient": "age1…", "vault": "path"},
@@ -595,6 +635,7 @@ fn manifest() -> serde_json::Value {
                 "guardrails": {"default": "allow|deny", "allow": ["run"], "deny": ["get"]},
                 "errors": ["finding…"],
             },
+            "deploy": {"ok": true, "ref": "arca://ns/name", "env": "dev", "target": "prod", "secret_name": "dev_ns_name", "created": true},
             "run": "passthrough — child stdout/stderr/exit code; --json changes nothing",
             "error": {"error": "message (stderr, non-zero exit)"},
         },
@@ -607,18 +648,21 @@ fn manifest() -> serde_json::Value {
             "ARCA_ENV": "env context (default dev)",
             "ARCA_ACTOR": "audit actor attribution",
             "ARCA_IDENTITY_FILE": "age identity file override",
+            "ARCA_CF_TOKEN": "default cf-vault bearer env var ([vaults.*] token_env overrides the name)",
+            "CLOUDFLARE_API_TOKEN": "default deploy-token env var ([deploy.*] token_env overrides the name)",
         },
         "config": {
             "search": ["--config", "$ARCA_CONFIG", "./arca.toml", "~/.config/arca/arca.toml"],
-            "tables": ["vaults", "envs", "secrets", "guardrails"],
+            "tables": ["vaults", "envs", "secrets", "deploy", "guardrails"],
             "schema": "arca schema",
             "env_pin": "arca://prod/ns/name pins the env regardless of context",
         },
-        "vault_kinds": ["age"],
+        "vault_kinds": ["age", "cf"],
+        "deploy_kinds": ["cf-secrets-store"],
         "audit": {
             "wire": "ndjson lines on stderr",
             "event": {"ts": "rfc3339", "actor": "…", "op": "…", "rref": "…|absent when op-scoped", "env": "…", "outcome": "ok|denied|error"},
-            "shape": "per-ref event per materialized/mutated ref (put/get/rotate/rm, run/env); op-scoped event for init/list/check/ui; denied on guardrail refusal; error on op failure; manifest/schema emit none; a run child's exit code is not an arca failure",
+            "shape": "per-ref event per materialized/mutated ref (put/get/rotate/rm/deploy, run/env); op-scoped event for init/list/check/ui; denied on guardrail refusal; error on op failure; manifest/schema emit none; a run child's exit code is not an arca failure",
         },
         "features": {
             "tui": cfg!(feature = "tui"),
@@ -628,6 +672,8 @@ fn manifest() -> serde_json::Value {
             "[secrets] bounds what run/env may inject (least privilege); -s covers one-offs",
             "guardrails are advisory — accident prevention, not policy; ARCA_ACTOR is self-claimed",
             "list never carries values; get/env are the only surfaces that print them",
+            "cf vaults store per-secret age ciphertext on a self-hosted Worker + D1 — the worker never sees plaintext",
+            "deploy targets are write-only sinks — the value crosses to the sink in plaintext, never fetched back",
         ],
     })
 }

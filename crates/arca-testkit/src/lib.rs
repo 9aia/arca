@@ -15,6 +15,9 @@
 
 #![allow(clippy::unwrap_used)]
 
+pub mod httpmock;
+pub mod mocks;
+
 use arca_core::{Env, Ref, Secret};
 use arca_vault::{Vault, VaultError};
 

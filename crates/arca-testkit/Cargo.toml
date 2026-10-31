@@ -12,6 +12,8 @@ categories = ["development-tools"]
 [dependencies]
 arca-core.workspace = true
 arca-vault.workspace = true
+serde_json.workspace = true
+time.workspace = true
 
 [lints]
 workspace = true

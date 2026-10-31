@@ -20,8 +20,11 @@ use std::path::PathBuf;
 use arca_config::ConfigSource;
 use arca_config_toml::TomlSource;
 use arca_core::{is_valid_env_var, Actor, Config, Env, Op, Ref, Secret};
+use arca_deploy::Deploy;
+use arca_deploy_cf::CfSecretsStore;
 use arca_vault::{SecretRecord, Vault};
 use arca_vault_age::AgeVault;
+use arca_vault_cf::CfVault;
 
 /// Knobs for [`Ops::load`] — the global CLI flags, resolved.
 #[derive(Debug, Default)]
@@ -62,6 +65,21 @@ pub struct VaultCheck {
     pub ok: bool,
     /// Why it didn't (`None` when `ok`).
     pub error: Option<String>,
+}
+
+/// What `deploy` reports back.
+#[derive(Debug)]
+pub struct DeployReport {
+    /// The `[deploy.<name>]` target that received the value.
+    pub target: String,
+    /// The env the ref resolved under.
+    pub env: Env,
+    /// The resolved ref (env pin stripped).
+    pub rref: Ref,
+    /// The sink-side name the value was written under.
+    pub secret_name: String,
+    /// `true` when the sink created a new entry (else updated).
+    pub created: bool,
 }
 
 /// What `check` reports about one declared `[secrets]` entry.
@@ -191,8 +209,56 @@ impl Ops {
                 let v = AgeVault::open(&vault_path, &identity_path, recipients)?;
                 Ok(Box::new(v))
             }
+            "cf" => {
+                let c = cfg.ok_or_else(|| {
+                    OpsError::Config(format!("vault {name:?} is kind cf but unconfigured"))
+                })?;
+                let url = c.url.as_deref().ok_or_else(|| {
+                    OpsError::Config(format!("[vaults.{name}] kind cf needs a `url`"))
+                })?;
+                let token_env = c.token_env.as_deref().unwrap_or("ARCA_CF_TOKEN");
+                let identity_path = c
+                    .identity
+                    .as_ref()
+                    .map(PathBuf::from)
+                    .unwrap_or_else(AgeVault::default_identity_path);
+                let v = CfVault::new(url, token_env, &identity_path, &c.recipients)?;
+                Ok(Box::new(v))
+            }
             other => Err(OpsError::Config(format!(
-                "vault {name:?} has unknown kind {other:?} (have: age)"
+                "vault {name:?} has unknown kind {other:?} (have: age, cf)"
+            ))),
+        }
+    }
+
+    /// Open a `[deploy.<name>]` sink — write-only push targets,
+    /// never sources.
+    pub fn open_deploy_named(&self, name: &str) -> Result<Box<dyn Deploy>, OpsError> {
+        let cfg = self
+            .config
+            .deploy_config(name)
+            .ok_or_else(|| OpsError::Config(format!("no [deploy.{name}] table in config")))?;
+        match cfg.kind.as_str() {
+            "cf-secrets-store" => {
+                let need = |field: &str, v: &Option<String>| {
+                    v.clone()
+                        .ok_or_else(|| OpsError::Config(format!("[deploy.{name}] needs `{field}`")))
+                };
+                let token_env = cfg
+                    .token_env
+                    .as_deref()
+                    .unwrap_or(arca_deploy_cf::DEFAULT_TOKEN_ENV);
+                let d = CfSecretsStore::new(
+                    name,
+                    &need("account_id", &cfg.account_id)?,
+                    &need("store_id", &cfg.store_id)?,
+                    token_env,
+                    cfg.base_url.as_deref(),
+                )?;
+                Ok(Box::new(d))
+            }
+            other => Err(OpsError::Config(format!(
+                "deploy target {name:?} has unknown kind {other:?} (have: cf-secrets-store)"
             ))),
         }
     }
@@ -203,10 +269,19 @@ impl Ops {
         let name = self.config.vault_for(env);
         let cfg = self.config.vault_config(name);
         let kind = cfg.map(|c| c.kind.as_str()).unwrap_or("age");
-        if kind != "age" {
-            return Err(OpsError::Config(format!(
-                "vault {name:?} has unknown kind {kind:?} (have: age)"
-            )));
+        match kind {
+            "age" => {}
+            "cf" => {
+                return Err(OpsError::Config(format!(
+                    "vault {name:?} is a remote cf vault — `arca init` only \
+                     bootstraps local age vaults"
+                )));
+            }
+            other => {
+                return Err(OpsError::Config(format!(
+                    "vault {name:?} has unknown kind {other:?} (have: age, cf)"
+                )));
+            }
         }
         Ok((
             cfg.and_then(|c| c.path.as_ref())
@@ -268,6 +343,56 @@ impl Ops {
         let rec = self.open_vault(&env)?.rotate(&env, &r, value)?;
         self.audit(Op::Rotate, &r, &env);
         Ok(rec)
+    }
+
+    /// Push a stored value to a deploy target — the vault is the
+    /// source, the `[deploy.NAME]` table the sink. The plaintext
+    /// value crosses here (and only here): the sink is an external
+    /// store that serves runtimes directly, outside arca's
+    /// ciphertext boundary. Emits an `op = "deploy"` audit event.
+    ///
+    /// `target` selects the sink; absent, a lone configured target
+    /// is used — ambiguity and absence are both errors.
+    pub fn deploy(&self, rref: &Ref, target: Option<&str>) -> Result<DeployReport, OpsError> {
+        let name = match target {
+            Some(t) => t.to_string(),
+            None => match self.config.deploy.len() {
+                1 => self
+                    .config
+                    .deploy
+                    .keys()
+                    .next()
+                    .cloned()
+                    .unwrap_or_default(),
+                0 => return Err(OpsError::Config("no [deploy.*] targets configured".into())),
+                _ => {
+                    let names: Vec<&str> = self.config.deploy.keys().map(String::as_str).collect();
+                    return Err(OpsError::Config(format!(
+                        "multiple deploy targets — pass --target ({})",
+                        names.join(", ")
+                    )));
+                }
+            },
+        };
+        let (env, r) = self.resolve(rref);
+        let rec = self
+            .open_vault(&env)?
+            .get(&env, &r)?
+            .ok_or_else(|| OpsError::NotStored {
+                var: "(deploy)".into(),
+                rref: rref.to_string(),
+                env: env.as_str().to_string(),
+            })?;
+        let sink = self.open_deploy_named(&name)?;
+        let report = sink.push(&env, &r, &rec.value)?;
+        self.audit(Op::Deploy, &r, &env);
+        Ok(DeployReport {
+            target: name,
+            env,
+            rref: r,
+            secret_name: report.name,
+            created: report.created,
+        })
     }
 
     /// Refs stored in the selected env (or an explicit one).
@@ -359,11 +484,22 @@ impl Ops {
             }
         }
         for (name, v) in &self.config.vaults {
-            if v.kind != "age" {
+            if !matches!(v.kind.as_str(), "age" | "cf") {
+                problems.push(format!("[vaults.{name}] kind {:?} — have: age, cf", v.kind));
+            }
+            if v.kind == "cf" && v.url.is_none() {
+                problems.push(format!("[vaults.{name}] kind cf needs a `url`"));
+            }
+        }
+        for (name, d) in &self.config.deploy {
+            if d.kind != "cf-secrets-store" {
                 problems.push(format!(
-                    "[vaults.{name}] kind {:?} — only \"age\" is implemented",
-                    v.kind
+                    "[deploy.{name}] kind {:?} — have: cf-secrets-store",
+                    d.kind
                 ));
+            }
+            if d.account_id.is_none() || d.store_id.is_none() {
+                problems.push(format!("[deploy.{name}] needs `account_id` and `store_id`"));
             }
         }
 
@@ -389,7 +525,14 @@ impl Ops {
             let cfg = self.config.vault_config(name);
             let kind = cfg.map(|c| c.kind.clone()).unwrap_or_else(|| "age".into());
             let path = cfg.and_then(|c| c.path.as_ref()).map(PathBuf::from);
-            match self.open_vault_named(name) {
+            match self.open_vault_named(name).and_then(|v| {
+                // Probe: construction is cheap (no I/O); a `list`
+                // proves a remote vault is actually reachable.
+                match v.list(&self.env) {
+                    Ok(_) => Ok(v),
+                    Err(e) => Err(e.into()),
+                }
+            }) {
                 Ok(v) => {
                     opened.insert(name.clone(), v);
                     vaults.push(VaultCheck {
@@ -597,6 +740,8 @@ mod tests {
                 path: Some(vault_path.to_string_lossy().into_owned()),
                 identity: Some(id_path.to_string_lossy().into_owned()),
                 recipients: vec![],
+                url: None,
+                token_env: None,
             },
         );
         config.secrets.insert(
