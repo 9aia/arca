@@ -7,6 +7,9 @@ members = [
     "crates/arca-core",
     "crates/arca-deploy",
     "crates/arca-deploy-cf",
+    "crates/arca-identity",
+    "crates/arca-identity-file",
+    "crates/arca-identity-keyring",
     "crates/arca-ops",
     "crates/arca-shell",
     "crates/arca-testkit",
@@ -36,6 +39,9 @@ arca-config-toml = { path = "crates/arca-config-toml", version = "0.1.0" }
 arca-core = { path = "crates/arca-core", version = "0.1.0" }
 arca-deploy = { path = "crates/arca-deploy", version = "0.1.0" }
 arca-deploy-cf = { path = "crates/arca-deploy-cf", version = "0.1.0" }
+arca-identity = { path = "crates/arca-identity", version = "0.1.0" }
+arca-identity-file = { path = "crates/arca-identity-file", version = "0.1.0" }
+arca-identity-keyring = { path = "crates/arca-identity-keyring", version = "0.1.0" }
 arca-ops = { path = "crates/arca-ops", version = "0.1.0" }
 arca-shell = { path = "crates/arca-shell", version = "0.1.0" }
 arca-testkit = { path = "crates/arca-testkit", version = "0.1.0" }
@@ -63,6 +69,13 @@ age = { version = "0.12", default-features = false }
 # runtime (AGENTS.md). Pinned to a >7-day-old release on purpose.
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 base64 = "0.23"
+# keyring-core + one native store per platform — the sync
+# `CredentialStore` model (no async runtime; the dbus store is the
+# synchronous libdbus client, `vendored` so no system -dev needed).
+keyring-core = "1"
+dbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust", "vendored"] }
+apple-native-keyring-store = { version = "1", features = ["keychain"] }
+windows-native-keyring-store = "1"
 ratatui = "0.30"
 crossterm = "0.29"
 clap-markdown = "0.1.5"

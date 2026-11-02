@@ -32,7 +32,6 @@
 //! HTTP uses `ureq` (blocking, no async runtime) per AGENTS.md.
 
 use std::io::{Read, Write};
-use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -84,15 +83,17 @@ pub struct CfVault {
 impl CfVault {
     /// Build a vault from config values: `url` is the Worker base
     /// (no trailing slash needed), `token_env` names the env var
-    /// holding the bearer token, `identity_path` the age keyfile
-    /// used to decrypt, `extra_recipients` extra `age1…` keys
-    /// encrypted to alongside the identity's public key.
+    /// holding the bearer token, `identity` the already-resolved
+    /// age identity used to decrypt (where it lives — keyfile or
+    /// keyring — is the `arca-identity` port's business),
+    /// `extra_recipients` extra `age1…` keys encrypted to alongside
+    /// the identity's public key.
     ///
     /// Construction does **no** network I/O — the first verb does.
     pub fn new(
         url: &str,
         token_env: &str,
-        identity_path: &Path,
+        identity: x25519::Identity,
         extra_recipients: &[String],
     ) -> Result<Self, VaultError> {
         let token = std::env::var(token_env).map_err(|_| {
@@ -105,7 +106,6 @@ impl CfVault {
                 "env var {token_env} is empty — cf vault tokens come via env, never config"
             )));
         }
-        let identity = read_identity(identity_path)?;
         Self::with_identity(url, &token, identity, extra_recipients)
     }
 
@@ -357,21 +357,6 @@ fn open(identity: &x25519::Identity, cipher: &[u8]) -> Result<String, VaultError
     Ok(buf)
 }
 
-/// Read + validate an age identity keyfile: first non-empty,
-/// non-`#`-comment line must be an `AGE-SECRET-KEY-…` string (same
-/// format as `arca-vault-age` — deliberately duplicated, ~15 lines).
-fn read_identity(path: &Path) -> Result<x25519::Identity, VaultError> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| VaultError::Config(format!("read identity {}: {e}", path.display())))?;
-    let line = text
-        .lines()
-        .map(str::trim)
-        .find(|l| !l.is_empty() && !l.starts_with('#'))
-        .ok_or_else(|| VaultError::Config(format!("identity {} holds no key", path.display())))?;
-    x25519::Identity::from_str(line)
-        .map_err(|e| VaultError::Crypto(format!("identity {}: {e}", path.display())))
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -424,17 +409,13 @@ mod tests {
 
     #[test]
     fn new_requires_token_env() {
-        let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("identity.txt");
         let id = x25519::Identity::generate();
-        use age::secrecy::ExposeSecret;
-        std::fs::write(&id_path, format!("{}\n", id.to_string().expose_secret())).unwrap();
         temp_env::with_var_unset("ARCA_CF_TOKEN_TEST", || {
-            assert!(CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", &id_path, &[]).is_err());
+            assert!(CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", id.clone(), &[]).is_err());
         });
         // set but empty → still an error
         temp_env::with_var("ARCA_CF_TOKEN_TEST", Some(""), || {
-            let e = CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", &id_path, &[])
+            let e = CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", id, &[])
                 .err()
                 .unwrap();
             assert!(e.to_string().contains("empty"), "{e}");
@@ -443,16 +424,10 @@ mod tests {
 
     #[test]
     fn new_and_with_identity_validate_inputs() {
-        let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("identity.txt");
         let id = x25519::Identity::generate();
-        use age::secrecy::ExposeSecret;
-        std::fs::write(&id_path, format!("{}\n", id.to_string().expose_secret())).unwrap();
-        // a broken identity file fails before any env-var concern
-        let junk = dir.path().join("junk.txt");
-        std::fs::write(&junk, "not-a-key\n").unwrap();
+        // a set token + valid identity opens — no network I/O yet
         temp_env::with_var("ARCA_CF_TOKEN_TEST", Some("fake"), || {
-            assert!(CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", &junk, &[]).is_err());
+            assert!(CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", id.clone(), &[]).is_ok());
         });
         // invalid extra recipient strings are config errors
         let e = CfVault::with_identity("http://x", "t", id.clone(), &["bad!!".into()])
@@ -488,20 +463,5 @@ mod tests {
             .err()
             .unwrap();
         assert!(e.to_string().contains("invalid recipient"), "{e}");
-    }
-
-    #[test]
-    fn read_identity_rejects_missing_and_garbage_files() {
-        let dir = tempfile::tempdir().unwrap();
-        // missing file → config error
-        assert!(read_identity(&dir.path().join("nope.txt")).is_err());
-        // comments only → "holds no key"
-        let p = dir.path().join("comments.txt");
-        std::fs::write(&p, "# nothing\n\n").unwrap();
-        assert!(read_identity(&p).is_err());
-        // a non-key line → crypto error
-        let p = dir.path().join("bad.txt");
-        std::fs::write(&p, "AGE-SECRET-KEY-NOTREAL\n").unwrap();
-        assert!(read_identity(&p).is_err());
     }
 }

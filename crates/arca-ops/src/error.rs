@@ -25,6 +25,9 @@ pub enum OpsError {
     /// Deploy target failure.
     #[error(transparent)]
     Deploy(#[from] DeployError),
+    /// Identity backend failure (keyfile, session keyring).
+    #[error(transparent)]
+    Identity(#[from] arca_identity::IdentityError),
     /// A declared/ad-hoc secret isn't in the vault.
     #[error("{var} → {rref} is not stored in env {env}")]
     NotStored {

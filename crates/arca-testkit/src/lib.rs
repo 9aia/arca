@@ -6,7 +6,7 @@
 //!
 //! ```ignore
 //! arca_testkit::vault_conformance!(|| {
-//!     AgeVault::open(&vault_path, &identity_path, &[]).unwrap()
+//!     AgeVault::open(&vault_path, x25519::Identity::generate(), &[]).unwrap()
 //! });
 //! ```
 //!

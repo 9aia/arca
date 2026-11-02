@@ -10,7 +10,9 @@
 # [vaults.local]
 # kind = "age"                                  # built-in local vault
 # path = "/home/you/.local/share/arca/vault.age"   # "~" is NOT expanded — full paths
-# identity = "/home/you/.config/arca/identity.txt"   # $ARCA_IDENTITY_FILE also works
+# identity = "/home/you/.config/arca/identity.txt"   # pins file mode — else session
+                                                   # keyring → default keyfile;
+                                                   # $ARCA_IDENTITY_FILE also pins
 # recipients = ["age1…"]                        # extra public keys to encrypt to
 
 # A remote vault: self-hosted Cloudflare Worker + D1 holding
@@ -22,7 +24,7 @@
 # kind = "cf"
 # url = "https://arca-vault.you.workers.dev"
 # token_env = "ARCA_CF_TOKEN"                    # env var NAME, not the token
-# identity = "/home/you/.config/arca/identity.txt"   # optional; same default as local
+# identity = "/home/you/.config/arca/identity.txt"   # optional; same resolution as local
 # recipients = ["age1…"]                        # optional extra encrypt-to keys
 
 # env → vault routing. dev/staging/prod always exist; unlisted envs

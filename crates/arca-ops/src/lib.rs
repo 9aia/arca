@@ -16,12 +16,17 @@ pub use error::OpsError;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 
+use age::x25519;
 use arca_config::ConfigSource;
 use arca_config_toml::TomlSource;
-use arca_core::{is_valid_env_var, Actor, Config, Env, Op, Ref, Secret};
+use arca_core::{is_valid_env_var, Actor, Config, Env, Op, Ref, Secret, VaultConfig};
 use arca_deploy::Deploy;
 use arca_deploy_cf::CfSecretsStore;
+use arca_identity::{IdentityError, IdentitySource};
+use arca_identity_file::FileIdentity;
+use arca_identity_keyring::KeyringIdentity;
 use arca_vault::{SecretRecord, Vault};
 use arca_vault_age::AgeVault;
 use arca_vault_cf::CfVault;
@@ -37,15 +42,32 @@ pub struct LoadOpts {
     pub actor: Option<String>,
 }
 
+/// Knobs for [`Ops::init`] — the `init` verb's flags, resolved.
+#[derive(Debug, Default)]
+pub struct InitOpts {
+    /// `--with-file` — force the identity keyfile even when a
+    /// session keyring is available (the headless/CI mode).
+    pub with_file: bool,
+}
+
 /// What `init` reports back.
 #[derive(Debug)]
 pub struct InitInfo {
     /// The vault file that backs the selected env.
     pub vault_path: PathBuf,
-    /// The age identity keyfile.
-    pub identity_path: PathBuf,
+    /// Where the identity lives — a keyfile path or a keyring
+    /// locator. Never key material.
+    pub identity: String,
+    /// The identity backend — `"keyring"` or `"file"`.
+    pub identity_backend: &'static str,
     /// `true` when a fresh identity was generated.
     pub identity_created: bool,
+    /// `true` when an existing keyfile identity was imported into
+    /// the keyring (the migration path).
+    pub migrated: bool,
+    /// The keyfile left behind after a migration — kept as a
+    /// backup; the human deletes it when ready.
+    pub file_remains: Option<PathBuf>,
     /// The identity's public recipient (`age1…`).
     pub recipient: String,
 }
@@ -202,12 +224,9 @@ impl Ops {
                     .and_then(|c| c.path.as_ref())
                     .map(PathBuf::from)
                     .unwrap_or_else(AgeVault::default_vault_path);
-                let identity_path = cfg
-                    .and_then(|c| c.identity.as_ref())
-                    .map(PathBuf::from)
-                    .unwrap_or_else(AgeVault::default_identity_path);
                 let recipients = cfg.map(|c| c.recipients.as_slice()).unwrap_or(&[]);
-                let v = AgeVault::open(&vault_path, &identity_path, recipients)?;
+                let identity = self.resolve_identity(cfg)?;
+                let v = AgeVault::open(&vault_path, identity, recipients)?;
                 Ok(Box::new(v))
             }
             "cf" => {
@@ -220,12 +239,8 @@ impl Ops {
                     OpsError::Config(format!("[vaults.{name}] kind cf needs a `url`"))
                 })?;
                 let token_env = c.token_env.as_deref().unwrap_or("ARCA_CF_TOKEN");
-                let identity_path = c
-                    .identity
-                    .as_ref()
-                    .map(PathBuf::from)
-                    .unwrap_or_else(AgeVault::default_identity_path);
-                let v = CfVault::new(url, token_env, &identity_path, &c.recipients)?;
+                let identity = self.resolve_identity(cfg)?;
+                let v = CfVault::new(url, token_env, identity, &c.recipients)?;
                 Ok(Box::new(v))
             }
             other => Err(OpsError::Config(format!(
@@ -266,9 +281,16 @@ impl Ops {
         }
     }
 
-    /// The `(vault file, identity file)` pair an env's vault would
-    /// use — for `init`/`check` reporting without opening anything.
-    pub fn vault_paths(&self, env: &Env) -> Result<(PathBuf, PathBuf, Vec<String>), OpsError> {
+    /// The `(vault file, configured identity override, recipients)`
+    /// an env's vault would use — for `init`/`check` reporting
+    /// without opening anything. The middle item is `Some` only
+    /// when `[vaults.*].identity` pins a file; identity *resolution*
+    /// (env → keyring → default file) happens in
+    /// [`Self::resolve_identity`].
+    pub fn vault_paths(
+        &self,
+        env: &Env,
+    ) -> Result<(PathBuf, Option<PathBuf>, Vec<String>), OpsError> {
         let name = self.config.vault_for(env);
         let cfg = self.config.vault_config(name);
         let kind = cfg.map(|c| c.kind.as_str()).unwrap_or("age");
@@ -290,23 +312,161 @@ impl Ops {
             cfg.and_then(|c| c.path.as_ref())
                 .map(PathBuf::from)
                 .unwrap_or_else(AgeVault::default_vault_path),
-            cfg.and_then(|c| c.identity.as_ref())
-                .map(PathBuf::from)
-                .unwrap_or_else(AgeVault::default_identity_path),
+            cfg.and_then(|c| c.identity.as_ref()).map(PathBuf::from),
             cfg.map(|c| c.recipients.clone()).unwrap_or_default(),
         ))
     }
 
-    /// `arca init` — ensure the identity exists (generate 0600
-    /// keyfile if missing), then verify the vault opens.
-    pub fn init(&self) -> Result<InitInfo, OpsError> {
-        let (vault_path, identity_path, recipients) = self.vault_paths(&self.env)?;
-        let created = AgeVault::ensure_identity(&identity_path)?;
-        let vault = AgeVault::open(&vault_path, &identity_path, &recipients)?;
+    /// Identity resolution for vault opens —
+    ///
+    /// 1. an **explicit file override** (`ARCA_IDENTITY_FILE`, then
+    ///    `[vaults.*].identity`) — always honored, always required;
+    /// 2. the **session keyring** when one is reachable and holds
+    ///    an `arca` identity;
+    /// 3. the **default keyfile** (`~/.config/arca/identity.txt`).
+    ///
+    /// A keyring that can't be read falls back to the file with a
+    /// stderr note — a headless box is a degraded session, not a
+    /// crash.
+    fn resolve_identity(&self, cfg: Option<&VaultConfig>) -> Result<x25519::Identity, OpsError> {
+        // An explicit file pins the source — skip the store probe
+        // entirely (no dbus round-trip, no misleading fallback note).
+        if explicit_identity_file(cfg).is_some() {
+            return self.resolve_identity_in(cfg, None);
+        }
+        let keyring = match KeyringIdentity::platform() {
+            Ok(k) => Some(k),
+            Err(e) => {
+                fallback_note(&format!(
+                    "no session keyring reachable ({e}) — using the identity file"
+                ));
+                None
+            }
+        };
+        self.resolve_identity_in(cfg, keyring.as_ref().map(|k| k as &dyn IdentitySource))
+    }
+
+    /// The injectable core of [`Self::resolve_identity`] — tests
+    /// pass a mock-backed `IdentitySource` through `keyring`.
+    fn resolve_identity_in(
+        &self,
+        cfg: Option<&VaultConfig>,
+        keyring: Option<&dyn IdentitySource>,
+    ) -> Result<x25519::Identity, OpsError> {
+        if let Some(src) = explicit_identity_file(cfg) {
+            return load_required(&src);
+        }
+        if let Some(k) = keyring {
+            match k.load() {
+                Ok(Some(id)) => return Ok(id),
+                Ok(None) => {}
+                Err(e) => fallback_note(&format!(
+                    "keyring identity unreadable ({e}) — using the identity file"
+                )),
+            }
+        }
+        load_required(&FileIdentity::default())
+    }
+
+    /// `arca init` — store the identity in the session keyring when
+    /// one is reachable (importing an existing keyfile identity
+    /// rather than orphaning its ciphertext), else the `0600`
+    /// keyfile; then verify the vault opens. `opts.with_file`
+    /// forces the keyfile path.
+    pub fn init(&self, opts: &InitOpts) -> Result<InitInfo, OpsError> {
+        let name = self.config.vault_for(&self.env);
+        let cfg = self.config.vault_config(name);
+        let keyring = if opts.with_file || explicit_identity_file(cfg).is_some() {
+            None
+        } else {
+            match KeyringIdentity::platform() {
+                Ok(k) => Some(k),
+                Err(e) => {
+                    // Headless init is the expected case — say why
+                    // the file was chosen, once.
+                    fallback_note(&format!(
+                        "no session keyring reachable ({e}) — using the identity file"
+                    ));
+                    None
+                }
+            }
+        };
+        self.init_in(opts, keyring.as_ref().map(|k| k as &dyn IdentitySource))
+    }
+
+    /// [`Self::init`] with the keyring injected — the testable core.
+    fn init_in(
+        &self,
+        opts: &InitOpts,
+        keyring: Option<&dyn IdentitySource>,
+    ) -> Result<InitInfo, OpsError> {
+        let (vault_path, _cfg_identity, recipients) = self.vault_paths(&self.env)?;
+        let name = self.config.vault_for(&self.env);
+        let cfg = self.config.vault_config(name);
+        let explicit = explicit_identity_file(cfg);
+        let (identity, backend, locator, created, migrated, file_remains) =
+            if let Some(src) = explicit {
+                // An explicit file pins the source — like a
+                // `--with-file` user, just configured.
+                let (id, created) = ensure_on(&src)?;
+                (id, "file", src.describe(), created, false, None)
+            } else if opts.with_file {
+                let src = FileIdentity::default();
+                let (id, created) = ensure_on(&src)?;
+                (id, "file", src.describe(), created, false, None)
+            } else if let Some(k) = keyring {
+                match k.load() {
+                    Ok(Some(id)) => (id, "keyring", k.describe(), false, false, None),
+                    Ok(None) => {
+                        // Migration: an existing keyfile identity is
+                        // imported, never orphaned — its ciphertext
+                        // must keep decrypting. The file stays as a
+                        // backup.
+                        let f = FileIdentity::default();
+                        match f.load().map_err(OpsError::Identity)? {
+                            Some(id) => {
+                                k.store(&id).map_err(OpsError::Identity)?;
+                                (
+                                    id,
+                                    "keyring",
+                                    k.describe(),
+                                    false,
+                                    true,
+                                    Some(f.path().to_path_buf()),
+                                )
+                            }
+                            None => {
+                                let (id, created) = ensure_on(k)?;
+                                (id, "keyring", k.describe(), created, false, None)
+                            }
+                        }
+                    }
+                    // Store reachable but the read failed — degraded
+                    // session, not a crash: bootstrap on the file.
+                    Err(e) => {
+                        fallback_note(&format!(
+                            "keyring identity unreadable ({e}) — using the identity file"
+                        ));
+                        let src = FileIdentity::default();
+                        let (id, created) = ensure_on(&src)?;
+                        (id, "file", src.describe(), created, false, None)
+                    }
+                }
+            } else {
+                // No session store (headless, no dbus) — the file
+                // path, with a clear note rather than a crash.
+                let src = FileIdentity::default();
+                let (id, created) = ensure_on(&src)?;
+                (id, "file", src.describe(), created, false, None)
+            };
+        let vault = AgeVault::open(&vault_path, identity, &recipients)?;
         Ok(InitInfo {
             vault_path,
-            identity_path,
+            identity: locator,
+            identity_backend: backend,
             identity_created: created,
+            migrated,
+            file_remains,
             recipient: vault.public_recipient(),
         })
     }
@@ -638,6 +798,50 @@ impl Ops {
     }
 }
 
+/// The explicit identity-file override for a vault —
+/// `ARCA_IDENTITY_FILE` wins over `[vaults.*].identity` (the
+/// documented precedence). `None` means "resolve normally".
+fn explicit_identity_file(cfg: Option<&VaultConfig>) -> Option<FileIdentity> {
+    if let Ok(p) = std::env::var("ARCA_IDENTITY_FILE") {
+        if !p.is_empty() {
+            return Some(FileIdentity::new(p));
+        }
+    }
+    cfg.and_then(|c| c.identity.as_ref()).map(FileIdentity::new)
+}
+
+/// `load` with `None` → "run `arca init`" guidance — every caller
+/// that *requires* an identity gets the same error shape.
+fn load_required(src: &dyn IdentitySource) -> Result<x25519::Identity, OpsError> {
+    match src.load() {
+        Ok(Some(id)) => Ok(id),
+        Ok(None) => Err(OpsError::Config(format!(
+            "no identity at {} — run `arca init`",
+            src.describe()
+        ))),
+        Err(e) => Err(OpsError::Config(format!(
+            "identity via {}: {e}",
+            src.describe()
+        ))),
+    }
+}
+
+/// [`arca_identity::ensure`] with ops-context errors.
+fn ensure_on(src: &dyn IdentitySource) -> Result<(x25519::Identity, bool), OpsError> {
+    arca_identity::ensure(src)
+        .map_err(|e| OpsError::Identity(IdentityError::Store(format!("{}: {e}", src.describe()))))
+}
+
+/// A user-visible fallback notice on stderr — at most once per
+/// process so `check` (which opens several vaults) doesn't repeat
+/// itself. Not an audit event: it's UX, not wire.
+fn fallback_note(msg: &str) {
+    static EMITTED: AtomicBool = AtomicBool::new(false);
+    if !EMITTED.swap(true, Ordering::Relaxed) {
+        eprintln!("arca: {msg}");
+    }
+}
+
 /// `--env` → `ARCA_ENV` → `dev`.
 fn resolve_env(flag: Option<&str>) -> Result<Env, OpsError> {
     let name = flag
@@ -715,7 +919,12 @@ mod tests {
                 ("HOME", Some(home.path().to_str().unwrap())),
                 ("XDG_CONFIG_HOME", Some(home.path().to_str().unwrap())),
                 ("XDG_DATA_HOME", Some(home.path().to_str().unwrap())),
-                ("ARCA_IDENTITY_FILE", None::<&str>),
+                // pinned at a missing file → deterministic file-mode
+                // resolution, the real keyring never probed
+                (
+                    "ARCA_IDENTITY_FILE",
+                    Some(home.path().join("no-id.txt").to_str().unwrap()),
+                ),
             ],
             || {
                 let report = ops.check();
@@ -734,8 +943,8 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let id_path = home.path().join("identity.txt");
         let vault_path = home.path().join("vault.age");
-        AgeVault::ensure_identity(&id_path).unwrap();
-        let vault = AgeVault::open(&vault_path, &id_path, &[]).unwrap();
+        let (identity, _) = arca_identity::ensure(&FileIdentity::new(&id_path)).unwrap();
+        let vault = AgeVault::open(&vault_path, identity, &[]).unwrap();
         Vault::put(
             &vault,
             &Env::dev(),
@@ -820,6 +1029,9 @@ mod tests {
     }
 
     /// Isolate every path an age vault could pick up by default.
+    /// `ARCA_IDENTITY_FILE` is pinned at a temp path so resolution
+    /// is deterministic file-mode — the real session keyring is
+    /// never probed in tests.
     fn isolate_home(home: &tempfile::TempDir, f: impl FnOnce()) {
         temp_env::with_vars(
             [
@@ -832,11 +1044,22 @@ mod tests {
                     "XDG_DATA_HOME",
                     Some(home.path().join("d").to_str().unwrap()),
                 ),
-                ("ARCA_IDENTITY_FILE", None::<&str>),
+                (
+                    "ARCA_IDENTITY_FILE",
+                    Some(home.path().join("identity.txt").to_str().unwrap()),
+                ),
                 ("ARCA_CONFIG", None::<&str>),
             ],
             f,
         );
+    }
+
+    /// Write a fresh identity keyfile under `dir` — via the file
+    /// impl, the same path `resolve_identity` takes.
+    fn write_identity(dir: &std::path::Path) -> PathBuf {
+        let src = FileIdentity::new(dir.join("identity.txt"));
+        arca_identity::ensure(&src).unwrap();
+        src.path().to_path_buf()
     }
 
     /// An Ops whose `local` vault is a real age vault in a tempdir,
@@ -845,8 +1068,8 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let id_path = home.path().join("identity.txt");
         let vault_path = home.path().join("vault.age");
-        AgeVault::ensure_identity(&id_path).unwrap();
-        let vault = AgeVault::open(&vault_path, &id_path, &[]).unwrap();
+        let (identity, _) = arca_identity::ensure(&FileIdentity::new(&id_path)).unwrap();
+        let vault = AgeVault::open(&vault_path, identity, &[]).unwrap();
         for r in refs {
             Vault::put(
                 &vault,
@@ -874,12 +1097,6 @@ mod tests {
         config.vaults.insert("cloud".into(), v);
         config.envs.insert(Env::dev(), "cloud".into());
         mk_ops(config)
-    }
-
-    fn write_identity(dir: &std::path::Path) -> PathBuf {
-        let id_path = dir.join("identity.txt");
-        AgeVault::ensure_identity(&id_path).unwrap();
-        id_path
     }
 
     #[test]
@@ -1038,7 +1255,7 @@ mod tests {
         let ops = mk_ops(config);
         let (vp, ip, rec) = ops.vault_paths(&Env::dev()).unwrap();
         assert_eq!(vp, PathBuf::from("/tmp/x/vault.age"));
-        assert_eq!(ip, PathBuf::from("/tmp/x/id.txt"));
+        assert_eq!(ip, Some(PathBuf::from("/tmp/x/id.txt")));
         assert_eq!(rec.len(), 1);
         // cf and unknown kinds can't init locally
         let mut config = Config::default();
@@ -1063,14 +1280,16 @@ mod tests {
 
     #[test]
     fn init_happy_and_error_paths() {
-        // happy: isolated HOME → fresh identity generated, vault opens
+        // happy: isolated HOME → fresh identity generated, vault opens.
+        // isolate_home pins ARCA_IDENTITY_FILE → explicit file mode.
         let home = tempfile::tempdir().unwrap();
         isolate_home(&home, || {
             let ops = mk_ops(Config::default());
-            let info = ops.init().unwrap();
+            let info = ops.init(&InitOpts::default()).unwrap();
             assert!(info.identity_created);
+            assert_eq!(info.identity_backend, "file");
             assert!(info.recipient.starts_with("age1"));
-            assert!(info.identity_path.exists());
+            assert!(PathBuf::from(&info.identity).exists());
             assert!(info.vault_path.ends_with("vault.age"));
         });
         // cf-routed env → init refuses (remote vaults can't init locally)
@@ -1080,7 +1299,11 @@ mod tests {
             .insert("cloud".into(), vault_cfg("cf", Some("http://x")));
         config.envs.insert(Env::dev(), "cloud".into());
         let ops = mk_ops(config);
-        assert!(ops.init().unwrap_err().to_string().contains("cf"));
+        assert!(ops
+            .init(&InitOpts::default())
+            .unwrap_err()
+            .to_string()
+            .contains("cf"));
         // identity path whose parent can't be created → ensure fails
         let home = tempfile::tempdir().unwrap();
         let blocker = home.path().join("blocker");
@@ -1091,8 +1314,8 @@ mod tests {
         v.identity = Some(blocker.join("id.txt").to_string_lossy().into_owned());
         config.vaults.insert("local".into(), v);
         let ops = mk_ops(config);
-        assert!(ops.init().is_err());
-        // garbage identity present → ensure skips it, open fails
+        assert!(ops.init(&InitOpts::default()).is_err());
+        // garbage identity present → ensure refuses, never clobbers
         let bad_id = home.path().join("bad-id.txt");
         std::fs::write(&bad_id, "not-a-key\n").unwrap();
         let mut config = Config::default();
@@ -1101,7 +1324,7 @@ mod tests {
         v.identity = Some(bad_id.to_string_lossy().into_owned());
         config.vaults.insert("local".into(), v);
         let ops = mk_ops(config);
-        assert!(ops.init().is_err());
+        assert!(ops.init(&InitOpts::default()).is_err());
     }
 
     #[test]
@@ -1363,5 +1586,223 @@ mod tests {
         // shape assertions live in audit.rs's tests
         ops.emit(Op::Get, Some("x/y"), Outcome::Denied);
         ops.emit(Op::List, None, Outcome::Error);
+    }
+
+    /// A scripted `IdentitySource` for resolution tests — no real
+    /// keyring needed.
+    struct StubSource {
+        stored: std::sync::Mutex<Option<x25519::Identity>>,
+        err: Option<IdentityError>,
+    }
+
+    impl StubSource {
+        fn holding(id: x25519::Identity) -> Self {
+            StubSource {
+                stored: std::sync::Mutex::new(Some(id)),
+                err: None,
+            }
+        }
+
+        fn empty() -> Self {
+            StubSource {
+                stored: std::sync::Mutex::new(None),
+                err: None,
+            }
+        }
+
+        fn failing(e: IdentityError) -> Self {
+            StubSource {
+                stored: std::sync::Mutex::new(None),
+                err: Some(e),
+            }
+        }
+    }
+
+    impl IdentitySource for StubSource {
+        fn load(&self) -> Result<Option<x25519::Identity>, IdentityError> {
+            match &self.err {
+                Some(IdentityError::Store(m)) => Err(IdentityError::Store(m.clone())),
+                Some(IdentityError::Unavailable(m)) => Err(IdentityError::Unavailable(m.clone())),
+                Some(IdentityError::Parse(m)) => Err(IdentityError::Parse(m.clone())),
+                Some(IdentityError::Io(m)) => Err(IdentityError::Io(m.clone())),
+                None => Ok(self.stored.lock().unwrap().clone()),
+            }
+        }
+
+        fn store(&self, id: &x25519::Identity) -> Result<(), IdentityError> {
+            *self.stored.lock().unwrap() = Some(id.clone());
+            Ok(())
+        }
+
+        fn kind(&self) -> &'static str {
+            "stub"
+        }
+
+        fn describe(&self) -> String {
+            "stub source".into()
+        }
+    }
+
+    #[test]
+    fn resolve_identity_prefers_keyring_then_file() {
+        let home = tempfile::tempdir().unwrap();
+        // a keyring holding identity A wins over the default file
+        let a = x25519::Identity::generate();
+        let keyring = StubSource::holding(a.clone());
+        isolate_home(&home, || {
+            temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
+                let ops = mk_ops(Config::default());
+                let got = ops.resolve_identity_in(None, Some(&keyring)).unwrap();
+                assert_eq!(got.to_public(), a.to_public());
+            });
+        });
+        // an empty keyring falls through to the default keyfile
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            temp_env::with_var("ARCA_IDENTITY_FILE", None::<&str>, || {
+                // seed the default-path keyfile (XDG under the
+                // isolated home)
+                let default = FileIdentity::default();
+                let (file_id, _) = arca_identity::ensure(&default).unwrap();
+                let ops = mk_ops(Config::default());
+                let keyring = StubSource::empty();
+                let got = ops.resolve_identity_in(None, Some(&keyring)).unwrap();
+                assert_eq!(got.to_public(), file_id.to_public());
+                // a failing keyring also falls back — note on
+                // stderr, not a crash
+                let keyring = StubSource::failing(IdentityError::Store("dead".into()));
+                let got = ops.resolve_identity_in(None, Some(&keyring)).unwrap();
+                assert_eq!(got.to_public(), file_id.to_public());
+            });
+        });
+    }
+
+    #[test]
+    fn resolve_identity_explicit_file_wins_and_is_required() {
+        let home = tempfile::tempdir().unwrap();
+        let id_path = write_identity(home.path());
+        let file_id = FileIdentity::new(&id_path).load().unwrap().unwrap();
+        // explicit config path beats a populated keyring
+        let mut config = Config::default();
+        let mut v = vault_cfg("age", None);
+        v.identity = Some(id_path.to_string_lossy().into_owned());
+        config.vaults.insert("local".into(), v);
+        let ops = mk_ops(config);
+        let cfg = ops.config.vault_config("local");
+        let a = x25519::Identity::generate();
+        let keyring = StubSource::holding(a);
+        let got = ops.resolve_identity_in(cfg, Some(&keyring)).unwrap();
+        assert_eq!(got.to_public(), file_id.to_public());
+        // env override beats config path — and a missing explicit
+        // file is an error, never a fall-through
+        temp_env::with_var(
+            "ARCA_IDENTITY_FILE",
+            Some(home.path().join("missing.txt").to_str().unwrap()),
+            || {
+                let e = ops
+                    .resolve_identity_in(cfg, Some(&keyring))
+                    .err()
+                    .unwrap()
+                    .to_string();
+                assert!(e.contains("run `arca init`"), "{e}");
+            },
+        );
+    }
+
+    #[test]
+    fn resolve_identity_reports_missing_everywhere() {
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
+                let ops = mk_ops(Config::default());
+                let e = ops
+                    .resolve_identity_in(None, None)
+                    .err()
+                    .unwrap()
+                    .to_string();
+                assert!(e.contains("run `arca init`"), "{e}");
+            });
+        });
+    }
+
+    #[test]
+    fn init_prefers_keyring_and_migrates_the_keyfile() {
+        // fresh machine + reachable store → identity lands in the
+        // keyring, nothing on disk
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
+                let ops = mk_ops(Config::default());
+                let keyring = StubSource::empty();
+                let info = ops.init_in(&InitOpts::default(), Some(&keyring)).unwrap();
+                assert_eq!(info.identity_backend, "keyring");
+                assert!(info.identity_created);
+                assert!(!info.migrated);
+                assert!(keyring.load().unwrap().is_some());
+            });
+        });
+
+        // an existing keyfile is imported — the migration path —
+        // and kept on disk as backup
+        let home = tempfile::tempdir().unwrap();
+        let id_path = write_identity(home.path());
+        isolate_home(&home, || {
+            temp_env::with_var("ARCA_IDENTITY_FILE", None::<&str>, || {
+                // make the default-path file visible
+                let default = FileIdentity::default_path();
+                std::fs::create_dir_all(default.parent().unwrap()).unwrap();
+                std::fs::copy(&id_path, &default).unwrap();
+                let file_id = FileIdentity::default().load().unwrap().unwrap();
+                let ops = mk_ops(Config::default());
+                let keyring = StubSource::empty();
+                let info = ops.init_in(&InitOpts::default(), Some(&keyring)).unwrap();
+                assert_eq!(info.identity_backend, "keyring");
+                assert!(!info.identity_created);
+                assert!(info.migrated);
+                assert_eq!(info.file_remains, Some(default.clone()));
+                let stored = keyring.load().unwrap().unwrap();
+                assert_eq!(stored.to_public(), file_id.to_public());
+            });
+        });
+    }
+
+    #[test]
+    fn init_falls_back_to_file_when_the_store_is_gone_or_broken() {
+        // no store at all → file bootstrap
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
+                let ops = mk_ops(Config::default());
+                let info = ops.init_in(&InitOpts::default(), None).unwrap();
+                assert_eq!(info.identity_backend, "file");
+                assert!(info.identity_created);
+                assert!(PathBuf::from(&info.identity).exists());
+            });
+        });
+        // a reachable-but-broken store → same clean fallback
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
+                let ops = mk_ops(Config::default());
+                let keyring = StubSource::failing(IdentityError::Store("dbus gone".into()));
+                let info = ops.init_in(&InitOpts::default(), Some(&keyring)).unwrap();
+                assert_eq!(info.identity_backend, "file");
+                assert!(info.identity_created);
+            });
+        });
+        // --with-file skips the store even when one holds an
+        // identity — and never migrates
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
+                let ops = mk_ops(Config::default());
+                let keyring = StubSource::holding(x25519::Identity::generate());
+                let info = ops
+                    .init_in(&InitOpts { with_file: true }, Some(&keyring))
+                    .unwrap();
+                assert_eq!(info.identity_backend, "file");
+                assert!(!info.migrated);
+            });
+        });
     }
 }

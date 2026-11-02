@@ -14,7 +14,6 @@ arca_testkit::vault_conformance!(|| {
         std::thread::current().id()
     ));
     let vault: PathBuf = dir.join("vault.age");
-    let identity: PathBuf = dir.join("identity.txt");
-    AgeVault::ensure_identity(&identity).unwrap();
-    AgeVault::open(&vault, &identity, &[]).unwrap()
+    let identity = age::x25519::Identity::generate();
+    AgeVault::open(&vault, identity, &[]).unwrap()
 });

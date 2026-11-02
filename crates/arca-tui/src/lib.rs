@@ -95,8 +95,9 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let id_path = home.path().join("identity.txt");
         let vault_path = home.path().join("vault.age");
-        arca_vault_age::AgeVault::ensure_identity(&id_path).unwrap();
-        let vault = arca_vault_age::AgeVault::open(&vault_path, &id_path, &[]).unwrap();
+        let (identity, _) =
+            arca_identity::ensure(&arca_identity_file::FileIdentity::new(&id_path)).unwrap();
+        let vault = arca_vault_age::AgeVault::open(&vault_path, identity, &[]).unwrap();
         for (env, refs) in envs {
             for r in *refs {
                 Vault::put(
@@ -398,7 +399,7 @@ mod tests {
         // a cf vault whose list claims a ref the get can't produce
         let id_dir = tempfile::tempdir().unwrap();
         let id_path = id_dir.path().join("id.txt");
-        arca_vault_age::AgeVault::ensure_identity(&id_path).unwrap();
+        arca_identity::ensure(&arca_identity_file::FileIdentity::new(&id_path)).unwrap();
         let home = tempfile::tempdir().unwrap();
         // list_records must see the ref first — the stateful wire
         // mock gives a real put; the failure lands only at reveal.
@@ -498,10 +499,10 @@ mod tests {
             ],
             || {
                 // seed a secret at the *default* vault location
-                let id_path = arca_vault_age::AgeVault::default_identity_path();
+                let src = arca_identity_file::FileIdentity::default();
                 let v_path = arca_vault_age::AgeVault::default_vault_path();
-                arca_vault_age::AgeVault::ensure_identity(&id_path).unwrap();
-                arca_vault_age::AgeVault::open(&v_path, &id_path, &[])
+                let (identity, _) = arca_identity::ensure(&src).unwrap();
+                arca_vault_age::AgeVault::open(&v_path, identity, &[])
                     .unwrap()
                     .put(
                         &Env::dev(),

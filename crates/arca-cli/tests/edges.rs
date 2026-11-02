@@ -19,7 +19,7 @@ fn arca(home: &Path, args: &[&str]) -> Command {
         .env_remove("ARCA_CONFIG")
         .env_remove("ARCA_ENV")
         .env_remove("ARCA_ACTOR")
-        .env_remove("ARCA_IDENTITY_FILE");
+        .env("ARCA_IDENTITY_FILE", home.join("xdg-config/arca/identity.txt"));
     c
 }
 
@@ -53,10 +53,11 @@ fn run_pty_prelude(home: &Path, args: &[&str], input: &[u8], prelude: &str) -> O
         .map(|v| format!(" LLVM_PROFILE_FILE='{v}'"))
         .unwrap_or_default();
     let cmdline = format!(
-        "{prelude}exec env -i HOME='{}' XDG_CONFIG_HOME='{}' XDG_DATA_HOME='{}' TERM=xterm{prof} '{}' {}",
+        "{prelude}exec env -i HOME='{}' XDG_CONFIG_HOME='{}' XDG_DATA_HOME='{}' ARCA_IDENTITY_FILE='{}' TERM=xterm{prof} '{}' {}",
         home.display(),
         home.join("xdg-config").display(),
         home.join("xdg-data").display(),
+        home.join("xdg-config/arca/identity.txt").display(),
         arca,
         args.join(" ")
     );

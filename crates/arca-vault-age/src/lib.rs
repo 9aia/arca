@@ -19,12 +19,14 @@
 //! }
 //! ```
 //!
-//! Identity is an age keyfile (one `AGE-SECRET-KEY-…` line,
-//! `#` comments allowed) at `~/.config/arca/identity.txt`;
-//! recipients default to that identity's public key plus any extra
-//! `recipients` in the vault's config. [`AgeVault::ensure_identity`]
-//! generates a fresh keyfile (mode `0600`) when missing — that path
-//! backs `arca init`.
+//! The vault takes an already-resolved [`x25519::Identity`] —
+//! where the identity *lives* is the `arca-identity` port's
+//! business (keyfile via `arca-identity-file`, session keyring via
+//! `arca-identity-keyring`; `arca-ops` resolves it). Recipients
+//! default to that identity's public key plus any extra
+//! `recipients` in the vault's config.
+//! [`AgeVault::open_or_init`] is the bootstrap path — it runs
+//! [`arca_identity::ensure`] on the caller's chosen source.
 
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
@@ -34,6 +36,7 @@ use std::sync::Mutex;
 
 use age::x25519;
 use arca_core::{Env, Ref, Secret};
+use arca_identity::IdentitySource;
 use arca_vault::{SecretRecord, Vault, VaultError};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -92,73 +95,16 @@ impl AgeVault {
         data_home().join("arca/vault.age")
     }
 
-    /// The default identity keyfile — `$ARCA_IDENTITY_FILE`, else
-    /// `$XDG_CONFIG_HOME/arca/identity.txt`, else
-    /// `~/.config/arca/identity.txt`.
-    pub fn default_identity_path() -> PathBuf {
-        if let Ok(p) = std::env::var("ARCA_IDENTITY_FILE") {
-            if !p.is_empty() {
-                return PathBuf::from(p);
-            }
-        }
-        config_home().join("arca/identity.txt")
-    }
-
-    /// Read + validate an age identity keyfile: first non-empty,
-    /// non-`#`-comment line must be an `AGE-SECRET-KEY-…` string.
-    pub fn read_identity(path: &Path) -> Result<x25519::Identity, VaultError> {
-        let text = std::fs::read_to_string(path)
-            .map_err(|e| VaultError::Config(format!("read identity {}: {e}", path.display())))?;
-        let line = text
-            .lines()
-            .map(str::trim)
-            .find(|l| !l.is_empty() && !l.starts_with('#'))
-            .ok_or_else(|| {
-                VaultError::Config(format!("identity {} holds no key", path.display()))
-            })?;
-        x25519::Identity::from_str(line)
-            .map_err(|e| VaultError::Crypto(format!("identity {}: {e}", path.display())))
-    }
-
-    /// Create the identity keyfile (mode `0600`, parents created)
-    /// iff missing; returns `true` when one was generated — the
-    /// `arca init` path. The public recipient goes in a `#` comment
-    /// line so the file stays rage-compatible.
-    #[allow(clippy::unwrap_used)]
-    pub fn ensure_identity(path: &Path) -> Result<bool, VaultError> {
-        if path.exists() {
-            return Ok(false);
-        }
-        use age::secrecy::ExposeSecret;
-        let identity = x25519::Identity::generate();
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let key = identity.to_string();
-        let body = format!(
-            "# arca identity — created {}\n# public: {}\n{}\n",
-            OffsetDateTime::now_utc(),
-            identity.to_public(),
-            key.expose_secret(),
-        );
-        std::fs::write(path, body)?;
-        // chmod'ing a file this process just created and owns
-        // cannot realistically fail — an expect is honest here
-        // where a `?` would imply a reachable error arm.
-        set_private(path).expect("chmod on a freshly written file");
-        Ok(true)
-    }
-
-    /// Open the vault. `identity` must exist (see
-    /// [`Self::ensure_identity`] for bootstrap); a missing vault file
-    /// is an empty vault. `extra_recipients` are `age1…` strings
-    /// encrypted to alongside the identity's public key.
+    /// Open the vault with an already-resolved identity — where the
+    /// identity came from (keyfile, keyring) is the caller's
+    /// business. A missing vault file is an empty vault.
+    /// `extra_recipients` are `age1…` strings encrypted to alongside
+    /// the identity's public key.
     pub fn open(
         vault_path: &Path,
-        identity_path: &Path,
+        identity: x25519::Identity,
         extra_recipients: &[String],
     ) -> Result<Self, VaultError> {
-        let identity = Self::read_identity(identity_path)?;
         let mut recipients = vec![identity.to_public()];
         for r in extra_recipients {
             recipients.push(
@@ -179,19 +125,17 @@ impl AgeVault {
         })
     }
 
-    /// [`Self::ensure_identity`] + [`Self::open`] — bootstrap when
-    /// the keyfile is missing, then open. Returns the vault and
-    /// whether a fresh identity was generated.
+    /// [`arca_identity::ensure`] + [`Self::open`] — bootstrap the
+    /// identity on `source` when it holds none, then open. Returns
+    /// the vault and whether a fresh identity was generated.
     pub fn open_or_init(
         vault_path: &Path,
-        identity_path: &Path,
+        source: &dyn IdentitySource,
         extra_recipients: &[String],
     ) -> Result<(Self, bool), VaultError> {
-        let created = Self::ensure_identity(identity_path)?;
-        Ok((
-            Self::open(vault_path, identity_path, extra_recipients)?,
-            created,
-        ))
+        let (identity, created) = arca_identity::ensure(source)
+            .map_err(|e| VaultError::Config(format!("identity from {}: {e}", source.describe())))?;
+        Ok((Self::open(vault_path, identity, extra_recipients)?, created))
     }
 
     /// The identity's public recipient (`age1…`).
@@ -359,13 +303,7 @@ fn data_home() -> PathBuf {
         .unwrap_or_else(|_| home().join(".local/share"))
 }
 
-fn config_home() -> PathBuf {
-    std::env::var("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| home().join(".config"))
-}
-
-/// `chmod 0600` — identity files hold key material; the vault file
+/// `chmod 0600` — the vault file
 /// is ciphertext but private-by-default is still right.
 #[cfg(unix)]
 fn set_private(path: &Path) -> Result<(), VaultError> {
@@ -385,41 +323,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ensure_identity_generates_0600_keyfile() {
-        let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("identity.txt");
-        assert!(AgeVault::ensure_identity(&id_path).unwrap());
-        assert!(!AgeVault::ensure_identity(&id_path).unwrap());
-        let id = AgeVault::read_identity(&id_path).unwrap();
-        let text = std::fs::read_to_string(&id_path).unwrap();
-        assert!(text.contains(&id.to_public().to_string()));
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            assert_eq!(
-                std::fs::metadata(&id_path).unwrap().permissions().mode() & 0o777,
-                0o600
-            );
-        }
-    }
-
-    #[test]
-    fn read_identity_rejects_garbage() {
-        let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("identity.txt");
-        std::fs::write(&id_path, "# only comments\n\n").unwrap();
-        assert!(AgeVault::read_identity(&id_path).is_err());
-        std::fs::write(&id_path, "not-a-key\n").unwrap();
-        assert!(AgeVault::read_identity(&id_path).is_err());
-    }
-
-    #[test]
     fn ciphertext_hides_values() {
         let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("identity.txt");
         let v_path = dir.path().join("vault.age");
-        AgeVault::ensure_identity(&id_path).unwrap();
-        let v = AgeVault::open(&v_path, &id_path, &[]).unwrap();
+        let id = x25519::Identity::generate();
+        let v = AgeVault::open(&v_path, id, &[]).unwrap();
         let fake = "fake-value-not-real";
         v.put(
             &Env::dev(),
@@ -431,21 +339,6 @@ mod tests {
         let text = String::from_utf8_lossy(&bytes);
         assert!(!text.contains(fake));
         assert!(!text.contains("billing"));
-    }
-
-    #[test]
-    fn recipient_file_comments_are_skipped() {
-        let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("identity.txt");
-        use age::secrecy::ExposeSecret;
-        let id = x25519::Identity::generate();
-        let mut f = std::fs::File::create(&id_path).unwrap();
-        writeln!(f, "# comment first").unwrap();
-        writeln!(f, "{}", id.to_string().expose_secret()).unwrap();
-        assert_eq!(
-            AgeVault::read_identity(&id_path).unwrap().to_public(),
-            id.to_public()
-        );
     }
 
     /// Age-encrypt `data` to a single recipient — fixtures for the
@@ -464,47 +357,18 @@ mod tests {
     }
 
     #[test]
-    fn ensure_identity_surfaces_write_failures() {
-        let dir = tempfile::tempdir().unwrap();
-        // a file where a parent dir must be → create_dir_all fails
-        let blocker = dir.path().join("blocker");
-        std::fs::write(&blocker, "x").unwrap();
-        assert!(AgeVault::ensure_identity(&blocker.join("sub/id.txt")).is_err());
-        // an empty path has no parent and no writable name
-        assert!(AgeVault::ensure_identity(Path::new("")).is_err());
-        // missing parents get created on demand
-        let nested = dir.path().join("a/b/identity.txt");
-        assert!(AgeVault::ensure_identity(&nested).unwrap());
-        assert!(nested.exists());
-    }
-
-    #[test]
     fn set_private_on_missing_file_is_an_error() {
         assert!(set_private(Path::new("/nonexistent/x/y")).is_err());
     }
 
     #[test]
-    fn default_paths_follow_xdg_then_home() {
-        // ARCA_IDENTITY_FILE wins outright
-        temp_env::with_var("ARCA_IDENTITY_FILE", Some("/tmp/arca-id-override"), || {
-            assert_eq!(
-                AgeVault::default_identity_path(),
-                PathBuf::from("/tmp/arca-id-override")
-            );
-        });
-        // empty override is ignored; XDG vars drive the rest
+    fn default_vault_path_follows_xdg_then_home() {
         temp_env::with_vars(
             [
-                ("ARCA_IDENTITY_FILE", Some("")),
-                ("XDG_CONFIG_HOME", Some("/tmp/xdg-c")),
                 ("XDG_DATA_HOME", Some("/tmp/xdg-d")),
                 ("HOME", Some("/tmp/fakehome")),
             ],
             || {
-                assert_eq!(
-                    AgeVault::default_identity_path(),
-                    PathBuf::from("/tmp/xdg-c/arca/identity.txt")
-                );
                 assert_eq!(
                     AgeVault::default_vault_path(),
                     PathBuf::from("/tmp/xdg-d/arca/vault.age")
@@ -514,8 +378,6 @@ mod tests {
         // no XDG → HOME-based fallback
         temp_env::with_vars(
             [
-                ("ARCA_IDENTITY_FILE", None::<&str>),
-                ("XDG_CONFIG_HOME", None::<&str>),
                 ("XDG_DATA_HOME", None::<&str>),
                 ("HOME", Some("/tmp/fakehome")),
             ],
@@ -524,20 +386,11 @@ mod tests {
                     AgeVault::default_vault_path(),
                     PathBuf::from("/tmp/fakehome/.local/share/arca/vault.age")
                 );
-                assert_eq!(
-                    AgeVault::default_identity_path(),
-                    PathBuf::from("/tmp/fakehome/.config/arca/identity.txt")
-                );
             },
         );
         // no HOME either → "."
         temp_env::with_vars(
-            [
-                ("ARCA_IDENTITY_FILE", None::<&str>),
-                ("XDG_CONFIG_HOME", None::<&str>),
-                ("XDG_DATA_HOME", None::<&str>),
-                ("HOME", None::<&str>),
-            ],
+            [("XDG_DATA_HOME", None::<&str>), ("HOME", None::<&str>)],
             || {
                 assert_eq!(
                     AgeVault::default_vault_path(),
@@ -550,53 +403,48 @@ mod tests {
     #[test]
     fn open_validates_recipients_and_vault_reads() {
         let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("id.txt");
         let v_path = dir.path().join("vault.age");
-        AgeVault::ensure_identity(&id_path).unwrap();
+        let id = x25519::Identity::generate();
         // a valid extra recipient opens and reports the identity key
         let extra = x25519::Identity::generate();
-        let v = AgeVault::open(&v_path, &id_path, &[extra.to_public().to_string()]).unwrap();
-        let me = AgeVault::read_identity(&id_path).unwrap();
-        assert_eq!(v.public_recipient(), me.to_public().to_string());
+        let v = AgeVault::open(&v_path, id.clone(), &[extra.to_public().to_string()]).unwrap();
+        assert_eq!(v.public_recipient(), id.to_public().to_string());
         // an invalid recipient string is a config error
-        assert!(AgeVault::open(&v_path, &id_path, &["not-a-recipient".into()]).is_err());
+        assert!(AgeVault::open(&v_path, id.clone(), &["not-a-recipient".into()]).is_err());
         // a directory where the vault file should be → i/o error
         let as_dir = dir.path().join("vaultdir");
         std::fs::create_dir(&as_dir).unwrap();
-        assert!(AgeVault::open(&as_dir, &id_path, &[]).is_err());
+        assert!(AgeVault::open(&as_dir, id.clone(), &[]).is_err());
         // garbage where ciphertext should be → crypto error
         let garbage = dir.path().join("garbage.age");
         std::fs::write(&garbage, b"definitely not age").unwrap();
-        assert!(AgeVault::open(&garbage, &id_path, &[]).is_err());
-        // missing identity → config error up front
-        assert!(AgeVault::open(&v_path, &dir.path().join("no-id.txt"), &[]).is_err());
+        assert!(AgeVault::open(&garbage, id, &[]).is_err());
     }
 
     #[test]
     fn open_or_init_bootstraps_then_opens() {
         let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("id.txt");
         let v_path = dir.path().join("vault.age");
-        let (_v, created) = AgeVault::open_or_init(&v_path, &id_path, &[]).unwrap();
+        let src = arca_identity_file::FileIdentity::new(dir.path().join("id.txt"));
+        let (_v, created) = AgeVault::open_or_init(&v_path, &src, &[]).unwrap();
         assert!(created);
-        let (_v, created) = AgeVault::open_or_init(&v_path, &id_path, &[]).unwrap();
+        let (_v, created) = AgeVault::open_or_init(&v_path, &src, &[]).unwrap();
         assert!(!created);
-        // identity can't be ensured → error
+        // identity can't be stored → error
         let blocker = dir.path().join("blocker");
         std::fs::write(&blocker, "x").unwrap();
-        assert!(AgeVault::open_or_init(&v_path, &blocker.join("id.txt"), &[]).is_err());
+        let bad_src = arca_identity_file::FileIdentity::new(blocker.join("id.txt"));
+        assert!(AgeVault::open_or_init(&v_path, &bad_src, &[]).is_err());
         // identity exists but is garbage → open fails
         let bad = dir.path().join("bad.txt");
         std::fs::write(&bad, "junk\n").unwrap();
-        assert!(AgeVault::open_or_init(&v_path, &bad, &[]).is_err());
+        let bad_src = arca_identity_file::FileIdentity::new(&bad);
+        assert!(AgeVault::open_or_init(&v_path, &bad_src, &[]).is_err());
     }
 
     #[test]
     fn decrypt_reports_every_failure_mode() {
-        let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("id.txt");
-        AgeVault::ensure_identity(&id_path).unwrap();
-        let id = AgeVault::read_identity(&id_path).unwrap();
+        let id = x25519::Identity::generate();
         // not an age file at all
         assert!(AgeVault::decrypt(&id, b"garbage").is_err());
         // passphrase-encrypted → we hold no passphrase
@@ -631,13 +479,11 @@ mod tests {
         // a payload entry lacking "version"/"rotated_at" picks up
         // serde defaults — older writes still read back sanely
         let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("id.txt");
         let v_path = dir.path().join("vault.age");
-        AgeVault::ensure_identity(&id_path).unwrap();
-        let id = AgeVault::read_identity(&id_path).unwrap();
+        let id = x25519::Identity::generate();
         let plain = br#"{"v":1,"envs":{"dev":{"x/y":{"value":"fake-old","created_at":"2024-01-01T00:00:00Z"}}}}"#;
         std::fs::write(&v_path, encrypt_to(&id.to_public(), plain)).unwrap();
-        let v = AgeVault::open(&v_path, &id_path, &[]).unwrap();
+        let v = AgeVault::open(&v_path, id, &[]).unwrap();
         let rec = v
             .get(&Env::dev(), &Ref::new("arca://x/y").unwrap())
             .unwrap()
@@ -650,10 +496,9 @@ mod tests {
     #[test]
     fn poisoned_state_is_an_error_not_a_panic() {
         let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("id.txt");
         let v_path = dir.path().join("vault.age");
-        AgeVault::ensure_identity(&id_path).unwrap();
-        let v = AgeVault::open(&v_path, &id_path, &[]).unwrap();
+        let id = x25519::Identity::generate();
+        let v = AgeVault::open(&v_path, id, &[]).unwrap();
         // die holding the lock → the mutex is poisoned for good
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _guard = v.state.lock().unwrap();
@@ -676,21 +521,20 @@ mod tests {
     #[test]
     fn save_surfaces_filesystem_failures() {
         let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("id.txt");
-        AgeVault::ensure_identity(&id_path).unwrap();
+        let id = x25519::Identity::generate();
         let r = Ref::new("arca://x/y").unwrap();
 
         // parent dir swapped for a file → create_dir_all can't proceed
         let parent = dir.path().join("swapped");
         let v_path = parent.join("vault.age");
-        let v = AgeVault::open(&v_path, &id_path, &[]).unwrap();
+        let v = AgeVault::open(&v_path, id.clone(), &[]).unwrap();
         std::fs::write(&parent, "not a dir").unwrap();
         assert!(v.put(&Env::dev(), &r, Secret::new("fake")).is_err());
         let _ = std::fs::remove_file(&parent);
 
         // vault path became a directory → the rename can't land
         let v_path = dir.path().join("isdir.age");
-        let v = AgeVault::open(&v_path, &id_path, &[]).unwrap();
+        let v = AgeVault::open(&v_path, id.clone(), &[]).unwrap();
         std::fs::create_dir(&v_path).unwrap();
         assert!(v.put(&Env::dev(), &r, Secret::new("fake")).is_err());
 
@@ -701,7 +545,7 @@ mod tests {
             let sub = dir.path().join("ro");
             std::fs::create_dir(&sub).unwrap();
             let v_path = sub.join("vault.age");
-            let v = AgeVault::open(&v_path, &id_path, &[]).unwrap();
+            let v = AgeVault::open(&v_path, id, &[]).unwrap();
             v.put(&Env::dev(), &r, Secret::new("fake")).unwrap();
             std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o500)).unwrap();
             assert!(v.put(&Env::dev(), &r, Secret::new("fake2")).is_err());
@@ -715,10 +559,8 @@ mod tests {
     fn a_parentless_vault_path_skips_dir_setup() {
         // "" has no parent — save() skips create_dir_all and the
         // tmp write itself fails. An error, not a panic.
-        let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("id.txt");
-        AgeVault::ensure_identity(&id_path).unwrap();
-        let v = AgeVault::open(Path::new(""), &id_path, &[]).unwrap();
+        let id = x25519::Identity::generate();
+        let v = AgeVault::open(Path::new(""), id, &[]).unwrap();
         let r = Ref::new("arca://x/y").unwrap();
         assert!(v.put(&Env::dev(), &r, Secret::new("fake")).is_err());
     }
@@ -728,10 +570,9 @@ mod tests {
         // put validates refs, so only a hand-edited payload could
         // carry a bad key — list must error, never panic
         let dir = tempfile::tempdir().unwrap();
-        let id_path = dir.path().join("id.txt");
         let v_path = dir.path().join("vault.age");
-        AgeVault::ensure_identity(&id_path).unwrap();
-        let v = AgeVault::open(&v_path, &id_path, &[]).unwrap();
+        let id = x25519::Identity::generate();
+        let v = AgeVault::open(&v_path, id, &[]).unwrap();
         {
             let mut p = v.state.lock().unwrap();
             p.envs.entry("dev".into()).or_default().insert(

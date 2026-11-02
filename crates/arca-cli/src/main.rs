@@ -54,9 +54,17 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Bootstrap: generate the age identity (0600) if missing and
-    /// verify the vault opens.
-    Init,
+    /// Bootstrap: store the age identity in the system keyring
+    /// when a session secret store is reachable — importing an
+    /// existing identity.txt rather than orphaning it — else the
+    /// `~/.config/arca/identity.txt` keyfile (0600). Verifies the
+    /// vault opens.
+    Init {
+        /// Force the identity keyfile even when a keyring is
+        /// available — the headless/CI mode.
+        #[arg(long)]
+        with_file: bool,
+    },
     /// Store a secret. The value comes from stdin (`printf … | arca
     /// put arca://ns/name`) or a hidden terminal prompt — never
     /// args, which land in shell history and `/proc`.
@@ -201,7 +209,7 @@ fn main() -> ExitCode {
 /// record.
 fn cmd_op(cmd: &Cmd) -> Op {
     match cmd {
-        Cmd::Init => Op::Init,
+        Cmd::Init { .. } => Op::Init,
         Cmd::Put { .. } => Op::Put,
         Cmd::Get { .. } => Op::Get,
         Cmd::List => Op::List,
@@ -278,26 +286,40 @@ fn load(cli: &Cli) -> Result<Ops, OpsError> {
 
 fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
     match cmd {
-        Cmd::Init => {
-            let info = ops.init()?;
+        Cmd::Init { with_file } => {
+            let info = ops.init(&arca_ops::InitOpts {
+                with_file: *with_file,
+            })?;
             ops.emit(Op::Init, None, Outcome::Ok);
             if cli.json {
                 return Ok(json_out(&serde_json::json!({
-                    "identity": info.identity_path,
+                    "identity": info.identity,
+                    "backend": info.identity_backend,
                     "created": info.identity_created,
+                    "migrated": info.migrated,
+                    "file_remains": info.file_remains,
                     "recipient": info.recipient,
                     "vault": info.vault_path,
                 })));
             }
             eprintln!(
                 "identity: {}{}",
-                info.identity_path.display(),
+                info.identity,
                 if info.identity_created {
                     " (generated)"
                 } else {
                     ""
                 }
             );
+            if info.migrated {
+                if let Some(p) = &info.file_remains {
+                    eprintln!(
+                        "migrated:  imported into the keyring; {} kept as a \
+                         backup — remove it when ready",
+                        p.display()
+                    );
+                }
+            }
             eprintln!("recipient: {}", info.recipient);
             eprintln!("vault:     {}", info.vault_path.display());
             Ok(ExitCode::SUCCESS)
@@ -624,7 +646,7 @@ fn manifest() -> serde_json::Value {
         "protocol": "arca/1",
         "ops": arca_core::Op::ALL.iter().map(|o| o.as_str()).collect::<Vec<_>>(),
         "verbs": {
-            "init": "generate the age identity (0600) if missing; verify the vault opens",
+            "init": "store the age identity in the session keyring when reachable (importing an existing keyfile), else the 0600 keyfile; verify the vault opens",
             "put": "store a secret — value via stdin or hidden /dev/tty prompt, never args",
             "get": "print a secret's value (the escape hatch — prefer run)",
             "list": "refs stored in the selected env — names only, never values",
@@ -645,10 +667,11 @@ fn manifest() -> serde_json::Value {
             "--config PATH": "config override (else $ARCA_CONFIG → ./arca.toml → ~/.config/arca/arca.toml)",
             "--actor ACTOR": "audit attribution (else ARCA_ACTOR → $USER → anon)",
             "-s VAR=arca://ref": "ad-hoc injection pair on run/env (repeatable)",
+            "--with-file": "on `arca init` — force the identity keyfile, skip the keyring",
             "--target NAME": "deploy target on `arca deploy` (required when several [deploy.*] tables exist)",
         },
         "json_shapes": {
-            "init": {"identity": "path", "created": true, "recipient": "age1…", "vault": "path"},
+            "init": {"identity": "path|keyring locator", "backend": "file|keyring", "created": true, "migrated": false, "file_remains": "path|null", "recipient": "age1…", "vault": "path"},
             "put": {"ok": true, "ref": "arca://ns/name", "env": "dev", "version": 1, "created_at": "rfc3339", "rotated_at": "rfc3339|null"},
             "rotate": "same as put",
             "get": {"ref": "arca://ns/name", "env": "dev", "value": "plaintext", "version": 1, "created_at": "rfc3339", "rotated_at": "rfc3339|null"},
@@ -674,7 +697,7 @@ fn manifest() -> serde_json::Value {
             "ARCA_CONFIG": "config file override",
             "ARCA_ENV": "env context (default dev)",
             "ARCA_ACTOR": "audit actor attribution",
-            "ARCA_IDENTITY_FILE": "age identity file override",
+            "ARCA_IDENTITY_FILE": "explicit identity keyfile path — pins file mode, skipping the session keyring",
             "ARCA_CF_TOKEN": "default cf-vault bearer env var ([vaults.*] token_env overrides the name)",
             "CLOUDFLARE_API_TOKEN": "default deploy-token env var ([deploy.*] token_env overrides the name)",
         },
