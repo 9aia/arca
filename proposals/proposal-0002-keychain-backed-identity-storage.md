@@ -1,7 +1,7 @@
 +++
 id = "P-002"
 title = "keychain-backed identity storage"
-status = "open"
+status = "in-progress"
 created = "2026-11-02"
 priority = "high"
 labels = ["identity", "security"]
