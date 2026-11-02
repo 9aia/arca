@@ -332,10 +332,8 @@ mod tests {
     fn envelope_reads_the_cf_contract() {
         // 401/403 → Unauthorized regardless of body
         for status in [401, 403] {
-            assert!(matches!(
-                CfSecretsStore::envelope(status, "{}"),
-                Err(DeployError::Unauthorized(_))
-            ));
+            let e = CfSecretsStore::envelope(status, "{}").unwrap_err();
+            assert!(format!("{e:?}").starts_with("Unauthorized"), "{e}");
         }
         // non-json body → backend error quoting the status
         let e = CfSecretsStore::envelope(502, "proxy says no").unwrap_err();
@@ -361,10 +359,9 @@ mod tests {
         let t = target();
         let env = Env::dev();
         let r = Ref::new("arca://x/y").unwrap();
-        assert!(matches!(
-            t.push(&env, &r, &Secret::new("fake")),
-            Err(DeployError::Io(_))
-        ));
-        assert!(matches!(t.remove(&env, &r), Err(DeployError::Io(_))));
+        let e = t.push(&env, &r, &Secret::new("fake")).unwrap_err();
+        assert!(format!("{e:?}").starts_with("Io"), "{e}");
+        let e = t.remove(&env, &r).unwrap_err();
+        assert!(format!("{e:?}").starts_with("Io"), "{e}");
     }
 }

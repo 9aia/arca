@@ -477,6 +477,20 @@ mod tests {
     }
 
     #[test]
+    fn open_surfaces_a_torn_body_and_bad_recipients() {
+        let id = x25519::Identity::generate();
+        let blob = seal(&[id.to_public()], "fake-value-long-enough-to-truncate");
+        // valid header, torn body — decrypt starts, the read dies
+        let torn = &blob[..blob.len() - 16];
+        assert!(open(&id, torn).is_err());
+        // an unparseable extra recipient → a config error, not a panic
+        let e = CfVault::with_identity("http://x", "t", id, &["not-a-key".into()])
+            .err()
+            .unwrap();
+        assert!(e.to_string().contains("invalid recipient"), "{e}");
+    }
+
+    #[test]
     fn read_identity_rejects_missing_and_garbage_files() {
         let dir = tempfile::tempdir().unwrap();
         // missing file → config error

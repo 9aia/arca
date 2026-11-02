@@ -40,9 +40,20 @@ fn run_stdin(home: &Path, args: &[&str], input: &[u8]) -> Output {
 
 /// Run under a pty via `script` — stdin goes in as terminal input.
 fn run_pty(home: &Path, args: &[&str], input: &[u8]) -> Output {
+    run_pty_prelude(home, args, input, "")
+}
+
+fn run_pty_prelude(home: &Path, args: &[&str], input: &[u8], prelude: &str) -> Output {
     let arca = env!("CARGO_BIN_EXE_arca");
+    // `env -i` scrubs everything — pass LLVM_PROFILE_FILE through so
+    // a coverage build still lands the child's .profraw in llvm-cov's
+    // target dir instead of a stray default_*.profraw next to the
+    // test binary.
+    let prof = std::env::var("LLVM_PROFILE_FILE")
+        .map(|v| format!(" LLVM_PROFILE_FILE='{v}'"))
+        .unwrap_or_default();
     let cmdline = format!(
-        "env -i HOME='{}' XDG_CONFIG_HOME='{}' XDG_DATA_HOME='{}' TERM=xterm '{}' {}",
+        "{prelude}exec env -i HOME='{}' XDG_CONFIG_HOME='{}' XDG_DATA_HOME='{}' TERM=xterm{prof} '{}' {}",
         home.display(),
         home.join("xdg-config").display(),
         home.join("xdg-data").display(),
@@ -56,8 +67,23 @@ fn run_pty(home: &Path, args: &[&str], input: &[u8]) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
+    if !prelude.is_empty() {
+        // give the prelude's poke time to land before the keys
+        std::thread::sleep(std::time::Duration::from_millis(1800));
+    }
     child.stdin.as_mut().unwrap().write_all(input).unwrap();
     child.wait_with_output().unwrap()
+}
+
+/// Same, but fires SIGWINCH at the child once the TUI is up —
+/// crossterm turns it into an `Event::Resize`, which exercises the
+/// event loop's non-Key arm, and the delayed input also leaves a
+/// few idle `poll` ticks on the clock.
+fn run_pty_winch(home: &Path, args: &[&str], input: &[u8]) -> Output {
+    // `$$` inside the parens is the `sh -c` pid — the same pid the
+    // `exec` hands to arca. Two pokes for startup-timing slack.
+    let prelude = "(sleep 1; kill -WINCH $$; sleep 0.4; kill -WINCH $$) & ";
+    run_pty_prelude(home, args, input, prelude)
 }
 
 fn stdout(o: &Output) -> String {
@@ -432,11 +458,119 @@ fn ui_declines_a_non_tty_and_runs_on_a_pty() {
     assert!(!o.status.success());
     assert!(stderr(&o).contains("terminal"), "{}", stderr(&o));
     // a pty → the browser opens and 'q' quits clean (pty merges
-    // stdout+stderr — the audit event lands in script's stdout)
-    let o = run_pty(home, &["ui"], b"q");
+    // stdout+stderr — the audit event lands in script's stdout).
+    // 'x' first so a key event *isn't* consumed by the quit arm —
+    // covers the loop's no-op-key iteration before 'q' breaks it;
+    // the winch adds a Resize event for the non-Key arm.
+    let o = run_pty_winch(home, &["ui"], b"xq");
     assert!(o.status.success(), "{}", stderr(&o));
     let all = format!("{}{}", stdout(&o), stderr(&o));
     assert!(all.contains("\"op\":\"ui\""), "{all}");
+}
+
+#[test]
+fn audit_fallback_covers_every_actor_and_ref_arm() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path();
+    // no --actor, ARCA_ACTOR, or USER → the "anon" fallback; a
+    // parseable ref → the normalized-path arm of the audit record
+    let o = arca(
+        home,
+        &["--config", "/nonexistent.toml", "get", "arca://x/y"],
+    )
+    .env_remove("USER")
+    .env_remove("LOGNAME")
+    .output()
+    .unwrap();
+    assert!(!o.status.success());
+    let e = stderr(&o);
+    assert!(e.contains("\"actor\":\"anon\""), "{e}");
+    assert!(e.contains("x/y"), "{e}");
+}
+
+#[test]
+fn put_fails_clean_when_the_vault_cant_save() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path();
+    init(home);
+    let id_file = home.join("xdg-config/arca/identity.txt");
+    let dir = home.join("ro");
+    std::fs::create_dir(&dir).unwrap();
+    let cfg = config(
+        home,
+        "ro.toml",
+        &format!(
+            "[vaults.local]\npath = {:?}\nidentity = {:?}\n",
+            dir.join("vault.age"),
+            id_file
+        ),
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+    }
+    // stdin is fine — the failure is in the vault write past `?`
+    let o = run_stdin(
+        home,
+        &["--config", cfg.to_str().unwrap(), "put", "arca://x/y"],
+        b"fake\n",
+    );
+    assert!(!o.status.success());
+}
+
+#[test]
+fn list_json_fails_when_a_record_read_dies() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path();
+    init(home);
+    let id_file = home.join("xdg-config/arca/identity.txt");
+    // list answers with a ref, the per-ref get 500s — the failure
+    // lands on `list_records`' `?`, not `list`'s
+    let mock = arca_testkit::httpmock::HttpMock::new(|req| {
+        if req.path == "/v1/dev" {
+            arca_testkit::httpmock::Response::json(200, r#"{"refs":["x/y"]}"#)
+        } else {
+            arca_testkit::httpmock::Response::json(500, r#"{"error":"boom"}"#)
+        }
+    });
+    let cfg = config(
+        home,
+        "cf.toml",
+        &format!(
+            "[vaults.cloud]\nkind = \"cf\"\nurl = \"{}\"\ntoken_env = \"T\"\nidentity = {:?}\n\n\
+             [envs]\ndev = \"cloud\"\n",
+            mock.url(),
+            id_file
+        ),
+    );
+    let o = arca(home, &["--config", cfg.to_str().unwrap(), "list", "--json"])
+        .env("T", "fake")
+        .output()
+        .unwrap();
+    assert!(!o.status.success(), "{}", stdout(&o));
+}
+
+#[test]
+fn rotate_fails_clean_on_empty_stdin() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path();
+    init(home);
+    // valid ref, unreadable secret → read_secret's `?`, not NotStored
+    let o = run_stdin(home, &["rotate", "arca://x/y"], b"");
+    assert!(!o.status.success());
+    let o = run_stdin(home, &["rotate", "arca://x/y"], b"\xff\xfe");
+    assert!(!o.status.success());
+}
+
+#[test]
+fn put_fails_clean_when_the_tty_prompt_cant_read() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path();
+    init(home);
+    // a pty, but stdin EOF — the /dev/tty prompt read fails outright
+    let o = run_pty(home, &["put", "arca://x/y"], b"");
+    assert!(!o.status.success(), "{}", stderr(&o));
 }
 
 #[test]

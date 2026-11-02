@@ -167,12 +167,14 @@ impl<'a> Model<'a> {
 
     /// The highlighted entry, filter applied.
     pub fn current(&self) -> Option<&Entry> {
+        // A failed listing has no visible entries — bail before the
+        // index math rather than after it.
+        let Listing::Ready(entries) = &self.listing else {
+            return None;
+        };
         let vis = self.visible();
         let i = *vis.get(self.selected.min(vis.len().saturating_sub(1)))?;
-        match &self.listing {
-            Listing::Ready(entries) => entries.get(i),
-            Listing::Failed(_) => None,
-        }
+        entries.get(i)
     }
 
     /// Handle a key; `true` means quit.
@@ -345,6 +347,9 @@ impl<'a> Model<'a> {
 
 /// RFC 3339 for the detail pane.
 fn fmt_ts(t: &time::OffsetDateTime) -> String {
+    // Rfc3339 formats any OffsetDateTime — the Err arm is
+    // unreachable by construction.
+    #[allow(clippy::unwrap_used)]
     t.format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| t.to_string())
+        .expect("Rfc3339 formats every instant")
 }

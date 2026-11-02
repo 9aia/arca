@@ -166,8 +166,11 @@ mod tests {
                 Ok(())
             }
         }
+        let mut dead = Dead;
+        // a flush on the dead writer is a no-op — only writes fail
+        dead.flush().unwrap();
         let ev = AuditEvent::op("devin", Op::List, None, "dev", Outcome::Ok);
-        assert!(emit_to(&mut Dead, &ev).is_err());
+        assert!(emit_to(&mut dead, &ev).is_err());
         // and `emit` swallows the same failure — stderr can be a
         // broken pipe, arca must not crash
         emit(&ev);

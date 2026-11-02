@@ -662,17 +662,15 @@ mod tests {
         let r = Ref::new("arca://x/y").unwrap();
         let e = Env::dev();
         // every verb reports the poisoned state as a backend error
-        assert!(matches!(v.get(&e, &r), Err(VaultError::Backend(_))));
-        assert!(matches!(
-            v.put(&e, &r, Secret::new("f")),
-            Err(VaultError::Backend(_))
-        ));
-        assert!(matches!(v.rm(&e, &r), Err(VaultError::Backend(_))));
-        assert!(matches!(v.list(&e), Err(VaultError::Backend(_))));
-        assert!(matches!(
-            v.rotate(&e, &r, Secret::new("f")),
-            Err(VaultError::Backend(_))
-        ));
+        for e in [
+            v.get(&e, &r).err().unwrap(),
+            v.put(&e, &r, Secret::new("f")).err().unwrap(),
+            v.rm(&e, &r).err().unwrap(),
+            v.list(&e).err().unwrap(),
+            v.rotate(&e, &r, Secret::new("f")).err().unwrap(),
+        ] {
+            assert!(format!("{e:?}").starts_with("Backend"), "{e:?}");
+        }
     }
 
     #[test]
@@ -711,6 +709,18 @@ mod tests {
             assert!(v.rotate(&Env::dev(), &r, Secret::new("fake3")).is_err());
             std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o700)).unwrap();
         }
+    }
+
+    #[test]
+    fn a_parentless_vault_path_skips_dir_setup() {
+        // "" has no parent — save() skips create_dir_all and the
+        // tmp write itself fails. An error, not a panic.
+        let dir = tempfile::tempdir().unwrap();
+        let id_path = dir.path().join("id.txt");
+        AgeVault::ensure_identity(&id_path).unwrap();
+        let v = AgeVault::open(Path::new(""), &id_path, &[]).unwrap();
+        let r = Ref::new("arca://x/y").unwrap();
+        assert!(v.put(&Env::dev(), &r, Secret::new("fake")).is_err());
     }
 
     #[test]

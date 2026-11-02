@@ -139,7 +139,8 @@ impl Ops {
             Some(_) => src.load().map_err(OpsError::Config)?,
             None if opts.config_path.is_some() => {
                 return Err(OpsError::Config(
-                    src.load().err().unwrap_or_else(|| "unreadable".into()),
+                    // `locate()` found nothing — a load can't succeed.
+                    src.load().err().unwrap_or("unreadable".into()),
                 ));
             }
             None => Config::default(),
@@ -423,8 +424,9 @@ impl Ops {
         &self,
         env: Option<&Env>,
     ) -> Result<(Env, Vec<(Ref, SecretRecord)>), OpsError> {
-        let (env, refs) = self.list(env)?;
+        let env = env.cloned().unwrap_or_else(|| self.env.clone());
         let vault = self.open_vault(&env)?;
+        let refs = vault.list(&env)?;
         let mut out = Vec::new();
         for r in refs {
             if let Some(rec) = vault.get(&env, &r)? {
@@ -661,7 +663,7 @@ fn resolve_actor(flag: Option<&str>) -> Result<Actor, OpsError> {
             }
         }
     }
-    Ok(Actor::new("anon")?)
+    Actor::new("anon").map_err(OpsError::Actor)
 }
 
 #[cfg(test)]
@@ -889,7 +891,7 @@ mod tests {
         })
         .err()
         .unwrap();
-        assert!(matches!(e, OpsError::Config(_)), "{e}");
+        assert!(format!("{e:?}").starts_with("Config"), "{e}");
         // explicit --config that exists but won't parse
         let dir = tempfile::tempdir().unwrap();
         let bad = dir.path().join("arca.toml");
@@ -900,7 +902,7 @@ mod tests {
         })
         .err()
         .unwrap();
-        assert!(matches!(e, OpsError::Config(_)), "{e}");
+        assert!(format!("{e:?}").starts_with("Config"), "{e}");
         // bad --env and bad --actor surface as typed errors
         let e = Ops::load(LoadOpts {
             env: Some("PROD".into()),
@@ -908,14 +910,14 @@ mod tests {
         })
         .err()
         .unwrap();
-        assert!(matches!(e, OpsError::Env(_)), "{e}");
+        assert!(format!("{e:?}").starts_with("Env"), "{e}");
         let e = Ops::load(LoadOpts {
             actor: Some("bad actor!".into()),
             ..LoadOpts::default()
         })
         .err()
         .unwrap();
-        assert!(matches!(e, OpsError::Actor(_)), "{e}");
+        assert!(format!("{e:?}").starts_with("Actor"), "{e}");
     }
 
     #[test]
@@ -935,10 +937,8 @@ mod tests {
             temp_env::with_vars(
                 [("ARCA_ENV", Some("BAD!!")), ("ARCA_ACTOR", Some("bot"))],
                 || {
-                    assert!(matches!(
-                        Ops::load(LoadOpts::default()).err().unwrap(),
-                        OpsError::Env(_)
-                    ));
+                    let e = Ops::load(LoadOpts::default()).err().unwrap();
+                    assert!(format!("{e:?}").starts_with("Env"), "{e}");
                 },
             );
             // USER present and valid → claimed as actor
@@ -997,6 +997,15 @@ mod tests {
         let ops = mk_ops(config.clone());
         let e = ops.open_deploy_named("prod").err().unwrap().to_string();
         assert!(e.contains("account_id"), "{e}");
+        // account_id present, store_id missing → the second `need`
+        let mut config2 = Config::default();
+        config2.deploy.insert(
+            "prod".into(),
+            deploy_cfg("cf-secrets-store", Some("acc"), None),
+        );
+        let ops = mk_ops(config2);
+        let e = ops.open_deploy_named("prod").err().unwrap().to_string();
+        assert!(e.contains("store_id"), "{e}");
         // unknown kind
         config
             .deploy
@@ -1208,6 +1217,11 @@ mod tests {
         config
             .deploy
             .insert("half".into(), deploy_cfg("cf-secrets-store", None, None));
+        // account set, store missing → the `||` right arm runs too
+        config.deploy.insert(
+            "half2".into(),
+            deploy_cfg("cf-secrets-store", Some("a"), None),
+        );
         let ops = mk_ops(config);
         let home = tempfile::tempdir().unwrap();
         isolate_home(&home, || {
@@ -1301,6 +1315,44 @@ mod tests {
             config.secrets.insert("V".into(), r.clone());
             let ops = mk_ops(config);
             assert!(ops.resolve_for_injection(Op::Run, &[]).is_err());
+        });
+    }
+
+    #[test]
+    fn list_and_deploy_surface_backend_failures() {
+        use arca_testkit::httpmock::{HttpMock, Response};
+        let home = tempfile::tempdir().unwrap();
+        let id_path = write_identity(home.path());
+        let r = Ref::new("arca://x/y").unwrap();
+        // every backend call 500s → list() and list_records() both
+        // surface the vault's list error
+        let mock = HttpMock::new(|_| Response::json(500, r#"{"error":"boom"}"#));
+        let ops = ops_on_cf(mock.url(), "ARCA_TEST_OPS_TOKEN", &id_path);
+        temp_env::with_var("ARCA_TEST_OPS_TOKEN", Some("fake-token"), || {
+            assert!(ops.list(None).is_err());
+            assert!(ops.list_records(None).is_err());
+            // deploy: vault get fails before any sink work
+            let mut config = Config::default();
+            let mut v = vault_cfg("cf", Some(mock.url()));
+            v.token_env = Some("ARCA_TEST_OPS_TOKEN".into());
+            v.identity = Some(id_path.to_string_lossy().into_owned());
+            config.vaults.insert("cloud".into(), v);
+            config.envs.insert(Env::dev(), "cloud".into());
+            let mut d = deploy_cfg("cf-secrets-store", Some("a"), Some("s"));
+            d.token_env = Some("ARCA_TEST_OPS_TOKEN".into());
+            d.base_url = Some(mock.url().to_string());
+            config.deploy.insert("prod".into(), d);
+            let ops = mk_ops(config);
+            assert!(ops.deploy(&r, Some("prod")).is_err());
+        });
+        // vault get succeeds (real age vault) but the sink push 500s
+        let (_h, mut ops) = ops_with_vault(&Env::dev(), &["arca://x/y"]);
+        let mut d = deploy_cfg("cf-secrets-store", Some("a"), Some("s"));
+        d.token_env = Some("ARCA_TEST_OPS_TOKEN".into());
+        d.base_url = Some(mock.url().to_string());
+        ops.config.deploy.insert("prod".into(), d);
+        temp_env::with_var("ARCA_TEST_OPS_TOKEN", Some("fake-token"), || {
+            assert!(ops.deploy(&r, Some("prod")).is_err());
         });
     }
 

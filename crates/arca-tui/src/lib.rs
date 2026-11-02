@@ -181,16 +181,14 @@ mod tests {
         }
         m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         term.draw(|f| render::draw(f, &mut m)).unwrap();
-        assert!(
-            screen(&term).contains("nothing matches"),
-            "{}",
-            screen(&term)
-        );
+        let s = screen(&term);
+        assert!(s.contains("nothing matches"), "{s}");
         // help overlay
         m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         m.key(key('?'));
         term.draw(|f| render::draw(f, &mut m)).unwrap();
-        assert!(screen(&term).contains("keys"), "{}", screen(&term));
+        let s = screen(&term);
+        assert!(s.contains("keys"), "{s}");
         // q quits
         m.key(key('?'));
         assert!(m.key(key('q')));
@@ -221,6 +219,25 @@ mod tests {
         term.draw(|f| render::draw(f, &mut m)).unwrap();
         let s = screen(&term);
         assert!(s.contains("vault not readable"), "{s}");
+    }
+
+    #[test]
+    fn rotated_entries_show_their_rotated_at_stamp() {
+        let (_h, ops) = ops_with_secrets(&[("dev", &["arca://x/y"])]);
+        ops.rotate(&Ref::new("arca://x/y").unwrap(), Secret::new("fake-2"))
+            .unwrap();
+        let m = app::Model::open(&ops);
+        let e = m.current().unwrap();
+        assert!(e.rotated_at.is_some());
+    }
+
+    #[test]
+    fn the_panic_hook_restores_then_delegates() {
+        install_panic_hook();
+        let _ = std::panic::catch_unwind(|| panic!("deliberate — hook body ran"));
+        // put the default hook back — the installed one would
+        // spray alt-screen escapes on any later panic here
+        let _ = std::panic::take_hook();
     }
 
     #[test]
@@ -260,6 +277,8 @@ mod tests {
         // unbound keys are ignored and never quit
         assert!(!m.key(key('z')));
         assert!(!m.key(code(KeyCode::F(5))));
+        // ctrl-c quits like q
+        assert!(m.key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)));
 
         // j/k + arrows move and wrap in the filtered view
         m.key(key('j'));
@@ -290,7 +309,10 @@ mod tests {
         assert_eq!(m.active, 0);
         m.key(key('3'));
         assert_eq!(m.active, 2); // prod
-        assert!(matches!(m.listing, app::Listing::Ready(_)));
+        assert_eq!(
+            std::mem::discriminant(&m.listing),
+            std::mem::discriminant(&app::Listing::Ready(vec![]))
+        );
 
         // Tab/BackTab cycle
         m.key(code(KeyCode::Tab));
@@ -423,7 +445,10 @@ mod tests {
             None,
         );
         let mut m = app::Model::open(&ops);
-        assert!(matches!(m.listing, app::Listing::Failed(_)));
+        assert_eq!(
+            std::mem::discriminant(&m.listing),
+            std::mem::discriminant(&app::Listing::Failed(String::new()))
+        );
         assert!(m.current().is_none());
         m.key(key('r'));
         assert_eq!(m.status.as_deref(), Some("nothing to reveal"));

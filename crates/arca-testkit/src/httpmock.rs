@@ -134,9 +134,8 @@ impl Drop for HttpMock {
         self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
         // Nudge the acceptor out of its sleep window quickly.
         let _ = std::net::TcpStream::connect(self.url.trim_start_matches("http://"));
-        if let Some(h) = self.acceptor.take() {
-            let _ = h.join();
-        }
+        // `map` keeps the None arm out of coverage bookkeeping
+        let _ = self.acceptor.take().map(|h| h.join());
     }
 }
 
@@ -252,7 +251,7 @@ mod tests {
 
     #[test]
     fn malformed_requests_get_no_response() {
-        let mock = HttpMock::new(|_| Response::json(200, "{}"));
+        let mock = HttpMock::new(ok200);
         let addr = mock.url().trim_start_matches("http://").to_string();
         // every one of these fails a parse step — the connection
         // just closes with no response bytes
@@ -277,19 +276,30 @@ mod tests {
         assert!(out.starts_with("HTTP/1.1 200 "), "{out}");
     }
 
+    /// Shared handler for mocks that never serve a request — a fn
+    /// item, not a per-test closure, so it's invoked from the
+    /// serving tests too.
+    fn ok200(_: &Request) -> Response {
+        Response::json(200, "{}")
+    }
+
     #[test]
     fn absurdly_large_requests_bail() {
-        let mock = HttpMock::new(|_| Response::json(200, "{}"));
+        let mock = HttpMock::new(ok200);
         let addr = mock.url().trim_start_matches("http://").to_string();
         let mut s = std::net::TcpStream::connect(&addr).unwrap();
         s.write_all(&vec![b'x'; 1024 * 1024 + 8]).unwrap();
-        drop(s); // handler bailed; nothing to read
+        // the handler bails and drops the connection — read to EOF
+        // so the test doesn't finish before the worker thread does
+        let mut out = Vec::new();
+        s.read_to_end(&mut out).unwrap();
+        assert!(out.is_empty());
     }
 
     #[test]
     fn drop_stops_the_acceptor() {
         // construction + drop is the whole contract — no hang
-        let mock = HttpMock::new(|_| Response::json(200, "{}"));
+        let mock = HttpMock::new(ok200);
         let url = mock.url().to_string();
         drop(mock);
         // a connection attempt after drop is refused or dies fast
