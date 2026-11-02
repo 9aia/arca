@@ -23,11 +23,20 @@ does not.
 - **Ciphertext at rest, everywhere** — every vault impl stores
   age ciphertext. The local file is unreadable without the
   identity; the `cf` remote store holds ciphertext over the wire
-  *and* in D1 — a compromised worker yields blobs and ref names,
-  not values.
+  *and* in D1 — a compromised worker yields blobs, not values.
+  With `[vaults.*] private_refs = true` it can't even see *which*
+  secrets exist: storage keys are HMAC-derived hex and the real
+  ref travels in an age-encrypted `name` blob.
+- **Token leakage on the cf wire** — scoped tokens
+  (`ARCA_VAULT_TOKENS`) bound a leaked credential to its
+  `{env, read, write}` scope instead of every env forever, and
+  ArcaHmac request signing means the token never travels at all
+  (a ±60s window bounds replay). All auth compares are
+  constant-time.
 - **Silent misuse** — every materialization, denial, and error
   emits an ndjson audit event on stderr, so capture is a wrapper
-  away. `check` fails closed on a vault that won't decrypt.
+  away. `check` fails closed on a vault that won't decrypt, and
+  on a mixed-mode cf vault (private config + plaintext rows).
 
 ## Does NOT protect against
 
@@ -48,6 +57,10 @@ does not.
 - **Deploy sinks** — `arca deploy` pushes plaintext into the sink
   by design (CF Secrets Store is write-only); a sink compromise
   is outside arca's boundary — it crosses exactly once, at push.
+- **Access patterns** — `private_refs` hides *which* secrets
+  exist, not *when* they're touched: request timing and row
+  counts are still observable to the store. Oblivious access is
+  out of scope.
 - **Host compromise in general** — an attacker who can read your
   memory, ptrace the broker, or impersonate your UID already won;
   arca raises the bar for *accidental* and *casual* leaks, not
