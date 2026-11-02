@@ -24,10 +24,22 @@ binary without the TUI:
 arca init
 ```
 
-`init` generates your age identity at
-`~/.config/arca/identity.txt` (mode `0600`) if it's missing and
+`init` stores your age identity where it's safest available and
 verifies the vault at `~/.local/share/arca/vault.age` opens. It's
 idempotent — run it any time.
+
+On a desktop session (GNOME Keyring, KeePassXC, KDE Wallet, macOS
+Keychain, Windows Credential Manager) the identity lands in the
+session keyring — it unlocks with login, no prompt. On headless
+boxes with no session store, `init` falls back to the
+`~/.config/arca/identity.txt` keyfile (mode `0600`) with a note
+saying so. `arca init --with-file` forces the keyfile; pinning
+`ARCA_IDENTITY_FILE` or `[vaults.*].identity` in config does the
+same — that's the headless/CI path.
+
+Already have an `identity.txt`? `arca init` imports it into the
+keyring rather than orphaning it, and leaves the file as a backup
+you can delete when ready.
 
 ## Seal a secret
 

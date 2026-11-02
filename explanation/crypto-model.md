@@ -1,15 +1,19 @@
 # Crypto model
 
 One crypto choice everywhere, made once in ADR-0001: **age**.
-Every vault impl stores age ciphertext; the same identity file
+Every vault impl stores age ciphertext; the same identity
 unlocks the local file vault and the remote `cf` vault alike.
 
 ## The pieces
 
-- **Identity** — one X25519 keypair at
-  `~/.config/arca/identity.txt` (mode `0600`;
-  `ARCA_IDENTITY_FILE` overrides). `arca init` generates it and
-  prints its public `age1…` recipient.
+- **Identity** — one X25519 keypair, held by an `arca-identity`
+  impl (ADR-0002): the **session keyring** when one is reachable
+  (secret-service, macOS Keychain, Credential Manager), else the
+  `~/.config/arca/identity.txt` keyfile (mode `0600`). An explicit
+  file — `ARCA_IDENTITY_FILE` or `[vaults.*].identity` — pins the
+  keyfile outright; that is the headless/CI path. `arca init`
+  bootstraps whichever backend applies and prints the public
+  `age1…` recipient.
 - **Recipients** — `[vaults.*].recipients` encrypts to extra
   public keys beyond the identity's own — a team recipient list
   without sharing the private key.
@@ -41,9 +45,10 @@ unlocks the local file vault and the remote `cf` vault alike.
   Manager) were explored in the `arca-vault-aws` spike to prove
   the `Vault` port generalizes to non-age stores; a KMS-backed
   *crypto* port is a later ADR, not v1.
-- **No passphrase-wrapped identity** — the keyfile is raw age
-  key material at `0600`, like an unencrypted SSH key. Wrapping
-  or keychain storage is a later hardening step.
+- **No passphrase-wrapped identity file** — when the keyring is
+  unavailable the keyfile is still raw age key material at
+  `0600`, like an unencrypted SSH key. A passphrase-wrapped arm
+  of the identity port is a later impl, not a new port.
 - **No signing / integrity metadata** beyond what age's AEAD
   gives — tampered ciphertext fails decryption loudly, which is
   the correct failure.

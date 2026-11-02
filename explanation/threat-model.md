@@ -36,10 +36,12 @@ does not.
   anyone who can edit `arca.toml` or run the binary can bypass
   them. They prevent *accidents*, not adversaries. Real
   multi-actor policy and enforcement belong to **peregrin**.
-- **The identity file itself** — `identity.txt` (0600) is the
-  master key for every vault impl; arca doesn't wrap it in a
-  passphrase or keychain (yet — a later ADR). Protect it like a
-  private SSH key.
+- **The identity's host protection** — the master key lives in
+  the session keyring when one exists (ADR-0002), which protects
+  it about as well as your login session. On headless/CI it is
+  still `identity.txt` (0600), raw key material — protect it like
+  a private SSH key. Either way, UID-level compromise reaches it:
+  the keyring raises the bar, it is not a TPM.
 - **The child process** — once `run` injects env vars, the child
   owns them (`/proc/<pid>/environ`, core dumps, the child logging
   its own env). arca's guarantee ends at `exec`.
