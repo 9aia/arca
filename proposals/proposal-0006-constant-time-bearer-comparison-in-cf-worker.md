@@ -1,7 +1,7 @@
 +++
 id = "P-006"
 title = "constant-time bearer comparison in cf worker"
-status = "open"
+status = "in-progress"
 created = "2026-11-02"
 priority = "low"
 labels = ["security", "vault-cf"]
