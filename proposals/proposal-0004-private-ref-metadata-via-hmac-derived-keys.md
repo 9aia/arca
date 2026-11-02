@@ -1,7 +1,7 @@
 +++
 id = "P-004"
 title = "private ref metadata via HMAC-derived keys"
-status = "open"
+status = "in-progress"
 created = "2026-11-02"
 priority = "medium"
 labels = ["security", "vault-cf"]
