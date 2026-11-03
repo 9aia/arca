@@ -1,1 +1,1 @@
-{"id":"","ws":"audit-fixes","actor":"luis","ts":1793675615,"op":{"op":"claim","glob":"crates/arca-core/**","ttl_secs":3600}}
+{"id":"","ws":"audit-fixes","actor":"luis","ts":1793677730,"op":{"op":"presence","status":"left"}}
