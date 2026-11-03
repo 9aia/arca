@@ -26,6 +26,17 @@
 # token_env = "ARCA_CF_TOKEN"                    # env var NAME, not the token
 # identity = "/home/you/.config/arca/identity.txt"   # optional; same resolution as local
 # recipients = ["age1…"]                        # optional extra encrypt-to keys
+#
+# Read-through encrypted local cache (P-007) — `get`/`list` serve a
+# local age vault at $XDG_CACHE_HOME/arca/cloud.age while fresh,
+# miss → remote fetch → write-through; writes always go remote
+# first. Scope it: `cache = true` caches every env, a name or list
+# scopes it — dev may cache, prod should live-fetch. Freshness is
+# TTL-bounded (`cache_ttl_secs`, default 300); a remote failure
+# falls back to the stale copy — the offline mode.
+#
+# cache = ["dev"]
+# cache_ttl_secs = 600
 
 # env → vault routing. dev/staging/prod always exist; unlisted envs
 # route to "local". `dev = "local"` shorthand also works.

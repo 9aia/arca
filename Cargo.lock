@@ -308,6 +308,7 @@ dependencies = [
  "arca-testkit",
  "arca-vault",
  "arca-vault-age",
+ "arca-vault-cached",
  "arca-vault-cf",
  "keyring-core",
  "serde",
@@ -391,6 +392,23 @@ dependencies = [
  "arca-identity-file",
  "arca-testkit",
  "arca-vault",
+ "serde",
+ "serde_json",
+ "temp-env",
+ "tempfile",
+ "time",
+ "zeroize",
+]
+
+[[package]]
+name = "arca-vault-cached"
+version = "0.1.0"
+dependencies = [
+ "age",
+ "arca-core",
+ "arca-testkit",
+ "arca-vault",
+ "arca-vault-age",
  "serde",
  "serde_json",
  "temp-env",

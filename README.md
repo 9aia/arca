@@ -71,8 +71,14 @@ commented tour.
 kind = "age"
 # path, identity, recipients  # optional overrides
 
+[vaults.cloud]                # a remote vault (self-hosted Worker + D1)
+kind = "cf"
+url = "https://arca-vault.you.workers.dev"
+cache = ["dev"]               # optional read-through local cache at
+                              # ~/.cache/arca/ — dev cached, prod live
+
 [envs]                        # env → vault routing; unlisted envs → "local"
-prod = { vault = "local" }
+prod = { vault = "cloud" }
 
 [secrets]                     # the declared surface run/env may inject
 STRIPE_KEY = "arca://billing/stripe"
@@ -101,8 +107,10 @@ ref, different backend per env.
   variants behind the same ref; env is also a routing axis:
   `dev` → local vault, `prod` → cloud vault
 - **ports-and-adapters vaults** — the `arca-vault` trait with
-  `arca-vault-age` (local age-encrypted file) and `arca-vault-cf`
-  (self-hosted Worker + D1, client-side age ciphertext) today;
+  `arca-vault-age` (local age-encrypted file), `arca-vault-cf`
+  (self-hosted Worker + D1, client-side age ciphertext), and
+  `arca-vault-cached` (read-through local cache in front of any
+  backend — `cache = ["dev"]` in `[vaults.*]`) today;
   `arca-deploy` covers write-only push targets (`arca-deploy-cf`
   → CF Secrets Store)
 - **redaction by construction** — a `Secret` newtype with no
