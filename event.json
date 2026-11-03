@@ -1,1 +1,1 @@
-{"id":"","ws":"feat-cached-vault","actor":"luis","ts":1793684890,"op":{"op":"claim","glob":"crates/**","ttl_secs":3600}}
+{"id":"","ws":"feat-cached-vault","actor":"luis","ts":1793684891,"op":{"op":"claim","glob":"Cargo.*","ttl_secs":3600}}
