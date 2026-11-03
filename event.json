@@ -1,1 +1,1 @@
-{"id":"","ws":"fix-ledger-xtask","actor":"luis","ts":1793684769,"op":{"op":"claim","glob":"kuda.toml","ttl_secs":3600}}
+{"id":"","ws":"fix-ledger-xtask","actor":"luis","ts":1793685024,"op":{"op":"presence","status":"left"}}
