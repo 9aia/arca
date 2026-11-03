@@ -1,1 +1,1 @@
-{"id":"","ws":"feat-cached-vault","actor":"luis","ts":1793685718,"op":{"op":"write","path":"examples/arca.toml.example","blob":"5ee80dd6e4dc34d7a9dd80b0686c87cb0328dcca","intent":"P-007 cached remote vault — read-through encrypted local cache"}}
+{"id":"","ws":"feat-cached-vault","actor":"luis","ts":1793685718,"op":{"op":"write","path":"crates/arca-core/src/config.rs","blob":"0766688609fe0a516b5c296bdcc55d3100b3dc8b","intent":"P-007 cached remote vault — read-through encrypted local cache"}}
