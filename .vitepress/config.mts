@@ -37,6 +37,7 @@ export default defineConfig({
           { text: "Inject into a process", link: "/how-to/inject-into-a-process" },
           { text: "Rotate a secret", link: "/how-to/rotate-a-secret" },
           { text: "Route envs to vaults", link: "/how-to/route-envs-to-vaults" },
+          { text: "Cache a remote vault", link: "/how-to/cached-vaults" },
           { text: "Deploy to a sink", link: "/how-to/deploy-to-a-sink" },
           { text: "Guardrails for agents", link: "/how-to/guardrails-for-agents" },
           { text: "Cloudflare Worker setup", link: "/how-to/cloudflare-worker-setup" },

@@ -44,6 +44,7 @@ Design rules:
 | `arca-testkit` | adapter | Vault conformance suite — every arca-vault impl passes the same contract tests (fake values only) |
 | `arca-tui` | adapter | arca — interactive vault TUI; a thin front-end over arca-ops (phase 5 polish) |
 | `arca-vault-age` | adapter | Local vault impl: one age-x25519-encrypted JSON doc — the v1 default backend |
+| `arca-vault-cached` | adapter | Composite vault impl: read-through age-encrypted local cache in front of any backend (P-007) |
 | `arca-vault-cf` | adapter | Remote vault impl: self-hosted Cloudflare Worker + D1 holding per-secret age ciphertext — the Worker never sees plaintext |
 | `arca` | binary | arca — secrets broker for agents: reference URIs, redaction, env-injection CLI |
 

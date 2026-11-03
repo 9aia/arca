@@ -18,5 +18,6 @@ documented at source (doc comments).
 - [arca-testkit](/arca/api/arca_testkit/index.html) — adapter
 - [arca-tui](/arca/api/arca_tui/index.html) — adapter
 - [arca-vault-age](/arca/api/arca_vault_age/index.html) — adapter
+- [arca-vault-cached](/arca/api/arca_vault_cached/index.html) — adapter
 - [arca-vault-cf](/arca/api/arca_vault_cf/index.html) — adapter
 - [arca](/arca/api/arca/index.html) — binary
