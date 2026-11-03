@@ -74,8 +74,43 @@ fixes the wire shapes.
   audit events carry the request's actor and the consult's
   verdict.
 - **Guardrails still apply** on the serve path (advisory layer,
-  checked before the PDP consult); `list`/`check`/`manifest`/
-  `shutdown` skip the consult — nothing materializes.
+  checked before the PDP consult); `manifest`/`shutdown` are
+  protocol meta-ops and skip it.
+
+## Amendment — adversarial-hardening pass (T-009)
+
+The original claim that `list`/`check` "skip the consult —
+nothing materializes" was wrong: `list` decrypts every record's
+metadata, and `check` probes vaults including scoped-token
+`get`s (real materializations, plus outbound signed HTTP on cf
+vaults). Corrected:
+
+- **`list`/`check` consult the PDP too.** The consult carries
+  `op: "list"|"check"` and omits `ref` (now optional in the
+  request shape). The verdict attaches to the scoped `Ops`
+  handle before the op runs, so the incidental materializations
+  inside — scoped-token `get`s, vault probes — emit
+  `policy`-bearing audit events.
+- **The consult is bounded.** The exec child is killed at
+  `[serve.pdp] timeout_ms` (new field, default 5000); the
+  verdict read is capped at 64 KiB; the request is written on a
+  helper thread so a >64 KiB request can't deadlock against a
+  child that never reads. A hung or flooding PDP can no longer
+  freeze the broker — the "deliberate v1 trade-off" below is
+  superseded.
+- **The PDP child's env is scrubbed** to the `arca-shell`
+  allowlist — parent credentials (`ARCA_CF_TOKEN`,
+  `CLOUDFLARE_API_TOKEN`, …) never cross into the decider.
+- **Request bounds.** One line ≤ 4 MiB (`bad_request` +
+  resync); `actor` ≤ 256 B, `attestation`/`value` ≤ 64 KiB,
+  `ref` ≤ 1 KiB, `id` ≤ 4 KiB serialized.
+- **Validation precedes the consult** — a doomed request never
+  spawns a PDP.
+- **`[serve.pdp] exec` is trust-root config.** `arca serve`
+  warns on stderr when it loads one from an *implicit*
+  `./arca.toml` — pin with `--config`/`$ARCA_CONFIG`.
+- **`check` audits `error` when it finds problems** (mirrors
+  the CLI exit code), on both the serve wire and the CLI.
 
 ## Consequences
 
@@ -85,9 +120,10 @@ fixes the wire shapes.
 - `serve` is opt-in: the single-shot CLI stays the primary
   surface and its posture is unchanged (no PDP consult, advisory
   guardrails only).
-- A hung PDP blocks the decision — there is no timeout on the
-  exec spawn (sync, no async runtime). Deliberate v1 trade-off:
-  the PDP is operator-configured, and a sandboxed decider can put
-  `timeout` in its own exec line.
+- ~~A hung PDP blocks the decision~~ — superseded by the
+  amendment above: `timeout_ms` (default 5 s) bounds the exec
+  spawn, and the bounded verdict read keeps a flooding PDP from
+  sinking memory. A sandboxed decider can still put `timeout` in
+  its own exec line for tighter control.
 - Audit consumers see a new optional `policy` field — additive,
   backwards-compatible.
