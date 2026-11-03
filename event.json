@@ -1,1 +1,1 @@
-{"id":"","ws":"serve-hardening","actor":"luis","ts":1793682664,"op":{"op":"claim","glob":"crates/arca-shell/**","ttl_secs":3600}}
+{"id":"","ws":"serve-hardening","actor":"luis","ts":1793682664,"op":{"op":"claim","glob":"crates/arca-core/src/config.rs","ttl_secs":3600}}
