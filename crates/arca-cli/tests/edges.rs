@@ -556,6 +556,64 @@ fn list_json_fails_when_a_record_read_dies() {
 }
 
 #[test]
+fn env_and_run_reject_invalid_var_names() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path();
+    // -s with a non-env-var name → the ad-hoc pair check fires
+    let o = run(home, &["env", "-s", "BAD VAR=arca://x/y"]);
+    assert!(!o.status.success());
+    assert!(
+        stderr(&o).contains("invalid env var name"),
+        "{}",
+        stderr(&o)
+    );
+    // a [secrets] key that isn't a valid env var name → the declared
+    // surface check fires inside resolve_for_injection
+    let cfg = config(
+        home,
+        "arca.toml",
+        "[secrets]\n\"BAD KEY\" = \"arca://x/y\"\n",
+    );
+    let o = run_cfg(home, &cfg, &["env"]);
+    assert!(!o.status.success());
+    assert!(
+        stderr(&o).contains("not a valid env var name"),
+        "{}",
+        stderr(&o)
+    );
+}
+
+#[test]
+fn deploy_requires_an_unambiguous_target() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path();
+    // no [deploy.*] tables at all → "no targets configured"
+    let cfg = config(home, "arca.toml", "[envs]\ndev = \"local\"\n");
+    let o = run_cfg(home, &cfg, &["deploy", "arca://x/y"]);
+    assert!(!o.status.success());
+    assert!(
+        stderr(&o).contains("no [deploy.*] targets"),
+        "{}",
+        stderr(&o)
+    );
+    // two targets and no --target → "multiple deploy targets"
+    let cfg = config(
+        home,
+        "arca.toml",
+        "[deploy.a]\nkind = \"cf-secrets-store\"\naccount_id = \"a\"\nstore_id = \"s\"\n\n\
+         [deploy.b]\nkind = \"cf-secrets-store\"\naccount_id = \"a\"\nstore_id = \"s\"\n\n\
+         [envs]\ndev = \"local\"\n",
+    );
+    let o = run_cfg(home, &cfg, &["deploy", "arca://x/y"]);
+    assert!(!o.status.success());
+    assert!(
+        stderr(&o).contains("multiple deploy targets"),
+        "{}",
+        stderr(&o)
+    );
+}
+
+#[test]
 fn rotate_fails_clean_on_empty_stdin() {
     let home = tempfile::tempdir().unwrap();
     let home = home.path();
@@ -572,8 +630,10 @@ fn put_fails_clean_when_the_tty_prompt_cant_read() {
     let home = tempfile::tempdir().unwrap();
     let home = home.path();
     init(home);
-    // a pty, but stdin EOF — the /dev/tty prompt read fails outright
-    let o = run_pty(home, &["put", "arca://x/y"], b"");
+    // a pty fed only VEOF (Ctrl-D) — the /dev/tty prompt read hits
+    // EOF and fails outright (raw EOF on script's stdin doesn't
+    // reach the pty; the character does)
+    let o = run_pty(home, &["put", "arca://x/y"], b"\x04");
     assert!(!o.status.success(), "{}", stderr(&o));
 }
 

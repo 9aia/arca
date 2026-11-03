@@ -782,6 +782,27 @@ mod tests {
     }
 
     #[test]
+    fn config_debug_shows_recipient_never_key_material() {
+        let cfg = test_config("http://x");
+        let s = format!("{cfg:?}");
+        assert!(s.contains("CfVaultConfig"), "{s}");
+        assert!(s.contains("recipient"), "{s}");
+    }
+
+    #[test]
+    fn request_fails_fast_when_no_credential_scopes_the_env() {
+        // cred_for's `?` — an env with no scoped token and no
+        // "*" fallback is a clean Config error, not a request.
+        let id = x25519::Identity::generate();
+        let mut auth = BTreeMap::new();
+        auth.insert("dev".to_string(), Auth::Bearer("fake".to_string()));
+        let v = CfVault::with_auth("http://127.0.0.1:1", auth, id, &[], false).unwrap();
+        let prod = Env::new("prod").unwrap();
+        let e = v.request(&prod, "GET", "http://x", None).unwrap_err();
+        assert!(e.to_string().contains("no cf token scoped"), "{e}");
+    }
+
+    #[test]
     fn seal_open_roundtrip_hides_value() {
         let id = x25519::Identity::generate();
         let blob = seal(&[id.to_public()], "fake-roundtrip");
@@ -826,6 +847,22 @@ mod tests {
             .request(&Env::dev(), "GET", "http://x", Some("{}".into()))
             .is_err());
         assert!(v.request(&Env::dev(), "PUT", "http://x", None).is_err());
+        // transport death → the io map_err arm
+        assert!(v
+            .request(&Env::dev(), "GET", "http://127.0.0.1:1", None)
+            .is_err());
+    }
+
+    #[test]
+    fn request_serves_every_verb_shape() {
+        use arca_testkit::httpmock::{HttpMock, Request, Response};
+        let mock = HttpMock::new(|_req: &Request| Response::json(200, "{}"));
+        let id = x25519::Identity::generate();
+        let v = CfVault::with_identity(mock.url(), "t", id, &[]).unwrap();
+        for (method, body) in [("GET", None), ("DELETE", None), ("PUT", Some("{}".into()))] {
+            let (status, _) = v.request(&Env::dev(), method, mock.url(), body).unwrap();
+            assert_eq!(status, 200, "{method}");
+        }
     }
 
     #[test]

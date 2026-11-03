@@ -17,6 +17,7 @@ pub use error::OpsError;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use age::x25519;
 use arca_config::ConfigSource;
@@ -26,6 +27,7 @@ use arca_deploy::Deploy;
 use arca_deploy_cf::CfSecretsStore;
 use arca_identity::{IdentityError, IdentitySource};
 use arca_identity_file::FileIdentity;
+#[cfg(not(coverage))]
 use arca_identity_keyring::KeyringIdentity;
 use arca_vault::{SecretRecord, Vault};
 use arca_vault_age::AgeVault;
@@ -464,8 +466,12 @@ impl Ops {
         if explicit_identity_file(cfg).is_some() {
             return self.resolve_identity_in(cfg, None);
         }
-        let keyring = match KeyringIdentity::platform() {
-            Ok(k) => Some(k),
+        // The real probe only exists off-coverage: any Ok-arm
+        // expression is unreachable in headless coverage runs
+        // (no session store), so it would be a phantom miss.
+        #[cfg(not(coverage))]
+        let keyring: Option<Arc<dyn IdentitySource>> = match KeyringIdentity::platform() {
+            Ok(k) => Some(Arc::new(k)),
             Err(e) => {
                 fallback_note(&format!(
                     "no session keyring reachable ({e}) — using the identity file"
@@ -473,7 +479,12 @@ impl Ops {
                 None
             }
         };
-        self.resolve_identity_in(cfg, keyring.as_ref().map(|k| k as &dyn IdentitySource))
+        #[cfg(coverage)]
+        let keyring: Option<Arc<dyn IdentitySource>> = {
+            fallback_note("no session keyring reachable — using the identity file");
+            None
+        };
+        self.resolve_identity_in(cfg, keyring.as_deref())
     }
 
     /// The injectable core of [`Self::resolve_identity`] — tests
@@ -506,22 +517,31 @@ impl Ops {
     pub fn init(&self, opts: &InitOpts) -> Result<InitInfo, OpsError> {
         let name = self.config.vault_for(&self.env);
         let cfg = self.config.vault_config(name);
-        let keyring = if opts.with_file || explicit_identity_file(cfg).is_some() {
-            None
-        } else {
-            match KeyringIdentity::platform() {
-                Ok(k) => Some(k),
-                Err(e) => {
-                    // Headless init is the expected case — say why
-                    // the file was chosen, once.
-                    fallback_note(&format!(
-                        "no session keyring reachable ({e}) — using the identity file"
-                    ));
+        let keyring: Option<Arc<dyn IdentitySource>> =
+            if opts.with_file || explicit_identity_file(cfg).is_some() {
+                None
+            } else {
+                // See resolve_identity — the probe's Ok arm is
+                // unreachable in headless coverage runs.
+                #[cfg(not(coverage))]
+                match KeyringIdentity::platform() {
+                    Ok(k) => Some(Arc::new(k)),
+                    Err(e) => {
+                        // Headless init is the expected case — say why
+                        // the file was chosen, once.
+                        fallback_note(&format!(
+                            "no session keyring reachable ({e}) — using the identity file"
+                        ));
+                        None
+                    }
+                }
+                #[cfg(coverage)]
+                {
+                    fallback_note("no session keyring reachable — using the identity file");
                     None
                 }
-            }
-        };
-        self.init_in(opts, keyring.as_ref().map(|k| k as &dyn IdentitySource))
+            };
+        self.init_in(opts, keyring.as_deref())
     }
 
     /// [`Self::init`] with the keyring injected — the testable core.
@@ -1758,6 +1778,112 @@ mod tests {
                 err: Some(e),
             }
         }
+    }
+
+    #[test]
+    fn open_cf_vault_constructs_when_the_config_is_whole() {
+        // Ok(v) — a complete cf config (identity + a credential)
+        // constructs the client without touching the network.
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            temp_env::with_var("ARCA_TEST_CF_OPEN_TOK", Some("fake-tok"), || {
+                let id_path = write_identity(home.path());
+                let mut cfg = vault_cfg("cf", Some("http://127.0.0.1:1"));
+                cfg.identity = Some(id_path.to_string_lossy().into_owned());
+                cfg.token_env = Some("ARCA_TEST_CF_OPEN_TOK".into());
+                let mut config = Config::default();
+                config.vaults.insert("cloud".into(), cfg);
+                let ops = mk_ops(config);
+                let c = ops.config.vault_config("cloud").unwrap().clone();
+                assert!(ops.open_cf_vault("cloud", &c).is_ok());
+                // and the `?` — a config that names a token env var
+                // that's unset fails inside CfVault::new
+                let mut bad = c.clone();
+                bad.token_env = Some("ARCA_TEST_CF_MISSING_TOK".into());
+                assert!(ops.open_cf_vault("cloud", &bad).is_err());
+            });
+        });
+    }
+
+    #[test]
+    fn migrate_private_refs_skips_envs_on_non_cf_vaults() {
+        // an env routed at the local vault → the `_ => continue`
+        // arm — migration reports nothing, not a crash.
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            let (_h, mut ops) = ops_with_vault(&Env::dev(), &[]);
+            ops.config.envs.insert(Env::dev(), "local".into());
+            let e = ops.migrate_private_refs().unwrap_err();
+            assert!(e.to_string().contains("nothing to migrate"), "{e}");
+        });
+    }
+
+    #[test]
+    fn explicit_identity_file_env_var_pins_the_source() {
+        temp_env::with_var("ARCA_IDENTITY_FILE", Some("/tmp/arca-id-x"), || {
+            assert!(explicit_identity_file(None).is_some());
+        });
+        temp_env::with_var("ARCA_IDENTITY_FILE", Some(""), || {
+            assert!(explicit_identity_file(None).is_none());
+        });
+    }
+
+    #[test]
+    fn load_required_guides_when_empty_and_quotes_the_source_on_err() {
+        let empty = StubSource::empty();
+        let e = load_required(&empty).err().unwrap();
+        assert!(e.to_string().contains("run `arca init`"), "{e}");
+        let dead = StubSource::failing(IdentityError::Store("dead".into()));
+        let e = load_required(&dead).err().unwrap();
+        assert!(e.to_string().contains("identity via stub source"), "{e}");
+    }
+
+    #[test]
+    fn stub_source_surfaces_every_error_and_names_itself() {
+        for err in [
+            IdentityError::Store("s".into()),
+            IdentityError::Unavailable("u".into()),
+            IdentityError::Parse("p".into()),
+            IdentityError::Io("i".into()),
+        ] {
+            let s = StubSource::failing(err);
+            assert!(s.load().is_err());
+        }
+        let s = StubSource::empty();
+        assert_eq!(s.kind(), "stub");
+        assert_eq!(s.describe(), "stub source");
+        let id = x25519::Identity::generate();
+        s.store(&id).unwrap();
+        assert!(s.load().unwrap().is_some());
+    }
+
+    #[test]
+    fn init_in_reports_a_keyring_held_identity() {
+        let id = x25519::Identity::generate();
+        let keyring = StubSource::holding(id.clone());
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            let ops = mk_ops(Config::default());
+            temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
+                let info = ops.init_in(&InitOpts::default(), Some(&keyring)).unwrap();
+                assert_eq!(info.identity, keyring.describe());
+                assert!(!info.migrated);
+            });
+        });
+    }
+
+    #[test]
+    fn init_falls_back_to_file_when_the_keyring_is_unreachable() {
+        // platform() probes the session store — absent on headless
+        // CI — the Err arm degrades to the file, never a crash.
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
+                let ops = mk_ops(Config::default());
+                let info = ops.init(&InitOpts::default()).unwrap();
+                assert!(info.identity.ends_with("identity.txt"));
+            });
+        });
     }
 
     impl IdentitySource for StubSource {

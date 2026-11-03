@@ -233,6 +233,17 @@ mod tests {
     }
 
     #[test]
+    fn custom_envs_open_sorted() {
+        let h = tempfile::tempdir().unwrap();
+        let ops = ops_on_config(&h, "[envs]\nzeta = \"local\"\nalpha = \"local\"\n", None);
+        let m = app::Model::open(&ops);
+        let names: Vec<&str> = m.tabs.iter().map(|t| t.env.as_str()).collect();
+        let z = names.iter().position(|n| *n == "zeta").unwrap();
+        let a = names.iter().position(|n| *n == "alpha").unwrap();
+        assert!(a < z, "custom envs must sort: {names:?}");
+    }
+
+    #[test]
     fn the_panic_hook_restores_then_delegates() {
         install_panic_hook();
         let _ = std::panic::catch_unwind(|| panic!("deliberate — hook body ran"));

@@ -433,6 +433,48 @@ mod tests {
     }
 
     #[test]
+    fn authenticate_scores_a_valid_sig_and_denies_a_bad_one() {
+        let tokens = &[ScopedToken {
+            id: "ops/tok-dev",
+            secret: "fake-secret",
+            scopes: &[("dev", true, true)],
+        }];
+        let req = |method: &str, path: &str, auth: String, body: &str| Request {
+            method: method.to_string(),
+            path: path.to_string(),
+            headers: vec![(
+                "authorization".into(),
+                auth.trim_start_matches("Authorization: ")
+                    .trim_end()
+                    .to_string(),
+            )],
+            body: body.as_bytes().to_vec(),
+        };
+        // a correct signature → Some(scopes)
+        let auth = hmac_auth("ops/tok-dev", "fake-secret", "GET", "/v1/dev", "");
+        let scopes = authenticate(&req("GET", "/v1/dev", auth, ""), "/v1/dev", tokens, None);
+        assert!(scopes.is_some());
+        // a wrong signature → None
+        let auth = hmac_auth("ops/tok-dev", "wrong", "GET", "/v1/dev", "");
+        assert!(authenticate(&req("GET", "/v1/dev", auth, ""), "/v1/dev", tokens, None).is_none());
+        // header present but neither scheme → None
+        assert!(authenticate(
+            &req(
+                "GET",
+                "/v1/dev",
+                "Authorization: Basic e30=
+"
+                .into(),
+                ""
+            ),
+            "/v1/dev",
+            tokens,
+            None
+        )
+        .is_none());
+    }
+
+    #[test]
     fn vault_wire_v2_scopes_and_signs() {
         let tokens = &[ScopedToken {
             id: "ops/tok-dev",

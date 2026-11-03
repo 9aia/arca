@@ -153,11 +153,17 @@ mod tests {
     #[test]
     fn ensure_propagates_store_failures() {
         let mem = Mem::failing(IdentityError::Store("backend dead".into()));
-        let e = match ensure(&mem) {
-            Err(e) => e,
-            Ok(_) => panic!("a failing store must not yield an identity"),
-        };
+        // `.err()` is infallible here — a failing store must not
+        // yield an identity, so no dead panic arm.
+        let e = ensure(&mem).err().unwrap();
         assert!(e.to_string().contains("backend dead"), "{e}");
+    }
+
+    #[test]
+    fn mem_names_itself_like_any_source() {
+        let mem = Mem::new();
+        assert_eq!(mem.kind(), "mem");
+        assert_eq!(mem.describe(), "in-memory test source");
     }
 
     #[test]

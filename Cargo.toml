@@ -84,6 +84,7 @@ clap-markdown = "0.1.5"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage)"] }
 
 [workspace.lints.clippy]
 unwrap_used = "warn"

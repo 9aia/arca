@@ -222,8 +222,47 @@ mod tests {
     }
 
     #[test]
+    fn store_surfaces_parent_dir_failures() {
+        // the keyfile's parent exists as a *file* → create_dir_all
+        // fails → the `?` inside store, not a panic
+        let dir = tempfile::tempdir().unwrap();
+        let blocker = dir.path().join("blocker");
+        std::fs::write(&blocker, "x").unwrap();
+        let f = FileIdentity::new(blocker.join("id.txt"));
+        let id = x25519::Identity::generate();
+        assert!(matches!(f.store(&id), Err(IdentityError::Io(_))));
+        // a parentless path ("/") skips create_dir_all entirely —
+        // the write then fails on its own
+        let root = FileIdentity::new("/");
+        assert!(matches!(root.store(&id), Err(IdentityError::Io(_))));
+    }
+
+    #[test]
     fn set_private_on_missing_file_is_an_error() {
         assert!(set_private(Path::new("/nonexistent/x/y")).is_err());
+    }
+
+    #[test]
+    fn the_source_names_and_defaults_itself() {
+        let f = FileIdentity::new("/tmp/arca-id-x");
+        assert_eq!(f.kind(), "file");
+        assert!(f.describe().contains("arca-id-x"));
+        assert!(!f.exists());
+        assert_eq!(f.path(), Path::new("/tmp/arca-id-x"));
+        // Default wraps default_path — same path, no surprises
+        temp_env::with_var("ARCA_IDENTITY_FILE", Some("/tmp/arca-id-y"), || {
+            assert_eq!(FileIdentity::default().path(), Path::new("/tmp/arca-id-y"));
+        });
+    }
+
+    #[test]
+    fn load_surfaces_non_notfound_io_errors() {
+        // a directory where the keyfile should be → read fails with
+        // something other than NotFound → the Io arm, not Ok(None)
+        let dir = tempfile::tempdir().unwrap();
+        let f = FileIdentity::new(dir.path());
+        assert!(f.exists());
+        assert!(matches!(f.load(), Err(IdentityError::Io(_))));
     }
 
     #[test]

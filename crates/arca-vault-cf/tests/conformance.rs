@@ -93,3 +93,51 @@ fn ciphertext_only_on_the_wire() {
         .unwrap();
     assert!(!raw.contains(arca_testkit::FAKE), "wire carried plaintext");
 }
+
+#[test]
+fn malformed_requests_get_wire_errors_not_panics() {
+    // The mock itself is protocol code — bad shapes exercise its
+    // error arms rather than the vault client's.
+    let mock = mocks::vault_wire(TOKEN);
+    let auth = format!("Bearer {TOKEN}");
+    let url = mock.url();
+    let status = |r: Result<ureq::http::Response<ureq::Body>, ureq::Error>| match r {
+        Ok(res) => res.status().as_u16(),
+        Err(ureq::Error::StatusCode(code)) => code,
+        Err(e) => panic!("transport error: {e}"),
+    };
+    // path outside /v1/ → the prefix 404
+    let r = ureq::get(format!("{url}/nope"))
+        .header("Authorization", &auth)
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .call();
+    assert_eq!(status(r), 404);
+    // "/v1/" — empty env segment → 404
+    let r = ureq::get(format!("{url}/v1/"))
+        .header("Authorization", &auth)
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .call();
+    assert_eq!(status(r), 404);
+    // PUT without ciphertext → 400
+    let r = ureq::put(format!("{url}/v1/dev/x/y"))
+        .header("Authorization", &auth)
+        .content_type("application/json")
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send("{}");
+    assert_eq!(status(r), 400);
+    // a method the wire doesn't route → 405
+    let r = ureq::patch(format!("{url}/v1/dev/x/y"))
+        .header("Authorization", &auth)
+        .content_type("application/json")
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send("{}");
+    assert_eq!(status(r), 405);
+}

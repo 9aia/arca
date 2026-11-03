@@ -258,3 +258,41 @@ fn a_body_short_of_content_length_is_an_io_error() {
         .unwrap_err();
     assert!(matches!(e, arca_deploy::DeployError::Io(_)), "{e}");
 }
+
+#[test]
+fn malformed_requests_get_cf_errors_not_panics() {
+    let (mock, _seen) = mocks::cf_secrets_store("acc", "sto", TOKEN);
+    let auth = format!("Bearer {TOKEN}");
+    let url = mock.url().to_string();
+    let base = format!("{url}/accounts/acc/secrets_store/stores/sto/secrets");
+    let status = |r: Result<ureq::http::Response<ureq::Body>, ureq::Error>| match r {
+        Ok(res) => res.status().as_u16(),
+        Err(ureq::Error::StatusCode(code)) => code,
+        Err(e) => panic!("transport error: {e}"),
+    };
+    // PATCH/DELETE an id the store doesn't hold → the 404 arm
+    let r = ureq::patch(format!("{base}/id9999"))
+        .header("Authorization", &auth)
+        .content_type("application/json")
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send("{}");
+    assert_eq!(status(r), 404);
+    let r = ureq::delete(format!("{base}/id9998"))
+        .header("Authorization", &auth)
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .call();
+    assert_eq!(status(r), 404);
+    // a route shape the mock doesn't route → the catch-all 404
+    let r = ureq::put(format!("{base}/id9997"))
+        .header("Authorization", &auth)
+        .content_type("application/json")
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send("{}");
+    assert_eq!(status(r), 404);
+}

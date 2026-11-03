@@ -300,3 +300,37 @@ fn check_reports_unreachable_cf_vault_not_panic() {
     assert_eq!(cloud["ok"], false, "{v}");
     assert!(cloud["error"].is_string(), "{v}");
 }
+
+#[test]
+fn cf_resolution_without_an_explicit_file_notes_the_missing_keyring() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path();
+    init(home);
+    let mock = mocks::vault_wire(TOKEN);
+    let cfg = config(
+        home,
+        &format!(
+            r#"
+            [vaults.cloud]
+            kind = "cf"
+            url = "{}"
+            token_env = "{TOKEN_ENV}"
+
+            [envs]
+            prod = {{ vault = "cloud" }}
+            "#,
+            mock.url()
+        ),
+    );
+    // no ARCA_IDENTITY_FILE — the cf vault's identity resolution
+    // probes the session keyring, fails headless, then falls back
+    // to the file: a note, not a panic.
+    let mut cmd = arca(home, &["--config", cfg.to_str().unwrap(), "list"]);
+    cmd.env_remove("ARCA_IDENTITY_FILE");
+    let o = cmd.output().unwrap();
+    assert!(
+        stderr(&o).contains("no session keyring reachable"),
+        "{}",
+        stderr(&o)
+    );
+}
