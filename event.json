@@ -1,1 +1,1 @@
-{"id":"","ws":"devin-t005","actor":"luis","ts":1793669397,"op":{"op":"write","path":"crates/arca-testkit/src/mocks.rs","blob":"a28057a22fa301c9ebbd8cd984d54d8141a8e852","intent":"post-merge 100% line coverage (T-005)"}}
+{"id":"","ws":"devin-t005","actor":"luis","ts":1793669397,"op":{"op":"write","path":"crates/arca-vault-cf/src/lib.rs","blob":"649caa28e7b11ddb5db766af35e2eb662507b188","intent":"post-merge 100% line coverage (T-005)"}}
