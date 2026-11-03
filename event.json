@@ -1,1 +1,1 @@
-{"id":"","ws":"peregrin-campaign","actor":"luis","ts":1793684564,"op":{"op":"write","path":"arca.toml","blob":"8e97e8357c02863bed286f26e8d5275182843ba5","intent":"peregrin adversarial campaign (T-010)"}}
+{"id":"","ws":"peregrin-campaign","actor":"luis","ts":1793684564,"op":{"op":"write","path":"campaigns/adversarial/main.yaml","blob":"8a7f074ceb4f712ab1cd180314f2af980dbdc0a1","intent":"peregrin adversarial campaign (T-010)"}}
