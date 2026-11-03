@@ -1,7 +1,7 @@
 +++
 id = "I-002"
 title = "shared target-dir xtask collision — wrong repo's xtask binary can run"
-status = "open"
+status = "done"
 created = "2026-10-31"
 priority = "medium"
 +++
@@ -35,3 +35,5 @@ whenever the other repo rebuilds.
       workaround in AGENTS.md
 
 ## Resolution
+
+Fixed on fix/ledger-xtask (commit 0c9fff4): xtask package renamed to arca-xtask (bin + fingerprint key now unique per repo — a bin-only rename would still share .fingerprint/xtask-* with foreign xtask packages). Alias updated to `run --package arca-xtask --`; test CARGO_BIN_EXE env follows; AGENTS.md crate table notes the pkg name. cargo xtask check + 265 tests green.
