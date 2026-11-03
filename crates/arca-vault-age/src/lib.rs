@@ -203,6 +203,13 @@ impl AgeVault {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Payload::default(),
             Err(e) => return Err(e.into()),
         };
+        // F3: loose vault material is a note, never a failure —
+        // the file may not exist yet (a first-run open is an
+        // empty vault) and missing paths simply don't warn.
+        warn_perms(vault_path, false);
+        if let Some(d) = vault_path.parent() {
+            warn_perms(d, true);
+        }
         Ok(AgeVault {
             path: vault_path.to_path_buf(),
             identity,
@@ -287,7 +294,7 @@ impl AgeVault {
         }
         let tmp = self.path.with_extension("age.tmp");
         {
-            let mut f = std::fs::File::create(&tmp)?;
+            let mut f = open_tmp_exclusive(&tmp)?;
             f.write_all(&cipher)?;
             f.sync_all()?;
         }
@@ -331,6 +338,9 @@ impl AgeVault {
         // exist yet on a first write (save creates it too)
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
+            // F3: a vault dir others can read/write is worth a
+            // note — it weakens every file-permission we set
+            warn_perms(parent, true);
         }
         let _lock = VaultLock::acquire(&self.path)?;
         *p = self.read_disk()?;
@@ -339,6 +349,47 @@ impl AgeVault {
             self.save(&p)?;
         }
         Ok(out)
+    }
+}
+
+/// The tmp file's open options — `create_new` is `O_EXCL`:
+/// `File::create` follows symlinks, so a planted `vault.age.tmp`
+/// symlink would redirect the write onto a victim file (F2). On
+/// unix it's `0600` at create — no group/world-readable window
+/// before the post-write chmod.
+fn tmp_open_options() -> std::fs::OpenOptions {
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    opts
+}
+
+/// Open `path` for the tmp write, refusing to follow or clobber
+/// anything already there. The [`VaultLock`] serializes writers,
+/// so an existing tmp is crash debris: a plain file is reclaimed
+/// and retried once (a second `AlreadyExists` means a racer —
+/// the io error surfaces honestly); a symlink or anything exotic
+/// was planted — the save fails rather than touching it (F2).
+fn open_tmp_exclusive(path: &Path) -> Result<std::fs::File, VaultError> {
+    match tmp_open_options().open(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            match std::fs::symlink_metadata(path) {
+                Ok(m) if m.file_type().is_file() => std::fs::remove_file(path)?,
+                _ => {
+                    return Err(VaultError::Backend(format!(
+                        "vault tmp {} exists and isn't a plain file — \
+                         refusing to touch it",
+                        path.display()
+                    )))
+                }
+            }
+            Ok(tmp_open_options().open(path)?)
+        }
+        other => other.map_err(Into::into),
     }
 }
 
@@ -444,6 +495,41 @@ fn data_home() -> PathBuf {
     std::env::var("XDG_DATA_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| home().join(".local/share"))
+}
+
+/// The warning text when `path` is more permissive than vault
+/// material should be — `None` when it's strict enough or doesn't
+/// exist (F3). Files must not exceed `0600`, directories `0700`;
+/// the check is "any bit outside the allowed set", like ssh's
+/// strict-modes rule. Returned (not printed) so tests can assert.
+#[cfg(unix)]
+fn perm_note(path: &Path, is_dir: bool) -> Option<String> {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = std::fs::symlink_metadata(path).ok()?.permissions().mode() & 0o777;
+    let allowed: u32 = if is_dir { 0o700 } else { 0o600 };
+    (mode & !allowed != 0).then(|| {
+        let kind = if is_dir { "directory" } else { "file" };
+        format!(
+            "{kind} {} is group/world-accessible (mode {mode:o}) — \
+             vault material should be {allowed:o}; run \
+             `chmod {allowed:o} {}`",
+            path.display(),
+            path.display()
+        )
+    })
+}
+
+#[cfg(not(unix))]
+fn perm_note(_path: &Path, _is_dir: bool) -> Option<String> {
+    None
+}
+
+/// F3 stderr note — a loose permission is a warning, never a
+/// vault failure.
+fn warn_perms(path: &Path, is_dir: bool) {
+    if let Some(note) = perm_note(path, is_dir) {
+        eprintln!("arca: {note}");
+    }
 }
 
 /// `chmod 0600` — the vault file
@@ -781,6 +867,74 @@ mod tests {
             )
             .unwrap_err();
         assert!(format!("{e:?}").starts_with("Crypto"), "{e}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_tmp_symlink_is_refused_and_stale_tmp_is_reclaimed() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let v_path = dir.path().join("vault.age");
+        let id = x25519::Identity::generate();
+        let v = AgeVault::open(&v_path, id, &[]).unwrap();
+        let r = Ref::new("arca://x/y").unwrap();
+        let tmp = v_path.with_extension("age.tmp");
+
+        // F2: a planted `vault.age.tmp` symlink must never redirect
+        // the write — the save fails, the victim keeps its bytes.
+        let victim = dir.path().join("victim");
+        std::fs::write(&victim, "precious").unwrap();
+        std::os::unix::fs::symlink(&victim, &tmp).unwrap();
+        let e = v.put(&Env::dev(), &r, Secret::new("fake")).unwrap_err();
+        assert!(e.to_string().contains("refusing"), "{e}");
+        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "precious");
+        std::fs::remove_file(&tmp).unwrap();
+
+        // a stale *regular* tmp is crash debris — reclaimed, the
+        // write lands, the tmp name is gone again
+        std::fs::write(&tmp, b"debris").unwrap();
+        v.put(&Env::dev(), &r, Secret::new("fake")).unwrap();
+        assert_eq!(
+            v.get(&Env::dev(), &r).unwrap().unwrap().value.expose(),
+            "fake"
+        );
+        assert!(!tmp.exists());
+        // and the vault file itself lands 0600
+        assert_eq!(
+            std::fs::metadata(&v_path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn loose_vault_permissions_warn_but_still_work() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let v_path = dir.path().join("vault.age");
+        let id = x25519::Identity::generate();
+        let v = AgeVault::open(&v_path, id.clone(), &[]).unwrap();
+        v.put(
+            &Env::dev(),
+            &Ref::new("arca://x/y").unwrap(),
+            Secret::new("f"),
+        )
+        .unwrap();
+        // F3: loosen file + dir → notes exist, opens still work
+        std::fs::set_permissions(&v_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+        let note = perm_note(&v_path, false).unwrap();
+        assert!(note.contains("644"), "{note}");
+        let note = perm_note(dir.path(), true).unwrap();
+        assert!(note.contains("755"), "{note}");
+        let v2 = AgeVault::open(&v_path, id, &[]).unwrap();
+        assert_eq!(v2.list(&Env::dev()).unwrap().len(), 1);
+        // strict paths and missing paths don't warn
+        std::fs::set_permissions(&v_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(perm_note(&v_path, false).is_none());
+        assert!(perm_note(dir.path(), true).is_none());
+        assert!(perm_note(&dir.path().join("nope"), false).is_none());
     }
 
     #[test]

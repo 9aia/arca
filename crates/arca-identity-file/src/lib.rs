@@ -77,6 +77,10 @@ impl IdentitySource for FileIdentity {
                 )))
             }
         };
+        // F3: the keyfile is raw key material — a group/world-
+        // readable file is a stderr note, never a load failure
+        // (ssh's strict-modes posture, non-fatal).
+        warn_perms(&self.path);
         let line = text
             .lines()
             .map(str::trim)
@@ -147,6 +151,35 @@ fn config_home() -> PathBuf {
         .unwrap_or_else(|_| home().join(".config"))
 }
 
+/// The warning text when the keyfile is more permissive than
+/// `0600` — `None` when it's strict enough or missing (F3).
+/// Returned (not printed) so tests can assert on it.
+#[cfg(unix)]
+fn perm_note(path: &Path) -> Option<String> {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = std::fs::symlink_metadata(path).ok()?.permissions().mode() & 0o777;
+    (mode & !0o600 != 0).then(|| {
+        format!(
+            "identity file {} is group/world-accessible (mode {mode:o}) — \
+             run `chmod 600 {}`",
+            path.display(),
+            path.display()
+        )
+    })
+}
+
+#[cfg(not(unix))]
+fn perm_note(_path: &Path) -> Option<String> {
+    None
+}
+
+/// F3 stderr note — a loose keyfile permission warns, never fails.
+fn warn_perms(path: &Path) {
+    if let Some(note) = perm_note(path) {
+        eprintln!("arca: {note}");
+    }
+}
+
 /// `chmod 0600` — the keyfile holds raw key material.
 #[cfg(unix)]
 fn set_private(path: &Path) -> Result<(), IdentityError> {
@@ -188,6 +221,25 @@ mod tests {
                 0o600
             );
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_loose_keyfile_warns_but_still_loads() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let src = FileIdentity::new(dir.path().join("id.txt"));
+        let (_id, created) = arca_identity::ensure(&src).unwrap();
+        assert!(created);
+        // F3: 0644 warns on stderr but the load still succeeds
+        std::fs::set_permissions(src.path(), std::fs::Permissions::from_mode(0o644)).unwrap();
+        let note = perm_note(src.path()).unwrap();
+        assert!(note.contains("644"), "{note}");
+        assert!(src.load().unwrap().is_some());
+        // strict and missing paths are quiet
+        std::fs::set_permissions(src.path(), std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(perm_note(src.path()).is_none());
+        assert!(perm_note(&dir.path().join("nope")).is_none());
     }
 
     #[test]

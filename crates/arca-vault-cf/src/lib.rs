@@ -18,10 +18,14 @@
 //!
 //! - `Authorization: Bearer <token>` — legacy; the token travels on
 //!   every request.
-//! - `Authorization: ArcaHmac <token_id>, <ts>, <sig>` — the token
-//!   *signs* instead of traveling:
-//!   `sig = hex HMAC-SHA256(token, method+"\n"+path+"\n"+ts+"\n"+sha256hex(body))`,
-//!   `ts` unix seconds within a ±60s replay window.
+//! - `Authorization: ArcaHmac <token_id>, <ts>, <nonce>, <sig>` — the
+//!   token *signs* instead of traveling:
+//!   `sig = hex HMAC-SHA256(token, method+"\n"+path+"\n"+ts+"\n"+nonce+"\n"+sha256hex(body))`,
+//!   `ts` unix seconds within a ±60s replay window. The `nonce`
+//!   makes identical requests inside one second sign differently —
+//!   a legit retry isn't a replay against the worker's `used_sig`
+//!   table (the pre-nonce 3-field form stays accepted during
+//!   migration).
 //!
 //! Tokens are scoped per env on the Worker side
 //! (`ARCA_VAULT_TOKENS` maps `token_id → {env → {read, write}}`);
@@ -127,9 +131,10 @@ struct ErrorBody {
 pub enum Auth {
     /// `Bearer <token>` — legacy; the token travels on each request.
     Bearer(String),
-    /// `ArcaHmac <id>, <ts>, <sig>` — the token signs, never travels
-    /// (P-003 phase 2). `id` is the wire `token_id` — the key under
-    /// which the Worker's `ARCA_VAULT_TOKENS` map holds this token.
+    /// `ArcaHmac <id>, <ts>, <nonce>, <sig>` — the token signs,
+    /// never travels (P-003 phase 2). `id` is the wire `token_id` —
+    /// the key under which the Worker's `ARCA_VAULT_TOKENS` map
+    /// holds this token.
     Hmac {
         /// The wire `token_id` (the scoped ref's path, by convention).
         id: String,
@@ -334,7 +339,10 @@ impl CfVault {
 
     /// `Authorization` header value for one request — Bearer
     /// verbatim, or an `ArcaHmac` signature over
-    /// `method\npath\nts\nsha256hex(body)` (wire v2).
+    /// `method\npath\nts\nnonce\nsha256hex(body)` (wire v2). The
+    /// nonce makes a same-second retry a *different* signature —
+    /// without it the worker's used_sig replay guard 401s an
+    /// identical second request (F7).
     fn auth_header(
         &self,
         env: &Env,
@@ -346,9 +354,10 @@ impl CfVault {
             Auth::Bearer(t) => Ok(format!("Bearer {t}")),
             Auth::Hmac { id, secret } => {
                 let ts = unix_ts();
-                let msg = format!("{method}\n{path}\n{ts}\n{}", sha256_hex(body));
+                let nonce = request_nonce();
+                let msg = format!("{method}\n{path}\n{ts}\n{nonce}\n{}", sha256_hex(body));
                 let sig = hex_encode(&hmac_sha256(secret.as_bytes(), msg.as_bytes()));
-                Ok(format!("ArcaHmac {id}, {ts}, {sig}"))
+                Ok(format!("ArcaHmac {id}, {ts}, {nonce}, {sig}"))
             }
         }
     }
@@ -733,6 +742,26 @@ fn unix_ts() -> u64 {
         .unwrap_or(0)
 }
 
+/// The `nonce` field of the ArcaHmac scheme — signed material that
+/// makes two identical requests inside one `ts` second produce
+/// different signatures, so a legit retry isn't a replay (F7). It
+/// is *not* a secret (it travels in the header), only unique:
+/// nanos + pid + a process-local sequence covers cross-process and
+/// same-instant cases without pulling in an entropy dependency.
+fn request_nonce() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!(
+        "{nanos:x}-{:x}-{:x}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
 /// A base URL is trusted with credentials and ciphertext — it must
 /// be `https://`, or `http://` to a loopback host (the test/mock
 /// case). Anything else is a config error: `./arca.toml` is the
@@ -1041,8 +1070,8 @@ mod tests {
         let v = CfVault::with_identity("https://h.invalid", "fake-tok", id.clone(), &[]).unwrap();
         let h = v.auth_header(&Env::dev(), "GET", "/v1/dev", b"").unwrap();
         assert_eq!(h, "Bearer fake-tok");
-        // hmac: header is `ArcaHmac id, ts, sig` and the signature
-        // recomputes over method+path+ts+body-sha
+        // hmac: header is `ArcaHmac id, ts, nonce, sig` and the
+        // signature recomputes over method+path+ts+nonce+body-sha
         let v = CfVault::with_auth(
             "https://h.invalid",
             BTreeMap::from([(
@@ -1066,15 +1095,28 @@ mod tests {
             .split(",")
             .map(|s| s.trim())
             .collect();
-        assert_eq!(parts.len(), 3, "{h}");
+        assert_eq!(parts.len(), 4, "{h}");
         assert_eq!(parts[0], "ops/tok");
         let ts: u64 = parts[1].parse().unwrap();
         assert!(ts > 0);
+        assert!(!parts[2].is_empty(), "nonce present");
         let expect = hex_encode(&hmac_sha256(
             b"fake-secret",
-            format!("PUT\n/v1/dev/a/b\n{}\n{}", parts[1], sha256_hex(b"{}")).as_bytes(),
+            format!(
+                "PUT\n/v1/dev/a/b\n{}\n{}\n{}",
+                parts[1],
+                parts[2],
+                sha256_hex(b"{}")
+            )
+            .as_bytes(),
         ));
-        assert_eq!(parts[2], expect);
+        assert_eq!(parts[3], expect);
+        // a second header in the same second carries a different
+        // nonce → a different signature (F7: retry ≠ replay)
+        let h2 = v
+            .auth_header(&Env::dev(), "PUT", "/v1/dev/a/b", b"{}")
+            .unwrap();
+        assert_ne!(h, h2);
         // an env with no scoped cred and no fallback → config error
         let e = v
             .auth_header(&Env::new("prod").unwrap(), "GET", "/v1/prod", b"")
