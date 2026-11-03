@@ -1,1 +1,1 @@
-{"id":"","ws":"peregrin-campaign","actor":"luis","ts":1793683707,"op":{"op":"claim","glob":"docs/**","ttl_secs":3600}}
+{"id":"","ws":"peregrin-campaign","actor":"luis","ts":1793684564,"op":{"op":"write","path":"README.md","blob":"704abb17c3c236de7f53e0767040dc521c3ce81e","intent":"peregrin adversarial campaign (T-010)"}}
