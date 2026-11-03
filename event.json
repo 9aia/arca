@@ -1,1 +1,1 @@
-{"id":"","ws":"fix-ledger-xtask","actor":"luis","ts":1793684768,"op":{"op":"claim","glob":"xtask/**","ttl_secs":3600}}
+{"id":"","ws":"fix-ledger-xtask","actor":"luis","ts":1793684768,"op":{"op":"claim","glob":".cargo/**","ttl_secs":3600}}
