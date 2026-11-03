@@ -19,7 +19,10 @@ fn arca(home: &Path, args: &[&str]) -> Command {
         .env_remove("ARCA_CONFIG")
         .env_remove("ARCA_ENV")
         .env_remove("ARCA_ACTOR")
-        .env("ARCA_IDENTITY_FILE", home.join("xdg-config/arca/identity.txt"));
+        .env(
+            "ARCA_IDENTITY_FILE",
+            home.join("xdg-config/arca/identity.txt"),
+        );
     c
 }
 

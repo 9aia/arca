@@ -29,7 +29,7 @@ use arca_identity_file::FileIdentity;
 use arca_identity_keyring::KeyringIdentity;
 use arca_vault::{SecretRecord, Vault};
 use arca_vault_age::AgeVault;
-use arca_vault_cf::CfVault;
+use arca_vault_cf::{Auth as CfAuth, CfVault, CfVaultConfig};
 
 /// Knobs for [`Ops::load`] — the global CLI flags, resolved.
 #[derive(Debug, Default)]
@@ -102,6 +102,19 @@ pub struct DeployReport {
     pub secret_name: String,
     /// `true` when the sink created a new entry (else updated).
     pub created: bool,
+}
+
+/// What `migrate --private-refs` rewrote in one env's keyspace.
+#[derive(Debug)]
+pub struct MigrateReport {
+    /// The `[vaults]` name the env routes to.
+    pub vault: String,
+    /// The env whose rows were rewritten.
+    pub env: Env,
+    /// Refs re-keyed (plaintext key → derived ref_key).
+    pub rewritten: Vec<Ref>,
+    /// Records that already carried a `name` blob (skipped).
+    pub already_private: usize,
 }
 
 /// What `check` reports about one declared `[secrets]` entry.
@@ -235,18 +248,135 @@ impl Ops {
                 // invariant rather than guarding a reachable path.
                 #[allow(clippy::unwrap_used)]
                 let c = cfg.expect("kind cf implies a configured vault");
-                let url = c.url.as_deref().ok_or_else(|| {
-                    OpsError::Config(format!("[vaults.{name}] kind cf needs a `url`"))
-                })?;
-                let token_env = c.token_env.as_deref().unwrap_or("ARCA_CF_TOKEN");
-                let identity = self.resolve_identity(cfg)?;
-                let v = CfVault::new(url, token_env, identity, &c.recipients)?;
+                let v = self.open_cf_vault(name, c)?;
                 Ok(Box::new(v))
             }
             other => Err(OpsError::Config(format!(
                 "vault {name:?} has unknown kind {other:?} (have: age, cf)"
             ))),
         }
+    }
+
+    /// Build the concrete [`CfVault`] for a configured
+    /// `[vaults.<name>] kind = "cf"` — scoped token refs resolved,
+    /// identity resolved through the `arca-identity` port,
+    /// `private_refs` carried through. Used by both
+    /// `open_vault_named` and `migrate` (which needs the concrete
+    /// type, not the port).
+    fn open_cf_vault(&self, name: &str, c: &arca_core::VaultConfig) -> Result<CfVault, OpsError> {
+        let url = c
+            .url
+            .as_deref()
+            .ok_or_else(|| OpsError::Config(format!("[vaults.{name}] kind cf needs a `url`")))?;
+        let scoped = self.scoped_tokens(name, &c.tokens)?;
+        let identity = self.resolve_identity(Some(c))?;
+        let v = CfVault::new(&CfVaultConfig {
+            url: url.to_string(),
+            token_env: Some(
+                c.token_env
+                    .clone()
+                    .unwrap_or_else(|| "ARCA_CF_TOKEN".into()),
+            ),
+            scoped,
+            identity,
+            extra_recipients: c.recipients.clone(),
+            private_refs: c.private_refs,
+        })?;
+        Ok(v)
+    }
+
+    /// Resolve `[vaults.<name>.tokens]` — every `arca://` ref is a
+    /// *token ref*: the token itself lives as a secret in the
+    /// `local` vault, under the env the entry scopes. The ref path
+    /// (env pin stripped) is the wire `token_id`; the stored value
+    /// is the HMAC secret, so the client sends `ArcaHmac`
+    /// signatures — the token never travels (P-003 phase 2).
+    /// Each resolution is a materialization and is audited as such.
+    fn scoped_tokens(
+        &self,
+        vault_name: &str,
+        tokens: &BTreeMap<Env, Ref>,
+    ) -> Result<BTreeMap<String, CfAuth>, OpsError> {
+        let mut out = BTreeMap::new();
+        if tokens.is_empty() {
+            return Ok(out);
+        }
+        if self
+            .config
+            .vault_config(arca_core::config::LOCAL_VAULT)
+            .map(|c| c.kind.as_str())
+            == Some("cf")
+        {
+            return Err(OpsError::Config(format!(
+                "[vaults.{vault_name}.tokens] resolve against the local vault, \
+                 but [vaults.local] is itself kind \"cf\" — move the tokens \
+                 or the loop never terminates"
+            )));
+        }
+        let local = self.open_vault_named(arca_core::config::LOCAL_VAULT)?;
+        for (env, rref) in tokens {
+            let bare = rref
+                .env_pin(|s| self.config.is_known_env(s))
+                .map(|(_, r)| r)
+                .unwrap_or_else(|| rref.clone());
+            let rec = local.get(env, &bare)?.ok_or_else(|| {
+                OpsError::Config(format!(
+                    "[vaults.{vault_name}.tokens.{env}] → {rref} is not stored \
+                     in the local vault env {env}"
+                ))
+            })?;
+            self.audit(Op::Get, &bare, env);
+            out.insert(
+                env.as_str().to_string(),
+                CfAuth::Hmac {
+                    id: bare.path(),
+                    secret: rec.value.expose().to_string(),
+                },
+            );
+        }
+        Ok(out)
+    }
+
+    /// `arca migrate --private-refs` — re-key every plaintext-named
+    /// row under its derived ref_key, in each env that routes to a
+    /// cf vault with `private_refs = true` (P-004). Deliberate, not
+    /// ambient: when nothing qualifies, that's a config error with
+    /// a pointer, not a silent no-op.
+    pub fn migrate_private_refs(&self) -> Result<Vec<MigrateReport>, OpsError> {
+        let mut reports = Vec::new();
+        let mut saw_cf = false;
+        for env in self.config.envs.keys() {
+            let name = self.config.vault_for(env);
+            let cfg = match self.config.vault_config(name) {
+                Some(c) if c.kind == "cf" => c,
+                _ => continue,
+            };
+            saw_cf = true;
+            if !cfg.private_refs {
+                continue;
+            }
+            let vault = self.open_cf_vault(name, cfg)?;
+            let rep = vault.migrate_private_refs(env)?;
+            for r in &rep.rewritten {
+                self.audit(Op::Migrate, r, env);
+            }
+            reports.push(MigrateReport {
+                vault: name.to_string(),
+                env: env.clone(),
+                rewritten: rep.rewritten,
+                already_private: rep.already_private,
+            });
+        }
+        if reports.is_empty() {
+            let msg = if saw_cf {
+                "no routed cf vault has `private_refs = true` — \
+                 enable it in [vaults.*] before migrating"
+            } else {
+                "no cf vault is routed in [envs] — nothing to migrate"
+            };
+            return Err(OpsError::Config(msg.into()));
+        }
+        Ok(reports)
     }
 
     /// Open a `[deploy.<name>]` sink — write-only push targets,
@@ -664,6 +794,14 @@ impl Ops {
             if v.kind == "cf" && v.url.is_none() {
                 problems.push(format!("[vaults.{name}] kind cf needs a `url`"));
             }
+            if v.private_refs && v.kind != "cf" {
+                problems.push(format!(
+                    "[vaults.{name}] private_refs only applies to kind \"cf\""
+                ));
+            }
+            if !v.tokens.is_empty() && v.kind != "cf" {
+                problems.push(format!("[vaults.{name}] tokens only apply to kind \"cf\""));
+            }
         }
         for (name, d) in &self.config.deploy {
             if d.kind != "cf-secrets-store" {
@@ -963,6 +1101,8 @@ mod tests {
                 recipients: vec![],
                 url: None,
                 token_env: None,
+                tokens: BTreeMap::new(),
+                private_refs: false,
             },
         );
         config.secrets.insert(
@@ -1011,6 +1151,8 @@ mod tests {
             recipients: vec![],
             url: url.map(str::to_string),
             token_env: None,
+            tokens: BTreeMap::new(),
+            private_refs: false,
         }
     }
 
@@ -1803,6 +1945,152 @@ mod tests {
                 assert_eq!(info.identity_backend, "file");
                 assert!(!info.migrated);
             });
+        });
+    }
+
+    /// A `local` age vault + cf vault on `mock`, both under one
+    /// identity in a tempdir. `tokens` seeds the local vault's
+    /// `dev` keyspace.
+    fn ops_on_cf_v2(url: &str, tokens: &[&str], private_refs: bool) -> (tempfile::TempDir, Ops) {
+        let home = tempfile::tempdir().unwrap();
+        let id_path = write_identity(home.path());
+        let identity = FileIdentity::new(&id_path).load().unwrap().unwrap();
+        let vault_path = home.path().join("vault.age");
+        let local = AgeVault::open(&vault_path, identity, &[]).unwrap();
+        for r in tokens {
+            Vault::put(
+                &local,
+                &Env::dev(),
+                &Ref::new(r).unwrap(),
+                Secret::new("fake-token-value"),
+            )
+            .unwrap();
+        }
+        let mut config = Config::default();
+        let mut local_cfg = vault_cfg("age", None);
+        local_cfg.path = Some(vault_path.to_string_lossy().into_owned());
+        local_cfg.identity = Some(id_path.to_string_lossy().into_owned());
+        config.vaults.insert("local".into(), local_cfg);
+        let mut cf = vault_cfg("cf", Some(url));
+        cf.identity = Some(id_path.to_string_lossy().into_owned());
+        cf.private_refs = private_refs;
+        config.vaults.insert("cloud".into(), cf);
+        config.envs.insert(Env::dev(), "cloud".into());
+        (home, mk_ops(config))
+    }
+
+    #[test]
+    fn scoped_tokens_sign_requests_from_local_vault_secrets() {
+        use arca_testkit::mocks::{self, ScopedToken};
+        let tokens = &[ScopedToken {
+            id: "ops/cf-token-dev",
+            secret: "fake-token-value",
+            scopes: &[("dev", true, true)],
+        }];
+        let mock = mocks::vault_wire_v2(tokens, None);
+        let (_h, mut ops) = ops_on_cf_v2(mock.url(), &["arca://ops/cf-token-dev"], false);
+        // wire the [vaults.cloud.tokens] table at the ref
+        ops.config
+            .vaults
+            .get_mut("cloud")
+            .unwrap()
+            .tokens
+            .insert(Env::dev(), Ref::new("arca://ops/cf-token-dev").unwrap());
+        // every verb on dev authenticates ArcaHmac — the mock
+        // verifies the signature against the local-vault secret.
+        temp_env::with_var_unset("ARCA_CF_TOKEN", || {
+            let r = Ref::new("arca://x/y").unwrap();
+            ops.put(&r, Secret::new("fake")).unwrap();
+            assert!(ops.get(&r).unwrap().is_some());
+            let (_, refs) = ops.list(None).unwrap();
+            assert_eq!(refs, vec![Ref::new("arca://x/y").unwrap()]);
+            assert!(ops.rm(&r).unwrap());
+        });
+        // a token ref the local vault doesn't hold → config error
+        ops.config.vaults.get_mut("cloud").unwrap().tokens.insert(
+            Env::new("prod").unwrap(),
+            Ref::new("arca://ops/not-there").unwrap(),
+        );
+        let e = ops.open_vault_named("cloud").err().unwrap().to_string();
+        assert!(e.contains("not stored"), "{e}");
+    }
+
+    #[test]
+    fn migrate_private_refs_via_ops() {
+        use arca_testkit::mocks;
+        let mock = mocks::vault_wire("ops-fake-token");
+        // private_refs off at first → rows land as plaintext keys.
+        let (_h, mut ops) = ops_on_cf_v2(mock.url(), &[], false);
+        temp_env::with_var("ARCA_CF_TOKEN", Some("ops-fake-token"), || {
+            let r = Ref::new("arca://a/b").unwrap();
+            ops.put(&r, Secret::new("fake")).unwrap();
+            // flip the vault to private_refs and migrate — the row
+            // is re-keyed and its name blob sealed to the same
+            // identity, so the value still decrypts end-to-end.
+            ops.config.vaults.get_mut("cloud").unwrap().private_refs = true;
+            let reports = ops.migrate_private_refs().unwrap();
+            assert_eq!(reports.len(), 1);
+            assert_eq!(reports[0].env.as_str(), "dev");
+            assert_eq!(reports[0].vault, "cloud");
+            assert_eq!(reports[0].rewritten, vec![Ref::new("arca://a/b").unwrap()]);
+            assert_eq!(reports[0].already_private, 0);
+            let (_, refs) = ops.list(None).unwrap();
+            assert_eq!(refs, vec![r.clone()]);
+            assert_eq!(ops.get(&r).unwrap().unwrap().value.expose(), "fake");
+        });
+    }
+
+    #[test]
+    fn migrate_errors_without_a_qualifying_cf_vault() {
+        // no cf vault routed at all
+        let ops = mk_ops(Config::default());
+        let e = ops.migrate_private_refs().unwrap_err().to_string();
+        assert!(e.contains("nothing to migrate"), "{e}");
+        // cf routed but private_refs off
+        let mut config = Config::default();
+        config
+            .vaults
+            .insert("cloud".into(), vault_cfg("cf", Some("http://x")));
+        config.envs.insert(Env::dev(), "cloud".into());
+        let ops = mk_ops(config);
+        let e = ops.migrate_private_refs().unwrap_err().to_string();
+        assert!(e.contains("private_refs"), "{e}");
+    }
+
+    #[test]
+    fn cf_tokens_cant_resolve_against_a_cf_local() {
+        // [vaults.local] as cf + tokens on another cf vault → the
+        // loop guard fires instead of recursing.
+        let mut config = Config::default();
+        config
+            .vaults
+            .insert("local".into(), vault_cfg("cf", Some("http://x")));
+        let mut cf = vault_cfg("cf", Some("http://y"));
+        cf.tokens
+            .insert(Env::dev(), Ref::new("arca://ops/tok").unwrap());
+        config.vaults.insert("cloud".into(), cf);
+        let ops = mk_ops(config);
+        let e = ops.open_vault_named("cloud").err().unwrap().to_string();
+        assert!(e.contains("itself kind"), "{e}");
+    }
+
+    #[test]
+    fn check_flags_cf_only_fields_on_other_kinds() {
+        let mut config = Config::default();
+        let mut v = vault_cfg("age", None);
+        v.private_refs = true;
+        config.vaults.insert("local".into(), v);
+        let mut v2 = vault_cfg("age", None);
+        v2.tokens
+            .insert(Env::dev(), Ref::new("arca://ops/tok").unwrap());
+        config.vaults.insert("other".into(), v2);
+        let ops = mk_ops(config);
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            let report = ops.check();
+            let has = |n: &str| report.problems.iter().any(|p| p.contains(n));
+            assert!(has("private_refs only applies"), "{:?}", report.problems);
+            assert!(has("tokens only apply"), "{:?}", report.problems);
         });
     }
 }

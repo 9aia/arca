@@ -327,7 +327,9 @@ version = "0.1.0"
 dependencies = [
  "arca-core",
  "arca-vault",
+ "hmac",
  "serde_json",
+ "sha2 0.10.9",
  "time",
 ]
 
@@ -384,8 +386,10 @@ dependencies = [
  "arca-testkit",
  "arca-vault",
  "base64 0.23.1",
+ "hmac",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "temp-env",
  "tempfile",
  "time",

@@ -114,6 +114,20 @@ pub struct VaultConfig {
     /// the token *name* lives in config, the token *value* only in
     /// the process env.
     pub token_env: Option<String>,
+    /// Per-env scoped credentials (`cf` impl, P-003): env → the
+    /// `arca://` ref of a token stored in the `local` vault. Each
+    /// resolved token authenticates as `ArcaHmac <ref-path>, ts,
+    /// sig` — the ref path is the wire `token_id`. Token *refs*
+    /// live in config, never token values.
+    #[serde(default)]
+    pub tokens: BTreeMap<Env, Ref>,
+    /// Opt-in private ref metadata (`cf` impl, P-004): storage keys
+    /// become HMAC-derived hex and every record carries an
+    /// age-encrypted `name` blob, so the remote store can't see
+    /// which secrets exist. Default false; `arca migrate
+    /// --private-refs` rewrites existing rows.
+    #[serde(default)]
+    pub private_refs: bool,
 }
 
 fn default_kind() -> String {
@@ -291,6 +305,8 @@ mod tests {
             cfg.vaults["cloud"].token_env.as_deref(),
             Some("ARCA_CF_TOKEN")
         );
+        assert!(cfg.vaults["cloud"].tokens.is_empty());
+        assert!(!cfg.vaults["cloud"].private_refs);
         let d = &cfg.deploy["prod"];
         assert_eq!(d.kind, "cf-secrets-store");
         assert!(d.account_id.is_some() && d.token_env.is_none());
@@ -299,6 +315,32 @@ mod tests {
         assert!(g.allows(Op::Run));
         assert!(g.allows(Op::List));
         assert!(!g.allows(Op::Get));
+    }
+
+    #[test]
+    fn cf_tokens_and_private_refs_parse() {
+        let text = r#"
+            [vaults.cloud]
+            kind = "cf"
+            url = "https://arca-vault.example.workers.dev"
+            private_refs = true
+
+            [vaults.cloud.tokens]
+            dev = "arca://ops/cf-token-dev"
+            prod = "arca://ops/cf-token-prod"
+        "#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        let cloud = &cfg.vaults["cloud"];
+        assert!(cloud.private_refs);
+        assert_eq!(cloud.tokens.len(), 2);
+        assert_eq!(
+            cloud
+                .tokens
+                .get(&Env::new("prod").unwrap())
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("arca://ops/cf-token-prod")
+        );
     }
 
     #[test]

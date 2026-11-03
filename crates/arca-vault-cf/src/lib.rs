@@ -2,53 +2,85 @@
 //!
 //! A [`Vault`] over HTTPS: a self-hosted Worker (source in
 //! `worker/`) fronts a D1 table of opaque rows —
-//! `(env, ref) → {ciphertext, version, created_at, rotated_at}`.
-//! **The Worker never sees plaintext.** Each value is age-encrypted
-//! client-side to the configured recipients *before* it leaves the
-//! process; the store holds and returns base64 ciphertext only.
-//! This is the same crypto boundary as `arca-vault-age` (ADR-0001)
-//! — a remote store is just a different persistence medium — but
-//! with *per-secret* ciphertext so rows map 1:1 to D1.
+//! `(env, key) → {ciphertext, name, version, created_at,
+//! rotated_at}`. **The Worker never sees plaintext.** Each value is
+//! age-encrypted client-side to the configured recipients *before*
+//! it leaves the process; the store holds and returns base64
+//! ciphertext only. This is the same crypto boundary as
+//! `arca-vault-age` (ADR-0001) — a remote store is just a different
+//! persistence medium — but with *per-secret* ciphertext so rows
+//! map 1:1 to D1.
 //!
-//! ## Wire protocol (`arca-vault-cf/1`)
+//! ## Wire protocol (`arca-vault-cf/2`)
 //!
-//! Bearer auth on every request: `Authorization: Bearer <token>`,
-//! the token read from the env var named by `token_env` in config —
-//! never inline.
+//! Two auth schemes; the Worker accepts both during migration
+//! (P-003):
+//!
+//! - `Authorization: Bearer <token>` — legacy; the token travels on
+//!   every request.
+//! - `Authorization: ArcaHmac <token_id>, <ts>, <sig>` — the token
+//!   *signs* instead of traveling:
+//!   `sig = hex HMAC-SHA256(token, method+"\n"+path+"\n"+ts+"\n"+sha256hex(body))`,
+//!   `ts` unix seconds within a ±60s replay window.
+//!
+//! Tokens are scoped per env on the Worker side
+//! (`ARCA_VAULT_TOKENS` maps `token_id → {env → {read, write}}`);
+//! config carries `arca://` refs resolved into values before the
+//! vault is built — never inline tokens.
 //!
 //! | Verb | Path | Body → Response |
 //! | --- | --- | --- |
-//! | `GET` | `/v1/{env}` | `{"refs": ["a/b", …]}` sorted |
-//! | `GET` | `/v1/{env}/{ref}` | `{"ciphertext": "<b64>", "version": n, "created_at": rfc3339, "rotated_at": rfc3339\|null}` |
-//! | `PUT` | `/v1/{env}/{ref}` | `{"ciphertext": "<b64>", "rotate": bool}` → record metadata; `rotate:true` on a missing ref → 404 |
-//! | `DELETE` | `/v1/{env}/{ref}` | `{"removed": bool}` |
+//! | `GET` | `/v1/{env}` | `{"refs": [{"key": "a/b", "name": blob\|null}, …]}` |
+//! | `GET` | `/v1/{env}/{key}` | `{"ciphertext": "<b64>", "name": blob\|null, "version": n, "created_at": rfc3339, "rotated_at": rfc3339\|null}` |
+//! | `PUT` | `/v1/{env}/{key}` | `{"ciphertext": "<b64>", "name": blob\|null, "rotate": bool}` → record metadata; `rotate:true` on a missing key → 404 |
+//! | `DELETE` | `/v1/{env}/{key}` | `{"removed": bool}` |
 //!
-//! `{ref}` is the bare ref path (`billing/stripe`) — both sides
-//! split on `/`. Errors are `{"error": "…"}` with a non-2xx status.
+//! `{key}` is the storage key: the bare ref path (`billing/stripe`)
+//! or — with `private_refs` (P-004) — `hex HMAC-SHA256(k, env+"/"+ref)`
+//! where `k` is derived from the age identity. Private rows carry a
+//! `name` blob (age ciphertext of the real ref) so `list` can map
+//! keys back; a store compromise then yields ciphertext and opaque
+//! hex, not which secrets exist.
+//!
 //! Bookkeeping is **server-side**: the Worker bumps `version`,
 //! preserves `created_at`, and stamps `rotated_at` on rotate, so
 //! concurrent writers can't race client-computed versions.
 //!
 //! HTTP uses `ureq` (blocking, no async runtime) per AGENTS.md.
 
+use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::str::FromStr;
 use std::time::Duration;
 
+use age::secrecy::ExposeSecret;
 use age::x25519;
 use arca_core::{Env, Ref, Secret};
 use arca_vault::{SecretRecord, Vault, VaultError};
 use base64::Engine;
+use hmac::{Hmac, Mac};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 use ureq::Agent;
 
+/// HMAC-SHA256 — request signing (P-003) and ref_key derivation
+/// (P-004).
+type HmacSha256 = Hmac<Sha256>;
+
+/// Domain label for the private-refs derivation — a versioned tag
+/// so derived keys can't be confused with any other use of the
+/// identity's key material.
+const PRIVATE_REFS_DOMAIN: &[u8] = b"arca-cf/private-refs/v1";
+
 /// One row of the wire protocol — `ciphertext` present only on the
-/// single-record GET.
+/// single-record GET, `name` is the private-refs blob (`null` on
+/// plain rows).
 #[derive(Debug, Deserialize)]
 struct Row {
-    #[serde(default)]
     ciphertext: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
     version: u64,
     #[serde(with = "time::serde::rfc3339")]
     created_at: OffsetDateTime,
@@ -56,9 +88,20 @@ struct Row {
     rotated_at: Option<OffsetDateTime>,
 }
 
+/// One `refs` entry — untagged so a v1 worker's bare-string shape
+/// still parses.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ListItem {
+    /// wire v1 shape — the bare ref path.
+    Plain(String),
+    /// wire v2 — storage key plus the private-refs name blob.
+    Keyed { key: String, name: Option<String> },
+}
+
 #[derive(Debug, Deserialize)]
 struct ListBody {
-    refs: Vec<String>,
+    refs: Vec<ListItem>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,52 +114,157 @@ struct ErrorBody {
     error: Option<String>,
 }
 
+/// How the client authenticates a request.
+#[derive(Debug, Clone)]
+pub enum Auth {
+    /// `Bearer <token>` — legacy; the token travels on each request.
+    Bearer(String),
+    /// `ArcaHmac <id>, <ts>, <sig>` — the token signs, never travels
+    /// (P-003 phase 2). `id` is the wire `token_id` — the key under
+    /// which the Worker's `ARCA_VAULT_TOKENS` map holds this token.
+    Hmac {
+        /// The wire `token_id` (the scoped ref's path, by convention).
+        id: String,
+        /// The token secret — the HMAC key. Never on the wire.
+        secret: String,
+    },
+}
+
+/// A resolved cf-vault configuration — mirrors `[vaults.<name>]
+/// kind = "cf"` after ops has resolved `arca://` token refs into
+/// credential values (no refs, no plaintext tokens in config).
+pub struct CfVaultConfig {
+    /// Worker base URL, e.g. `https://arca-vault.you.workers.dev`.
+    pub url: String,
+    /// Env var holding the legacy bearer token — the fallback
+    /// credential. The *name* is config; the value is process env.
+    pub token_env: Option<String>,
+    /// Credentials by env name (`"*"` is the fallback for unscoped
+    /// envs) — token values already resolved.
+    pub scoped: BTreeMap<String, Auth>,
+    /// The already-resolved age identity the vault decrypts with —
+    /// where it lives (keyfile or keyring) is the `arca-identity`
+    /// port's business; ops resolves it before building this
+    /// config (the same contract as `AgeVault::open`).
+    pub identity: x25519::Identity,
+    /// Extra `age1…` recipients encrypted to alongside the identity.
+    pub extra_recipients: Vec<String>,
+    /// P-004: derive storage keys + carry name blobs.
+    pub private_refs: bool,
+}
+
+// `x25519::Identity` isn't `Debug` and shouldn't print anyway —
+// the Debug impl shows its public recipient instead.
+impl std::fmt::Debug for CfVaultConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CfVaultConfig")
+            .field("url", &self.url)
+            .field("token_env", &self.token_env)
+            .field("scoped", &self.scoped)
+            .field("identity", &self.identity.to_public())
+            .field("extra_recipients", &self.extra_recipients)
+            .field("private_refs", &self.private_refs)
+            .finish()
+    }
+}
+
+/// What [`CfVault::migrate_private_refs`] did.
+#[derive(Debug, Default)]
+pub struct MigrateReport {
+    /// Refs re-keyed (plaintext key → derived ref_key).
+    pub rewritten: Vec<Ref>,
+    /// Records already private (a `name` blob was present).
+    pub already_private: usize,
+}
+
 /// A [`Vault`] backed by the Worker + D1 service.
 pub struct CfVault {
     agent: Agent,
     base: String,
-    auth: String,
+    /// env name (or `"*"` fallback) → credential.
+    auth: BTreeMap<String, Auth>,
     identity: x25519::Identity,
     recipients: Vec<x25519::Recipient>,
+    /// Derived only when `private_refs` is on — `HMAC(identity,
+    /// PRIVATE_REFS_DOMAIN)`, the PRF key for storage keys.
+    private_key: Option<[u8; 32]>,
 }
 
 impl CfVault {
-    /// Build a vault from config values: `url` is the Worker base
-    /// (no trailing slash needed), `token_env` names the env var
-    /// holding the bearer token, `identity` the already-resolved
-    /// age identity used to decrypt (where it lives — keyfile or
-    /// keyring — is the `arca-identity` port's business),
-    /// `extra_recipients` extra `age1…` keys encrypted to alongside
-    /// the identity's public key.
+    /// Build a vault from resolved config values. Construction does
+    /// **no** network I/O — the first verb does.
     ///
-    /// Construction does **no** network I/O — the first verb does.
-    pub fn new(
-        url: &str,
-        token_env: &str,
-        identity: x25519::Identity,
-        extra_recipients: &[String],
-    ) -> Result<Self, VaultError> {
-        let token = std::env::var(token_env).map_err(|_| {
-            VaultError::Config(format!(
-                "env var {token_env} is unset — cf vault tokens come via env, never config"
-            ))
-        })?;
-        if token.is_empty() {
-            return Err(VaultError::Config(format!(
-                "env var {token_env} is empty — cf vault tokens come via env, never config"
-            )));
+    /// `token_env` names the env var holding the legacy bearer
+    /// token; when set but empty that's a config error, and when
+    /// unset it errors *only* if `scoped` is empty too (scoped
+    /// tokens can be the whole credential set). `cfg.identity` is
+    /// the already-resolved age identity — where it lives is the
+    /// `arca-identity` port's business.
+    pub fn new(cfg: &CfVaultConfig) -> Result<Self, VaultError> {
+        let mut auth = cfg.scoped.clone();
+        if let Some(var) = &cfg.token_env {
+            match std::env::var(var) {
+                Ok(t) if t.is_empty() => {
+                    return Err(VaultError::Config(format!(
+                        "env var {var} is empty — cf vault tokens come via env, never config"
+                    )));
+                }
+                Ok(t) => {
+                    auth.insert("*".into(), Auth::Bearer(t));
+                }
+                Err(_) if auth.is_empty() => {
+                    return Err(VaultError::Config(format!(
+                        "env var {var} is unset — cf vault tokens come via env, never config"
+                    )));
+                }
+                Err(_) => {} // scoped creds cover every env — no fallback needed
+            }
         }
-        Self::with_identity(url, &token, identity, extra_recipients)
+        if auth.is_empty() {
+            return Err(VaultError::Config(
+                "cf vault has no credentials — set token_env or [vaults.*.tokens]".into(),
+            ));
+        }
+        Self::with_auth(
+            &cfg.url,
+            auth,
+            cfg.identity.clone(),
+            &cfg.extra_recipients,
+            cfg.private_refs,
+        )
     }
 
-    /// Build from an already-parsed identity + token — the test and
-    /// embedding path; `new` is the config path.
+    /// Build from an already-parsed identity + a single bearer
+    /// token — the test and embedding path.
     pub fn with_identity(
         url: &str,
         token: &str,
         identity: x25519::Identity,
         extra_recipients: &[String],
     ) -> Result<Self, VaultError> {
+        Self::with_auth(
+            url,
+            BTreeMap::from([("*".to_string(), Auth::Bearer(token.to_string()))]),
+            identity,
+            extra_recipients,
+            false,
+        )
+    }
+
+    /// Full constructor: credential map + private-refs flag.
+    /// `auth` keys are env names; `"*"` is the fallback.
+    pub fn with_auth(
+        url: &str,
+        auth: BTreeMap<String, Auth>,
+        identity: x25519::Identity,
+        extra_recipients: &[String],
+        private_refs: bool,
+    ) -> Result<Self, VaultError> {
+        if auth.is_empty() {
+            return Err(VaultError::Config(
+                "cf vault has no credentials — set token_env or [vaults.*.tokens]".into(),
+            ));
+        }
         let mut recipients = vec![identity.to_public()];
         for r in extra_recipients {
             recipients.push(
@@ -124,6 +272,7 @@ impl CfVault {
                     .map_err(|e| VaultError::Config(format!("invalid recipient {r:?}: {e}")))?,
             );
         }
+        let private_key = private_refs.then(|| derive_private_key(&identity));
         let agent: Agent = Agent::config_builder()
             .timeout_global(Some(Duration::from_secs(15)))
             .build()
@@ -131,16 +280,76 @@ impl CfVault {
         Ok(CfVault {
             agent,
             base: url.trim_end_matches('/').to_string(),
-            auth: format!("Bearer {token}"),
+            auth,
             identity,
             recipients,
+            private_key,
         })
     }
 
-    /// `{base}/v1/{env}/{ref}` — ref segments are URL-safe by the
-    /// `Ref` grammar (`[A-Za-z0-9._-]`), no escaping needed.
-    fn item_url(&self, env: &Env, rref: &Ref) -> String {
-        format!("{}/v1/{}/{}", self.base, env.as_str(), rref.path())
+    /// The credential for `env` — a scoped entry wins over the
+    /// `"*"` fallback; neither is a config error.
+    fn cred_for(&self, env: &Env) -> Result<&Auth, VaultError> {
+        self.auth
+            .get(env.as_str())
+            .or_else(|| self.auth.get("*"))
+            .ok_or_else(|| {
+                VaultError::Config(format!(
+                    "no cf token scoped for env {env} — add a [vaults.*.tokens] \
+                     entry or a fallback token_env",
+                    env = env.as_str()
+                ))
+            })
+    }
+
+    /// `Authorization` header value for one request — Bearer
+    /// verbatim, or an `ArcaHmac` signature over
+    /// `method\npath\nts\nsha256hex(body)` (wire v2).
+    fn auth_header(
+        &self,
+        env: &Env,
+        method: &str,
+        path: &str,
+        body: &[u8],
+    ) -> Result<String, VaultError> {
+        match self.cred_for(env)? {
+            Auth::Bearer(t) => Ok(format!("Bearer {t}")),
+            Auth::Hmac { id, secret } => {
+                let ts = unix_ts();
+                let msg = format!("{method}\n{path}\n{ts}\n{}", sha256_hex(body));
+                let sig = hex_encode(&hmac_sha256(secret.as_bytes(), msg.as_bytes()));
+                Ok(format!("ArcaHmac {id}, {ts}, {sig}"))
+            }
+        }
+    }
+
+    /// The storage key for `rref` in `env`: the ref path, or the
+    /// private-refs `ref_key` — `hex HMAC-SHA256(k, env+"/"+ref)`,
+    /// one 64-hex segment, opaque to the store (P-004).
+    fn storage_key(&self, env: &Env, rref: &Ref) -> String {
+        match &self.private_key {
+            Some(key) => hex_encode(&hmac_sha256(
+                key,
+                format!("{}/{}", env.as_str(), rref.path()).as_bytes(),
+            )),
+            None => rref.path(),
+        }
+    }
+
+    /// `{base}/v1/{env}/{key}` — ref segments and derived keys are
+    /// URL-safe by construction (`[A-Za-z0-9._-]` / hex), no
+    /// escaping needed.
+    fn item_url(&self, env: &Env, key: &str) -> String {
+        format!("{}/v1/{}/{}", self.base, env.as_str(), key)
+    }
+
+    /// The private-refs `name` blob for a ref: age ciphertext of the
+    /// real ref path, sealed to the vault's recipients. `None` on
+    /// plain rows.
+    fn name_blob(&self, rref: &Ref) -> Option<String> {
+        self.private_key.as_ref().map(|_| {
+            base64::engine::general_purpose::STANDARD.encode(seal(&self.recipients, &rref.path()))
+        })
     }
 
     /// One HTTP round-trip. `http_status_as_error(false)` so error
@@ -149,17 +358,24 @@ impl CfVault {
     /// different builder types, so each arm is self-contained.)
     fn request(
         &self,
+        env: &Env,
         method: &str,
         url: &str,
         body: Option<String>,
     ) -> Result<(u16, String), VaultError> {
         let io = |e: ureq::Error| VaultError::Io(format!("{method} {url}: {e}"));
         let has_body = body.is_some();
+        let auth = self.auth_header(
+            env,
+            method,
+            url_path(url),
+            body.as_deref().unwrap_or("").as_bytes(),
+        )?;
         let mut res = match (method, body) {
             ("GET", None) => self
                 .agent
                 .get(url)
-                .header("Authorization", &self.auth)
+                .header("Authorization", &auth)
                 .config()
                 .http_status_as_error(false)
                 .build()
@@ -168,7 +384,7 @@ impl CfVault {
             ("DELETE", None) => self
                 .agent
                 .delete(url)
-                .header("Authorization", &self.auth)
+                .header("Authorization", &auth)
                 .config()
                 .http_status_as_error(false)
                 .build()
@@ -177,7 +393,7 @@ impl CfVault {
             ("PUT", Some(b)) => self
                 .agent
                 .put(url)
-                .header("Authorization", &self.auth)
+                .header("Authorization", &auth)
                 .config()
                 .http_status_as_error(false)
                 .build()
@@ -216,14 +432,126 @@ impl CfVault {
         serde_json::from_str(body)
             .map_err(|e| VaultError::Backend(format!("worker returned bad row json: {e}")))
     }
+
+    /// The raw `refs` listing — `(storage key, name blob)` pairs
+    /// without the private-refs mapping or the mixed-mode refusal.
+    /// `migrate` needs the unfiltered view; [`Vault::list`] maps.
+    fn list_raw(&self, env: &Env) -> Result<Vec<(String, Option<String>)>, VaultError> {
+        let url = format!("{}/v1/{}", self.base, env.as_str());
+        let (status, body) = self.request(env, "GET", &url, None)?;
+        match status {
+            200 => {
+                let out: ListBody = serde_json::from_str(&body).map_err(|e| {
+                    VaultError::Backend(format!("worker returned bad list json: {e}"))
+                })?;
+                Ok(out
+                    .refs
+                    .into_iter()
+                    .map(|item| match item {
+                        ListItem::Plain(key) => (key, None),
+                        ListItem::Keyed { key, name } => (key, name),
+                    })
+                    .collect())
+            }
+            other => Err(Self::error_msg(other, &body)),
+        }
+    }
+
+    /// Decrypt a private-refs `name` blob back into a [`Ref`].
+    fn open_name(&self, blob: &str) -> Result<Ref, VaultError> {
+        let raw = base64::engine::general_purpose::STANDARD
+            .decode(blob)
+            .map_err(|e| VaultError::Backend(format!("bad b64 name blob: {e}")))?;
+        let path = open(&self.identity, &raw).map_err(|e| {
+            VaultError::Crypto(format!("name blob won't decrypt (mixed-mode vault?): {e}"))
+        })?;
+        Ref::from_path(&path)
+            .map_err(|e| VaultError::Backend(format!("name blob held an invalid ref: {e}")))
+    }
+
+    /// `arca migrate --private-refs` — re-key every plaintext-named
+    /// row in `env` under its derived `ref_key`, attaching the
+    /// `name` blob so `list` can still map back. The ciphertext
+    /// moves verbatim — the value is never decrypted here. Already-
+    /// private rows are skipped. Requires `private_refs = true` —
+    /// the mode the rows are being rewritten *to*.
+    pub fn migrate_private_refs(&self, env: &Env) -> Result<MigrateReport, VaultError> {
+        if self.private_key.is_none() {
+            return Err(VaultError::Config(
+                "migrate --private-refs needs [vaults.*] private_refs = true".into(),
+            ));
+        }
+        let mut report = MigrateReport::default();
+        for (key, name) in self.list_raw(env)? {
+            if name.is_some() {
+                report.already_private += 1;
+                continue;
+            }
+            let rref = Ref::from_path(&key).map_err(|e| {
+                VaultError::Backend(format!("stored key {key:?} can't migrate: {e}"))
+            })?;
+            // Fetch the row verbatim — ciphertext only, no decrypt.
+            let (status, body) = self.request(env, "GET", &self.item_url(env, &key), None)?;
+            let ciphertext = match status {
+                200 => Self::parse_row(&body)?
+                    .ciphertext
+                    .ok_or_else(|| VaultError::Backend("worker row missing ciphertext".into()))?,
+                other => return Err(Self::error_msg(other, &body)),
+            };
+            // Write under the derived key first — the new row must
+            // exist before the old one goes away.
+            let new_key = self.storage_key(env, &rref);
+            let put = serde_json::json!({
+                "ciphertext": ciphertext,
+                "name": self.name_blob(&rref),
+                "rotate": false,
+            })
+            .to_string();
+            let (status, body) =
+                self.request(env, "PUT", &self.item_url(env, &new_key), Some(put))?;
+            if status != 200 {
+                return Err(Self::error_msg(status, &body));
+            }
+            let (status, body) = self.request(env, "DELETE", &self.item_url(env, &key), None)?;
+            if status != 200 {
+                return Err(Self::error_msg(status, &body));
+            }
+            report.rewritten.push(rref);
+        }
+        Ok(report)
+    }
 }
 
 impl Vault for CfVault {
     fn get(&self, env: &Env, rref: &Ref) -> Result<Option<SecretRecord>, VaultError> {
-        let (status, body) = self.request("GET", &self.item_url(env, rref), None)?;
+        let key = self.storage_key(env, rref);
+        let (status, body) = self.request(env, "GET", &self.item_url(env, &key), None)?;
         match status {
             200 => {
                 let row = Self::parse_row(&body)?;
+                // Private mode: the name blob must decrypt to the
+                // ref we asked for — a wrong/missing name means a
+                // mixed-mode vault or a lying store, never a value.
+                if self.private_key.is_some() {
+                    match &row.name {
+                        Some(blob) => {
+                            let named = self.open_name(blob)?;
+                            if named != *rref {
+                                return Err(VaultError::Backend(format!(
+                                    "name blob says {named}, asked for {rref} — \
+                                     the store is lying or mixed-mode"
+                                )));
+                            }
+                        }
+                        None => {
+                            return Err(VaultError::Backend(
+                                "mixed-mode vault: row has no name blob — \
+                                 run `arca migrate --private-refs`"
+                                    .into(),
+                            ));
+                        }
+                    }
+                }
                 let b64 = row
                     .ciphertext
                     .ok_or_else(|| VaultError::Backend("worker row missing ciphertext".into()))?;
@@ -248,7 +576,8 @@ impl Vault for CfVault {
     }
 
     fn rm(&self, env: &Env, rref: &Ref) -> Result<bool, VaultError> {
-        let (status, body) = self.request("DELETE", &self.item_url(env, rref), None)?;
+        let key = self.storage_key(env, rref);
+        let (status, body) = self.request(env, "DELETE", &self.item_url(env, &key), None)?;
         match status {
             200 => {
                 let out: RmBody = serde_json::from_str(&body).map_err(|e| {
@@ -260,26 +589,37 @@ impl Vault for CfVault {
         }
     }
 
+    /// Refs in `env`, mapped back through `name` blobs when
+    /// `private_refs` is on. **Fails closed on a mixed-mode vault**
+    /// (P-004): private mode + a row with no name blob, or plain
+    /// mode + a row with one, is a `VaultError`, never a silently
+    /// wrong listing — run `arca migrate --private-refs`.
     fn list(&self, env: &Env) -> Result<Vec<Ref>, VaultError> {
-        let url = format!("{}/v1/{}", self.base, env.as_str());
-        let (status, body) = self.request("GET", &url, None)?;
-        match status {
-            200 => {
-                let out: ListBody = serde_json::from_str(&body).map_err(|e| {
-                    VaultError::Backend(format!("worker returned bad list json: {e}"))
-                })?;
-                let mut refs = Vec::new();
-                for path in out.refs {
-                    refs.push(
-                        Ref::from_path(&path)
-                            .map_err(|e| VaultError::Backend(format!("stored key {e}")))?,
-                    );
+        let private = self.private_key.is_some();
+        let mut refs = Vec::new();
+        for (key, name) in self.list_raw(env)? {
+            match (private, name) {
+                (true, Some(blob)) => refs.push(self.open_name(&blob)?),
+                (true, None) => {
+                    return Err(VaultError::Backend(format!(
+                        "mixed-mode vault: row {key:?} has no name blob — \
+                         run `arca migrate --private-refs`"
+                    )));
                 }
-                refs.sort();
-                Ok(refs)
+                (false, Some(_)) => {
+                    return Err(VaultError::Backend(format!(
+                        "row {key:?} was written with private_refs — set \
+                         [vaults.*] private_refs = true to read it"
+                    )));
+                }
+                (false, None) => refs.push(
+                    Ref::from_path(&key)
+                        .map_err(|e| VaultError::Backend(format!("stored key {e}")))?,
+                ),
             }
-            other => Err(Self::error_msg(other, &body)),
         }
+        refs.sort();
+        Ok(refs)
     }
 
     fn rotate(&self, env: &Env, rref: &Ref, value: Secret) -> Result<SecretRecord, VaultError> {
@@ -299,8 +639,14 @@ impl CfVault {
     ) -> Result<SecretRecord, VaultError> {
         let blob = seal(&self.recipients, value.expose());
         let b64 = base64::engine::general_purpose::STANDARD.encode(blob);
-        let body = serde_json::json!({ "ciphertext": b64, "rotate": rotate }).to_string();
-        let (status, text) = self.request("PUT", &self.item_url(env, rref), Some(body))?;
+        let key = self.storage_key(env, rref);
+        let body = serde_json::json!({
+            "ciphertext": b64,
+            "name": self.name_blob(rref),
+            "rotate": rotate,
+        })
+        .to_string();
+        let (status, text) = self.request(env, "PUT", &self.item_url(env, &key), Some(body))?;
         match status {
             200 => {
                 let row = Self::parse_row(&text)?;
@@ -318,6 +664,68 @@ impl CfVault {
             other => Err(Self::error_msg(other, &text)),
         }
     }
+}
+
+/// `HMAC-SHA256(key, msg)` — the fixed 32-byte output. The expect
+/// documents the invariant (HMAC accepts keys of any length), not a
+/// reachable failure.
+#[allow(clippy::unwrap_used)]
+fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
+    let mut mac =
+        <HmacSha256 as Mac>::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
+    mac.update(msg);
+    mac.finalize().into_bytes().into()
+}
+
+fn sha256_hex(data: &[u8]) -> String {
+    hex_encode(&Sha256::digest(data))
+}
+
+/// Lowercase hex, no separators — the wire form for signatures and
+/// storage keys.
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push_str(&format!("{b:02x}"));
+    }
+    out
+}
+
+/// Whole seconds since the epoch — the `ts` field of the ArcaHmac
+/// scheme. A clock before the epoch degrades to 0, which simply
+/// fails the worker's replay window.
+fn unix_ts() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// The path component of `url` (no query) — what the ArcaHmac
+/// signature covers. `request` only ever builds
+/// `{base}/v1/…` URLs; this extracts the same `url.pathname` the
+/// worker signs.
+fn url_path(url: &str) -> &str {
+    let after = match url.find("://") {
+        Some(i) => &url[i + 3..],
+        None => url,
+    };
+    let path = match after.find('/') {
+        Some(j) => &after[j..],
+        None => "/",
+    };
+    &path[..path.find('?').unwrap_or(path.len())]
+}
+
+/// The private-refs PRF key: `HMAC-SHA256(identity_secret, domain)`.
+/// Deriving from the identity means `ref_key`s move with the same
+/// key that decrypts the values — and a different identity can't
+/// compute or open them.
+fn derive_private_key(identity: &x25519::Identity) -> [u8; 32] {
+    hmac_sha256(
+        identity.to_string().expose_secret().as_bytes(),
+        PRIVATE_REFS_DOMAIN,
+    )
 }
 
 /// Age-encrypt `plaintext` to `recipients` — per-secret ciphertext,
@@ -362,6 +770,17 @@ fn open(identity: &x25519::Identity, cipher: &[u8]) -> Result<String, VaultError
 mod tests {
     use super::*;
 
+    fn test_config(url: &str) -> CfVaultConfig {
+        CfVaultConfig {
+            url: url.to_string(),
+            token_env: Some("ARCA_CF_TOKEN_TEST".into()),
+            scoped: BTreeMap::new(),
+            identity: x25519::Identity::generate(),
+            extra_recipients: Vec::new(),
+            private_refs: false,
+        }
+    }
+
     #[test]
     fn seal_open_roundtrip_hides_value() {
         let id = x25519::Identity::generate();
@@ -402,38 +821,197 @@ mod tests {
         // produces must be a clean error, never a panic
         let id = x25519::Identity::generate();
         let v = CfVault::with_identity("http://127.0.0.1:1", "t", id, &[]).unwrap();
-        assert!(v.request("PATCH", "http://x", None).is_err());
-        assert!(v.request("GET", "http://x", Some("{}".into())).is_err());
-        assert!(v.request("PUT", "http://x", None).is_err());
+        assert!(v.request(&Env::dev(), "PATCH", "http://x", None).is_err());
+        assert!(v
+            .request(&Env::dev(), "GET", "http://x", Some("{}".into()))
+            .is_err());
+        assert!(v.request(&Env::dev(), "PUT", "http://x", None).is_err());
     }
 
     #[test]
-    fn new_requires_token_env() {
-        let id = x25519::Identity::generate();
+    fn new_requires_credentials() {
         temp_env::with_var_unset("ARCA_CF_TOKEN_TEST", || {
-            assert!(CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", id.clone(), &[]).is_err());
+            // unset, no scoped creds → error
+            let mut cfg = test_config("http://x");
+            let e = CfVault::new(&cfg).err().unwrap();
+            assert!(e.to_string().contains("unset"), "{e}");
+            // no token_env at all and no scoped → error
+            cfg.token_env = None;
+            let e = CfVault::new(&cfg).err().unwrap();
+            assert!(e.to_string().contains("no credentials"), "{e}");
         });
-        // set but empty → still an error
+        // set but empty → always an error
         temp_env::with_var("ARCA_CF_TOKEN_TEST", Some(""), || {
-            let e = CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", id, &[])
-                .err()
-                .unwrap();
+            let mut cfg = test_config("http://x");
+            cfg.scoped.insert(
+                "dev".into(),
+                Auth::Hmac {
+                    id: "ops/tok".into(),
+                    secret: "fake".into(),
+                },
+            );
+            let e = CfVault::new(&cfg).err().unwrap();
             assert!(e.to_string().contains("empty"), "{e}");
+        });
+        // unset but scoped creds exist → the fallback is optional
+        temp_env::with_var_unset("ARCA_CF_TOKEN_TEST", || {
+            let mut cfg = test_config("http://x");
+            cfg.scoped.insert("dev".into(), Auth::Bearer("fake".into()));
+            assert!(CfVault::new(&cfg).is_ok());
         });
     }
 
     #[test]
     fn new_and_with_identity_validate_inputs() {
         let id = x25519::Identity::generate();
-        // a set token + valid identity opens — no network I/O yet
+        // a set token + resolved identity opens — no network I/O
+        // yet (identity validation lives in the arca-identity port)
         temp_env::with_var("ARCA_CF_TOKEN_TEST", Some("fake"), || {
-            assert!(CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", id.clone(), &[]).is_ok());
+            let cfg = test_config("http://x");
+            assert!(CfVault::new(&cfg).is_ok());
         });
         // invalid extra recipient strings are config errors
         let e = CfVault::with_identity("http://x", "t", id.clone(), &["bad!!".into()])
             .err()
             .unwrap();
         assert!(e.to_string().contains("invalid recipient"), "{e}");
+    }
+
+    #[test]
+    fn auth_header_shapes() {
+        let id = x25519::Identity::generate();
+        // bearer passes the token verbatim
+        let v = CfVault::with_identity("http://h", "fake-tok", id.clone(), &[]).unwrap();
+        let h = v.auth_header(&Env::dev(), "GET", "/v1/dev", b"").unwrap();
+        assert_eq!(h, "Bearer fake-tok");
+        // hmac: header is `ArcaHmac id, ts, sig` and the signature
+        // recomputes over method+path+ts+body-sha
+        let v = CfVault::with_auth(
+            "http://h",
+            BTreeMap::from([(
+                "dev".to_string(),
+                Auth::Hmac {
+                    id: "ops/tok".into(),
+                    secret: "fake-secret".into(),
+                },
+            )]),
+            id,
+            &[],
+            false,
+        )
+        .unwrap();
+        let h = v
+            .auth_header(&Env::dev(), "PUT", "/v1/dev/a/b", b"{}")
+            .unwrap();
+        let parts: Vec<&str> = h
+            .strip_prefix("ArcaHmac ")
+            .unwrap()
+            .split(",")
+            .map(|s| s.trim())
+            .collect();
+        assert_eq!(parts.len(), 3, "{h}");
+        assert_eq!(parts[0], "ops/tok");
+        let ts: u64 = parts[1].parse().unwrap();
+        assert!(ts > 0);
+        let expect = hex_encode(&hmac_sha256(
+            b"fake-secret",
+            format!("PUT\n/v1/dev/a/b\n{}\n{}", parts[1], sha256_hex(b"{}")).as_bytes(),
+        ));
+        assert_eq!(parts[2], expect);
+        // an env with no scoped cred and no fallback → config error
+        let e = v
+            .auth_header(&Env::new("prod").unwrap(), "GET", "/v1/prod", b"")
+            .unwrap_err();
+        assert!(e.to_string().contains("no cf token"), "{e}");
+    }
+
+    #[test]
+    fn url_path_extracts_the_signed_component() {
+        assert_eq!(url_path("http://h/v1/dev/a/b"), "/v1/dev/a/b");
+        assert_eq!(url_path("https://h:443/x?y=1"), "/x");
+        assert_eq!(url_path("http://h"), "/");
+        assert_eq!(url_path("/v1/dev"), "/v1/dev");
+    }
+
+    #[test]
+    fn private_key_and_storage_key_are_deterministic() {
+        let id = x25519::Identity::generate();
+        let rref = Ref::new("arca://billing/stripe").unwrap();
+        let mk = |private: bool| {
+            CfVault::with_auth(
+                "http://h",
+                BTreeMap::from([("*".to_string(), Auth::Bearer("t".into()))]),
+                id.clone(),
+                &[],
+                private,
+            )
+            .unwrap()
+        };
+        let p = mk(true);
+        let k1 = p.storage_key(&Env::dev(), &rref);
+        assert_eq!(k1.len(), 64);
+        assert!(k1.chars().all(|c| c.is_ascii_hexdigit()), "{k1}");
+        // deterministic: same identity + env + ref → same key
+        assert_eq!(k1, mk(true).storage_key(&Env::dev(), &rref));
+        // env is part of the derivation
+        assert_ne!(k1, p.storage_key(&Env::new("prod").unwrap(), &rref));
+        // another identity → different key for the same ref
+        let other = CfVault::with_auth(
+            "http://h",
+            BTreeMap::from([("*".to_string(), Auth::Bearer("t".into()))]),
+            x25519::Identity::generate(),
+            &[],
+            true,
+        )
+        .unwrap();
+        assert_ne!(k1, other.storage_key(&Env::dev(), &rref));
+        // non-private mode is the bare ref path
+        assert_eq!(mk(false).storage_key(&Env::dev(), &rref), "billing/stripe");
+    }
+
+    #[test]
+    fn with_auth_rejects_empty_credentials() {
+        let e = CfVault::with_auth(
+            "http://x",
+            BTreeMap::new(),
+            x25519::Identity::generate(),
+            &[],
+            false,
+        )
+        .err()
+        .unwrap();
+        assert!(e.to_string().contains("no credentials"), "{e}");
+    }
+
+    #[test]
+    fn open_name_rejects_garbage_and_foreign_blobs() {
+        let id = x25519::Identity::generate();
+        let v = CfVault::with_auth(
+            "http://x",
+            BTreeMap::from([("*".to_string(), Auth::Bearer("t".into()))]),
+            id.clone(),
+            &[],
+            true,
+        )
+        .unwrap();
+        // not base64 → backend error
+        assert!(v.open_name("!!!").is_err());
+        // base64 but not age → crypto error
+        let e = v.open_name("Z2FyYmFnZQ==").unwrap_err();
+        assert!(e.to_string().contains("name blob"), "{e}");
+        // sealed to a different identity → can't open
+        let other = x25519::Identity::generate();
+        let blob =
+            base64::engine::general_purpose::STANDARD.encode(seal(&[other.to_public()], "a/b"));
+        assert!(v.open_name(&blob).is_err());
+        // decrypts to a string that isn't a ref path → backend error
+        let blob =
+            base64::engine::general_purpose::STANDARD.encode(seal(&v.recipients, "bad key!"));
+        let e = v.open_name(&blob).unwrap_err();
+        assert!(e.to_string().contains("invalid ref"), "{e}");
+        // and the happy path: our own blob names the ref
+        let good = base64::engine::general_purpose::STANDARD.encode(seal(&v.recipients, "a/b"));
+        assert_eq!(v.open_name(&good).unwrap().path(), "a/b");
     }
 
     #[test]

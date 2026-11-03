@@ -13,8 +13,10 @@ age.workspace = true
 arca-core.workspace = true
 arca-vault.workspace = true
 base64.workspace = true
+hmac.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 time.workspace = true
 ureq.workspace = true
 

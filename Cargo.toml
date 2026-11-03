@@ -76,6 +76,8 @@ keyring-core = "1"
 dbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust", "vendored"] }
 apple-native-keyring-store = { version = "1", features = ["keychain"] }
 windows-native-keyring-store = "1"
+hmac = "0.12"
+sha2 = "0.10"
 ratatui = "0.30"
 crossterm = "0.29"
 clap-markdown = "0.1.5"
