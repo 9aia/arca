@@ -1,1 +1,1 @@
-{"id":"","ws":"serve","actor":"luis","ts":1793681330,"op":{"op":"claim","glob":"examples/**","ttl_secs":3600}}
+{"id":"","ws":"serve","actor":"luis","ts":1793681962,"op":{"op":"write","path":"AGENTS.md","blob":"70e0bd788f0d57e745dcaf59562c1ed1c6615a26","intent":"P-005: arca serve — ndjson IPC surface + [serve.pdp] exec policy wire"}}
