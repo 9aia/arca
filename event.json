@@ -1,1 +1,1 @@
-{"id":"","ws":"feat-cached-vault","actor":"luis","ts":1793685718,"op":{"op":"write","path":"Cargo.toml","blob":"a80bbc9c4c36060c9f3f90d78f7f714f4c3de8b0","intent":"P-007 cached remote vault — read-through encrypted local cache"}}
+{"id":"","ws":"feat-cached-vault","actor":"luis","ts":1793685718,"op":{"op":"write","path":"Cargo.lock","blob":"8a85fc416cad4e27008d90be985397409f699483","intent":"P-007 cached remote vault — read-through encrypted local cache"}}
