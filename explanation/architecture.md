@@ -53,8 +53,9 @@ Design rules:
   machines; the agent interface.
 - **`arca ui` (TUI)** — a read-only ratatui browser over the same
   ops; feature-gated (`--no-default-features` for a lean binary).
-- A future `arca serve` ndjson/JSON-RPC surface for peregrin is a
-  later ADR — the `serve` op is reserved.
+- **`arca serve`** — ndjson IPC over the Vault port with an
+  exec-driven `[serve.pdp]` policy-decision hook (ADR-0003);
+  peregrin's embedding point.
 
 ## Boundary — secret materialization only
 
