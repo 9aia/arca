@@ -1,1 +1,1 @@
-{"id":"","ws":"peregrin-campaign","actor":"luis","ts":1793684564,"op":{"op":"write","path":"campaigns/adversarial/triage.sh","blob":"edc87aea1f735ab06e4021ba60f69b49b6e41c64","intent":"peregrin adversarial campaign (T-010)"}}
+{"id":"","ws":"peregrin-campaign","actor":"luis","ts":1793684564,"op":{"op":"write","path":"campaigns/adversarial/verify.sh","blob":"90f896da4ddeaf3438add0fef73c5154771f7572","intent":"peregrin adversarial campaign (T-010)"}}
