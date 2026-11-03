@@ -1,1 +1,1 @@
-{"id":"","ws":"devin-t005","actor":"luis","ts":1793656737,"op":{"op":"claim","glob":"crates/**","ttl_secs":3600}}
+{"id":"","ws":"devin-t005","actor":"luis","ts":1793667600,"op":{"op":"write","path":"crates/arca-cli/src/main.rs","blob":"5939fbb50e0ac54f2b2fa32ad5bc9fd769bd8458","intent":"T-005: 100% line coverage"}}
