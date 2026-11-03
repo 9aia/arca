@@ -1,1 +1,1 @@
-{"id":"","ws":"serve-hardening","actor":"luis","ts":1793683354,"op":{"op":"write","path":"crates/arca-cli/src/main.rs","blob":"372c4ef098f044e0b3e2bb5285039c541a8a5b36","intent":"adversarial fixes T-009 (F-1..F-6 + lows)"}}
+{"id":"","ws":"serve-hardening","actor":"luis","ts":1793683354,"op":{"op":"write","path":"crates/arca-core/src/config.rs","blob":"1ff04e1b411a491e41cf6b13f940525d7c8525d6","intent":"adversarial fixes T-009 (F-1..F-6 + lows)"}}
