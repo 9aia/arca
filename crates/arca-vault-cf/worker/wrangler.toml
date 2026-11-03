@@ -12,3 +12,7 @@ database_id = "4b0fbf31-5dac-48f4-ab88-bdf5ec6c0f3f"
 
 # The bearer token is NOT here — set it with:
 #   wrangler secret put ARCA_VAULT_TOKEN
+
+[[routes]]
+pattern = "arca.luisfuturist.com"
+custom_domain = true
