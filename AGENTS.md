@@ -66,6 +66,7 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/arca-vault` | Vault port — readable secret stores: `get/put/list/rotate`, per-env variants |
 | `crates/arca-vault-age` | Local vault impl — age-encrypted file (v1) |
 | `crates/arca-vault-cf` | Remote vault impl — self-hosted CF Worker + D1, per-secret client-side age ciphertext (`worker/` has the deployable JS) |
+| `crates/arca-vault-cached` | Composite vault — read-through age-encrypted cache wrapping any impl; `cache`/`cache_ttl_secs` on `[vaults.*]` (P-007) |
 | `crates/arca-deploy` | Deploy port — write-only push targets (sinks, never sources) |
 | `crates/arca-deploy-cf` | Deploy impl — CF account Secrets Store via API v4 |
 | `crates/arca-shell` | `bash -c <cmd>` + env injection — the `arca run` path |
