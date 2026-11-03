@@ -1,0 +1,44 @@
+# arca
+
+> secrets broker for agents — sealed, not spilled
+
+arca:// references in code, env vars at runtime, an audit trail for every materialization
+
+## Table of Contents
+
+### Tutorials
+
+- [Your first secret](/arca/tutorials/first-secret.md)
+
+### How-to
+
+- [Add a secret](/arca/how-to/add-a-secret.md)
+- [Inject secrets into a process](/arca/how-to/inject-into-a-process.md)
+- [Rotate a secret](/arca/how-to/rotate-a-secret.md)
+- [Route envs to vaults](/arca/how-to/route-envs-to-vaults.md)
+- [Cache a remote vault locally](/arca/how-to/cached-vaults.md)
+- [Deploy a secret to a sink](/arca/how-to/deploy-to-a-sink.md)
+- [Guardrails for agents](/arca/how-to/guardrails-for-agents.md)
+- [Cloudflare Worker setup](/arca/how-to/cloudflare-worker-setup.md)
+
+### Reference
+
+- [Command-Line Help for `arca`](/arca/reference/cli.md)
+- [Config — `arca.toml`](/arca/reference/config.md)
+- [Audit events](/arca/reference/audit-events.md)
+- [The `arca serve` protocol](/arca/reference/serve-protocol.md)
+- [Environment variables](/arca/reference/env-vars.md)
+- [Crate API](/arca/reference/crate-api.md)
+
+### Explanation
+
+- [Architecture](/arca/explanation/architecture.md)
+- [Threat model](/arca/explanation/threat-model.md)
+- [Boundaries](/arca/explanation/boundaries.md)
+- [Crypto model](/arca/explanation/crypto-model.md)
+- [The worktree model](/arca/explanation/worktree-model.md)
+
+### Other
+
+- [Getting started](/arca/getting-started.md)
+- [Untitled](/arca/public/api/static.files/SourceSerif4-LICENSE-a2cfd9d5.md)

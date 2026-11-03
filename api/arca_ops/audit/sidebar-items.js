@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Outcome"],"fn":["emit","emit_to"],"struct":["AuditEvent"]};

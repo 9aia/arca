@@ -1,0 +1,2 @@
+window.ALL_CRATES = ["arca","arca_config","arca_config_toml","arca_core","arca_deploy","arca_deploy_cf","arca_ops","arca_shell","arca_testkit","arca_tui","arca_vault","arca_vault_age","arca_vault_cf","xtask"];
+//{"start":21,"fragment_lengths":[6,14,19,12,14,17,11,13,15,11,13,17,16,8]}
