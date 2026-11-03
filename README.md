@@ -49,6 +49,8 @@ values never enter agent context.
 | `arca run [-s VAR=ref] -- cmd` | Inject `[secrets]` + ad-hoc pairs into a child. One arg → `bash -c`; several → argv exec, no shell |
 | `arca env [-s VAR=ref]` | `export VAR='…'` lines for `eval` — the human path |
 | `arca check` | Validate config, vault readability, declared-surface resolution; exit 1 on findings |
+| `arca deploy <ref>` | Push a secret to a write-only sink (e.g. CF Secrets Store) |
+| `arca migrate` | Vault migrations — e.g. `--private-refs` re-keys cf rows to HMAC storage keys |
 | `arca ui` | Interactive vault browser (TUI) |
 | `arca manifest` / `arca schema` | Machine-readable capabilities / `arca.toml` JSON Schema |
 
