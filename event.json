@@ -1,1 +1,1 @@
-{"id":"","ws":"serve","actor":"luis","ts":1793681329,"op":{"op":"claim","glob":"README.md","ttl_secs":3600}}
+{"id":"","ws":"serve","actor":"luis","ts":1793681330,"op":{"op":"claim","glob":"examples/**","ttl_secs":3600}}
