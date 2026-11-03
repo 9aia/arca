@@ -1,1 +1,1 @@
-{"id":"","ws":"devin-t005","actor":"luis","ts":1793669397,"op":{"op":"write","path":"Cargo.toml","blob":"d63ff253de14f36e37e7bbd139c04cee00d83966","intent":"post-merge 100% line coverage (T-005)"}}
+{"id":"","ws":"devin-t005","actor":"luis","ts":1793669397,"op":{"op":"write","path":"crates/arca-cli/src/main.rs","blob":"6dafac02c4c393cd10b562c5c3e6cc940ca5d596","intent":"post-merge 100% line coverage (T-005)"}}
