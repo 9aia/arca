@@ -55,14 +55,15 @@
 
 | field | type | required | notes |
 |---|---|---|---|
-| `pdp` | `table` | optional | The external policy decision point serve consults before every vault-touching op (`get`/`put`/`rm`/`rotate`). Absent, no consult happens — the advisory posture only. |
+| `pdp` | `table` | optional | The external policy decision point serve consults before every op that can materialize (`get`/`put`/`rm`/`rotate`/ `list`/`check`). Absent, no consult happens — the advisory posture only. |
 
 ## `[serve.pdp]` — the external policy decision point
 
 | field | type | required | notes |
 |---|---|---|---|
-| `exec` | `string` | required | The exec driver command — run via `sh -c` once per decision, request JSON on stdin, verdict JSON on stdout. |
+| `exec` | `string` | required | The exec driver command — run via `sh -c` once per decision, request JSON on stdin, verdict JSON on stdout. **Trust root**: the line authorizes shell exec; the child inherits only the `arca-shell` env allowlist. `arca serve` warns when this arrives via an implicit `./arca.toml` — pin config with `--config`/`$ARCA_CONFIG`. |
 | `allow_on_error` | `bool` | optional | What an unreachable PDP means. `false` (default) fails **closed** — the op is denied; a policy engine that can't answer must not silently mean "allowed". `true` fails open — the op runs anyway and the audit event records the degraded verdict. |
+| `timeout_ms` | `int` | optional | Per-decision deadline in milliseconds — the child is killed and the consult counts as *unreachable* past it. A hung or flooding PDP must never freeze the serve loop; absent → 5000. |
 
 ## `[envs]` route forms
 

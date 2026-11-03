@@ -29,7 +29,7 @@ breadcrumb.
 | `ok`, ref-scoped | one **per ref** materialized or mutated — `put`, `get`, `rotate`, `rm`, `deploy`, and per resolved ref inside `run`/`env` |
 | `ok`, op-scoped | ref-less verb completed — `init`, `list`, `check`, `ui`, `serve` |
 | `denied` | `[guardrails]` — or a serve-path PDP verdict of `allow: false` (including fail-closed on an unreachable PDP) — refused the op before it touched the vault; `rref` is the requested ref (normalized when parseable) |
-| `error` | the op ran and failed — missing secret, vault i/o, bad ref; also emitted when config load itself fails (best-effort actor/env from flags + process env) |
+| `error` | the op ran and failed — missing secret, vault i/o, bad ref; a `check` with findings also audits `error` (it exits 1); also emitted when config load itself fails (best-effort actor/env from flags + process env) |
 
 Two deliberate silences:
 
@@ -42,10 +42,14 @@ Two deliberate silences:
 
 `arca serve` emits the same events — `get`/`put`/`rm`/`rotate`
 requests audit exactly like the CLI verbs, under the request's
-claimed `actor` when it carries one. On the serve path only,
-every event a consulted `[serve.pdp]` gated gains a `policy`
-object — `{allow, reason?, obligations?}` — so the stream shows
-the verdict behind the outcome: a PDP allow, a PDP deny
+claimed `actor` when it carries one. The PDP consult covers the
+ops that can materialize — `get`/`put`/`rm`/`rotate` *and*
+`list`/`check` (record decrypts, vault probes, scoped-token
+gets) — so a `check`'s incidental token `get`s ride the same
+`policy`-bearing events. On the serve path only, every event a
+consulted `[serve.pdp]` gated gains a `policy` object —
+`{allow, reason?, obligations?}` — so the stream shows the
+verdict behind the outcome: a PDP allow, a PDP deny
 (`outcome: "denied"`, `policy.allow: false`), or a degraded
 allow recorded when `allow_on_error` overrode an unreachable
 PDP. The `serve` verb itself closes with one op-scoped `ok`.

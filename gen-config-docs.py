@@ -28,7 +28,8 @@ TITLES = {n: t for names in SRCS.values() for n, t in names.items()}
 STRUCTS = [n for names in SRCS.values() for n in names]
 
 SIMPLE = {"String": "string", "PathBuf": "path", "bool": "bool",
-          "u16": "int", "usize": "int", "Vec<String>": "list",
+          "u16": "int", "u64": "int", "usize": "int",
+          "Vec<String>": "list",
           "Vec<Op>": "op list",
           "BTreeMap<String, VaultConfig>": "{name: vault}",
           "BTreeMap<Env, EnvRoute>": "{env: vault|{vault}}",
