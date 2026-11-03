@@ -123,6 +123,25 @@ memory), **peregrin** (orchestration — campaigns consume via
 gate), **mimus** (critic — its key resolution migrates to arca),
 **sepia** (session lifecycle).
 
+## Campaigns
+
+`campaigns/` holds peregrin campaign definitions that orchestrate
+work on this repo. `campaigns/adversarial/` is the self-testing
+loop — attack → triage → fix → verify: an adversarial battery
+(`arca serve` PDP-wire repros, wire bounds, env scrubs, audit
+redaction, plus `cargo xtask test`), every finding registered as a
+myco issue + todo in the `project/` ledger, a fix agent per issue,
+and a lint + battery re-run that closes them. The campaign's own
+secrets come through `arca run` — dogfooding the injection path:
+
+```sh
+arca run --env dev -- peregrin campaign run campaigns/adversarial/main.yaml
+```
+
+See [`campaigns/adversarial/README.md`](campaigns/adversarial/README.md)
+for the battery table, the `[serve.pdp]` policy-decision wiring, and
+peregrin-version caveats (campaigns need the peregrin v2 engine).
+
 ## Status
 
 Working v1 — local age vault + remote `cf` vault (self-hosted
