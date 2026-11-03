@@ -17,6 +17,7 @@ members = [
     "crates/arca-tui",
     "crates/arca-vault",
     "crates/arca-vault-age",
+    "crates/arca-vault-cached",
     "crates/arca-vault-cf",
     "xtask",
 ]
@@ -50,6 +51,7 @@ arca-testkit = { path = "crates/arca-testkit", version = "0.1.0" }
 arca-tui = { path = "crates/arca-tui", version = "0.1.0" }
 arca-vault = { path = "crates/arca-vault", version = "0.1.0" }
 arca-vault-age = { path = "crates/arca-vault-age", version = "0.1.0" }
+arca-vault-cached = { path = "crates/arca-vault-cached", version = "0.1.0" }
 arca-vault-cf = { path = "crates/arca-vault-cf", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

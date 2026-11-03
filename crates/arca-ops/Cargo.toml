@@ -20,6 +20,7 @@ arca-identity-file.workspace = true
 arca-identity-keyring.workspace = true
 arca-vault.workspace = true
 arca-vault-age.workspace = true
+arca-vault-cached.workspace = true
 arca-vault-cf.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -27,7 +27,7 @@
 //! Unknown keys are rejected so a typo fails loud instead of
 //! silently doing nothing.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -138,6 +138,70 @@ pub struct VaultConfig {
     /// --private-refs` rewrites existing rows.
     #[serde(default)]
     pub private_refs: bool,
+    /// Read-through encrypted local cache in front of this vault
+    /// (P-007): `true` caches every env; a name or list scopes it —
+    /// `cache = "dev"` or `cache = ["dev", "staging"]`. Rows land
+    /// at `$XDG_CACHE_HOME/arca/<name>.age` as ordinary age
+    /// ciphertext carrying the remote `version`/`rotated_at`
+    /// verbatim; freshness is TTL-bounded (`cache_ttl_secs`) and
+    /// writes are always remote-first. Meant for remote backends —
+    /// `dev` may cache, `prod` should live-fetch.
+    pub cache: Option<CacheScope>,
+    /// Cache freshness window in seconds — a cached row or env
+    /// listing younger than this answers without a remote
+    /// round-trip; past it the remote is re-fetched and the cache
+    /// updated. A remote *failure* falls back to the stale copy —
+    /// the offline mode. Absent → 300.
+    pub cache_ttl_secs: Option<u64>,
+}
+
+/// The `[vaults.*] cache` scope — which envs the read-through
+/// cache may hold (P-007).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum CacheScope {
+    /// `cache = true` caches every env; `false` is off (same as
+    /// leaving the field out).
+    All(bool),
+    /// `cache = "dev"` — a single env.
+    One(Env),
+    /// `cache = ["dev", "staging"]` — a set of envs.
+    Envs(Vec<Env>),
+}
+
+impl CacheScope {
+    /// Is the cache on at all? `cache = false` and `cache = []`
+    /// are off — equivalent to omitting the field.
+    pub fn enabled(&self) -> bool {
+        match self {
+            CacheScope::All(b) => *b,
+            CacheScope::One(_) => true,
+            CacheScope::Envs(es) => !es.is_empty(),
+        }
+    }
+
+    /// Does `env` fall inside the scope? (Assumes [`Self::enabled`].)
+    pub fn caches(&self, env: &Env) -> bool {
+        match self {
+            CacheScope::All(b) => *b,
+            CacheScope::One(e) => e == env,
+            CacheScope::Envs(es) => es.contains(env),
+        }
+    }
+
+    /// The env set the scope names — `None` = every env
+    /// (`cache = true`), `Some(set)` = only those envs. The shape
+    /// `arca-vault-cached`'s `CachePolicy` consumes; kept here so
+    /// the config model stays impl-agnostic.
+    pub fn envs(&self) -> Option<BTreeSet<String>> {
+        match self {
+            CacheScope::All(true) => None,
+            CacheScope::All(false) => Some(BTreeSet::new()),
+            CacheScope::One(e) => Some(BTreeSet::from([e.as_str().to_string()])),
+            CacheScope::Envs(es) => Some(es.iter().map(|e| e.as_str().to_string()).collect()),
+        }
+    }
 }
 
 fn default_kind() -> String {
@@ -405,6 +469,55 @@ mod tests {
                 .as_deref(),
             Some("arca://ops/cf-token-prod")
         );
+    }
+
+    #[test]
+    fn cache_scope_parses_all_forms() {
+        let text = r#"
+            [vaults.all]
+            kind = "cf"
+            url = "https://x.workers.dev"
+            cache = true
+            cache_ttl_secs = 60
+
+            [vaults.one]
+            kind = "cf"
+            url = "https://x.workers.dev"
+            cache = "dev"
+
+            [vaults.some]
+            kind = "cf"
+            url = "https://x.workers.dev"
+            cache = ["dev", "staging"]
+
+            [vaults.off]
+            kind = "cf"
+            url = "https://x.workers.dev"
+            cache = false
+
+            [vaults.plain]
+            kind = "cf"
+            url = "https://x.workers.dev"
+        "#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        let dev = Env::dev();
+        let prod = Env::new("prod").unwrap();
+        let st = Env::new("staging").unwrap();
+        let all = cfg.vaults["all"].cache.as_ref().unwrap();
+        assert!(all.enabled() && all.caches(&dev) && all.caches(&prod));
+        assert!(all.envs().is_none());
+        assert_eq!(cfg.vaults["all"].cache_ttl_secs, Some(60));
+        let one = cfg.vaults["one"].cache.as_ref().unwrap();
+        assert!(one.enabled() && one.caches(&dev) && !one.caches(&prod));
+        assert_eq!(one.envs().unwrap().len(), 1);
+        let some = cfg.vaults["some"].cache.as_ref().unwrap();
+        assert!(some.caches(&dev) && some.caches(&st) && !some.caches(&prod));
+        let off = cfg.vaults["off"].cache.as_ref().unwrap();
+        assert!(!off.enabled() && !off.caches(&dev));
+        assert!(cfg.vaults["plain"].cache.is_none());
+        assert!(cfg.vaults["plain"].cache_ttl_secs.is_none());
+        // an invalid env name in the scope fails the parse
+        assert!(toml::from_str::<Config>("[vaults.x]\ncache = \"NOT AN ENV\"\n").is_err());
     }
 
     #[test]

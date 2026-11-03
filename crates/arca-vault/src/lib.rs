@@ -3,8 +3,9 @@
 //! A [`Vault`] is a store of [`SecretRecord`]s keyed by
 //! `(env, ref-path)`. Every impl stores opaque ciphertext — stores
 //! never see plaintext (ADR-0001); impls are `arca-vault-age`
-//! (local file, the default) and `arca-vault-cf` (self-hosted
-//! Cloudflare Worker + D1). The
+//! (local file, the default), `arca-vault-cf` (self-hosted
+//! Cloudflare Worker + D1), and `arca-vault-cached` (read-through
+//! encrypted local cache in front of any backend, P-007). The
 //! trait is sync by design — no async runtime in the binary; an
 //! HTTP-backed impl uses a blocking client.
 //!

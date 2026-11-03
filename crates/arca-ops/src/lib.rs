@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use age::x25519;
 use arca_config::ConfigSource;
@@ -31,6 +32,7 @@ use arca_identity_file::FileIdentity;
 use arca_identity_keyring::KeyringIdentity;
 use arca_vault::{SecretRecord, Vault};
 use arca_vault_age::AgeVault;
+use arca_vault_cached::{CachePolicy, CachedVault};
 use arca_vault_cf::{Auth as CfAuth, CfVault, CfVaultConfig};
 
 /// Knobs for [`Ops::load`] — the global CLI flags, resolved.
@@ -272,7 +274,7 @@ impl Ops {
                 let recipients = cfg.map(|c| c.recipients.as_slice()).unwrap_or(&[]);
                 let identity = self.resolve_identity(cfg)?;
                 let v = AgeVault::open(&vault_path, identity, recipients)?;
-                Ok(Box::new(v))
+                self.wrap_cache(name, cfg, Box::new(v))
             }
             "cf" => {
                 // `kind` was read off `cfg` — "cf" here means the
@@ -281,12 +283,69 @@ impl Ops {
                 #[allow(clippy::unwrap_used)]
                 let c = cfg.expect("kind cf implies a configured vault");
                 let v = self.open_cf_vault(name, c)?;
-                Ok(Box::new(v))
+                self.wrap_cache(name, cfg, Box::new(v))
             }
             other => Err(OpsError::Config(format!(
                 "vault {name:?} has unknown kind {other:?} (have: age, cf)"
             ))),
         }
+    }
+
+    /// Wrap `inner` in the read-through local cache when
+    /// `[vaults.<name>] cache` scopes it on (P-007). The cache is an
+    /// age vault at `$XDG_CACHE_HOME/arca/<name>.age`, encrypted to
+    /// the same identity + recipients as the vault itself — cached
+    /// rows are ciphertext like any vault. A cache file that won't
+    /// open is moved aside and rebuilt; one that still fails
+    /// degrades to a remote-only pass-through — the remote is
+    /// always the source of truth.
+    fn wrap_cache(
+        &self,
+        name: &str,
+        cfg: Option<&VaultConfig>,
+        inner: Box<dyn Vault>,
+    ) -> Result<Box<dyn Vault>, OpsError> {
+        let scope = match cfg.and_then(|c| c.cache.as_ref()) {
+            Some(s) if s.enabled() => s,
+            _ => return Ok(inner),
+        };
+        let identity = self.resolve_identity(cfg)?;
+        let recipients = cfg.map(|c| c.recipients.as_slice()).unwrap_or(&[]);
+        let cache_path = CachedVault::default_cache_file(name);
+        let cache: Option<AgeVault> =
+            match AgeVault::open(&cache_path, identity.clone(), recipients) {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    fallback_note(&format!(
+                        "cache for vault {name:?} unreadable ({e}) — rebuilding it"
+                    ));
+                    let _ = std::fs::rename(&cache_path, cache_path.with_extension("corrupt"));
+                    match AgeVault::open(&cache_path, identity, recipients) {
+                        Ok(v) => Some(v),
+                        Err(e2) => {
+                            fallback_note(&format!(
+                                "cache for vault {name:?} still unavailable ({e2}) — \
+                             remote-only reads"
+                            ));
+                            None
+                        }
+                    }
+                }
+            };
+        let ttl = Duration::from_secs(
+            cfg.and_then(|c| c.cache_ttl_secs)
+                .unwrap_or_else(|| arca_vault_cached::DEFAULT_TTL.as_secs()),
+        );
+        let policy = CachePolicy {
+            envs: scope.envs(),
+            ttl,
+        };
+        Ok(Box::new(CachedVault::new(
+            inner,
+            cache.map(|v| Box::new(v) as Box<dyn Vault>),
+            Some(CachedVault::default_meta_file(name)),
+            policy,
+        )))
     }
 
     /// Build the concrete [`CfVault`] for a configured
@@ -867,6 +926,11 @@ impl Ops {
             if !v.tokens.is_empty() && v.kind != "cf" {
                 problems.push(format!("[vaults.{name}] tokens only apply to kind \"cf\""));
             }
+            if v.cache_ttl_secs.is_some() && v.cache.is_none() {
+                problems.push(format!(
+                    "[vaults.{name}] cache_ttl_secs is set but cache is not"
+                ));
+            }
         }
         for (name, d) in &self.config.deploy {
             if d.kind != "cf-secrets-store" {
@@ -1165,6 +1229,8 @@ mod tests {
                 token_env: None,
                 tokens: BTreeMap::new(),
                 private_refs: false,
+                cache: None,
+                cache_ttl_secs: None,
             },
         );
         config.secrets.insert(
@@ -1240,6 +1306,8 @@ mod tests {
             token_env: None,
             tokens: BTreeMap::new(),
             private_refs: false,
+            cache: None,
+            cache_ttl_secs: None,
         }
     }
 
@@ -2314,6 +2382,121 @@ mod tests {
             let has = |n: &str| report.problems.iter().any(|p| p.contains(n));
             assert!(has("private_refs only applies"), "{:?}", report.problems);
             assert!(has("tokens only apply"), "{:?}", report.problems);
+        });
+    }
+
+    #[test]
+    fn check_flags_orphaned_cache_ttl() {
+        let mut config = Config::default();
+        let mut v = vault_cfg("cf", Some("https://x.workers.dev"));
+        v.cache_ttl_secs = Some(60);
+        config.vaults.insert("cloud".into(), v);
+        let ops = mk_ops(config);
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            let report = ops.check();
+            assert!(
+                report
+                    .problems
+                    .iter()
+                    .any(|p| p.contains("cache_ttl_secs") && p.contains("cache is not")),
+                "{:?}",
+                report.problems
+            );
+        });
+    }
+
+    /// The env vars a cached-cf test needs — token + an isolated
+    /// XDG cache home under `home`.
+    fn cached_cf_env(home: &std::path::Path, f: impl FnOnce()) {
+        temp_env::with_vars(
+            [
+                ("ARCA_CF_TOKEN", Some("ops-fake-token")),
+                (
+                    "XDG_CACHE_HOME",
+                    Some(home.join("cache-home").to_str().unwrap()),
+                ),
+            ],
+            f,
+        );
+    }
+
+    #[test]
+    fn cached_cf_vault_reads_through_and_serves_offline() {
+        use arca_testkit::mocks;
+        let mock = mocks::vault_wire("ops-fake-token");
+        let (home, mut ops) = ops_on_cf_v2(mock.url(), &[], false);
+        ops.config.vaults.get_mut("cloud").unwrap().cache = Some(arca_core::CacheScope::All(true));
+        cached_cf_env(home.path(), || {
+            let r = Ref::new("arca://a/b").unwrap();
+            ops.put(&r, Secret::new("fake")).unwrap();
+            // write-through: the cache vault landed under the XDG
+            // cache dir, per-vault
+            let cache_file = home.path().join("cache-home/arca/cloud.age");
+            assert!(cache_file.exists());
+            assert_eq!(ops.get(&r).unwrap().unwrap().value.expose(), "fake");
+            let (_, refs) = ops.list(None).unwrap();
+            assert_eq!(refs, vec![r.clone()]);
+            // the mirror itself is the proof — the same ref, held
+            // locally as ciphertext under the same identity
+            let identity = FileIdentity::new(home.path().join("identity.txt"))
+                .load()
+                .unwrap()
+                .unwrap();
+            let cache = AgeVault::open(&cache_file, identity.clone(), &[]).unwrap();
+            assert_eq!(
+                cache.list(&Env::dev()).unwrap(),
+                vec![Ref::new("arca://a/b").unwrap()]
+            );
+            assert!(ops.rm(&r).unwrap());
+            // rm invalidated the mirror too
+            let cache = AgeVault::open(&cache_file, identity, &[]).unwrap();
+            assert!(cache.list(&Env::dev()).unwrap().is_empty());
+        });
+    }
+
+    #[test]
+    fn corrupt_cache_file_is_rebuilt_not_fatal() {
+        use arca_testkit::mocks;
+        let mock = mocks::vault_wire("ops-fake-token");
+        let (home, mut ops) = ops_on_cf_v2(mock.url(), &[], false);
+        ops.config.vaults.get_mut("cloud").unwrap().cache = Some(arca_core::CacheScope::All(true));
+        let cache_file = home.path().join("cache-home/arca/cloud.age");
+        std::fs::create_dir_all(cache_file.parent().unwrap()).unwrap();
+        std::fs::write(&cache_file, b"garbage - not age ciphertext").unwrap();
+        cached_cf_env(home.path(), || {
+            let r = Ref::new("arca://a/b").unwrap();
+            // the unreadable cache is moved aside, rebuilt, and the
+            // remote answers normally
+            ops.put(&r, Secret::new("fake")).unwrap();
+            assert_eq!(ops.get(&r).unwrap().unwrap().value.expose(), "fake");
+            assert!(home.path().join("cache-home/arca/cloud.corrupt").exists());
+        });
+    }
+
+    #[test]
+    fn cache_scope_keeps_unlisted_envs_off_the_disk() {
+        use arca_testkit::mocks;
+        let mock = mocks::vault_wire("ops-fake-token");
+        let (home, mut ops) = ops_on_cf_v2(mock.url(), &[], false);
+        let cloud = ops.config.vaults.get_mut("cloud").unwrap();
+        cloud.cache = Some(arca_core::CacheScope::Envs(vec![Env::dev()]));
+        // route prod at the same vault — its rows must stay remote
+        ops.config
+            .envs
+            .insert(Env::new("prod").unwrap(), "cloud".into());
+        cached_cf_env(home.path(), || {
+            let prod_ref = Ref::new("arca://prod/a/b").unwrap();
+            ops.put(&prod_ref, Secret::new("fake")).unwrap();
+            assert_eq!(ops.get(&prod_ref).unwrap().unwrap().value.expose(), "fake");
+            let cache_file = home.path().join("cache-home/arca/cloud.age");
+            let identity = FileIdentity::new(home.path().join("identity.txt"))
+                .load()
+                .unwrap()
+                .unwrap();
+            let cache = AgeVault::open(&cache_file, identity, &[]).unwrap();
+            // dev may land in the mirror; prod never does
+            assert!(cache.list(&Env::new("prod").unwrap()).unwrap().is_empty());
         });
     }
 }
