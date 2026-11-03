@@ -7,7 +7,7 @@ priority = "low"
 labels = ["architecture", "peregrin"]
 +++
 
-Status: **proposal (later ADR)**. Formalizes the seam for real
+Status: **implemented — ADR-0003**. Formalizes the seam for real
 policy: peregrin becomes the decision point, arca stays the
 enforcement-thin emitter.
 
