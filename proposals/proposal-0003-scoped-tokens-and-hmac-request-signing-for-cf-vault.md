@@ -1,7 +1,7 @@
 +++
 id = "P-003"
 title = "scoped tokens and HMAC request signing for cf vault"
-status = "in-progress"
+status = "done"
 created = "2026-11-02"
 priority = "medium"
 labels = ["security", "vault-cf"]
