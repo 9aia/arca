@@ -32,6 +32,8 @@ pub enum Op {
     Check,
     /// Push a stored value to a write-only deploy target.
     Deploy,
+    /// Rewrite stored records for a wire/config upgrade.
+    Migrate,
     /// Interactive TUI.
     Ui,
     /// ndjson verb dispatch (later ADR).
@@ -44,7 +46,7 @@ pub enum Op {
 
 impl Op {
     /// All ops, in declaration order.
-    pub const ALL: [Op; 14] = [
+    pub const ALL: [Op; 15] = [
         Op::Init,
         Op::Put,
         Op::Get,
@@ -55,6 +57,7 @@ impl Op {
         Op::Env,
         Op::Check,
         Op::Deploy,
+        Op::Migrate,
         Op::Ui,
         Op::Serve,
         Op::Manifest,
@@ -81,6 +84,7 @@ impl Op {
             Op::Env => "env",
             Op::Check => "check",
             Op::Deploy => "deploy",
+            Op::Migrate => "migrate",
             Op::Ui => "ui",
             Op::Serve => "serve",
             Op::Manifest => "manifest",

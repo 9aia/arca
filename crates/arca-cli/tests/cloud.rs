@@ -120,6 +120,75 @@ fn cf_vault_roundtrips_through_the_wire() {
 }
 
 #[test]
+fn migrate_rekeys_rows_and_reports() {
+    let home = tempfile::tempdir().unwrap();
+    let home = home.path();
+    init(home);
+    let mock = mocks::vault_wire(TOKEN);
+    // seed one plaintext-named row through a v1-style config
+    let plain_cfg = config(
+        home,
+        &format!(
+            r#"
+            [vaults.cloud]
+            kind = "cf"
+            url = "{}"
+            token_env = "{TOKEN_ENV}"
+
+            [envs]
+            dev = {{ vault = "cloud" }}
+            "#,
+            mock.url()
+        ),
+    );
+    let o = run_stdin(
+        home,
+        &["--config", plain_cfg.to_str().unwrap(), "put", "arca://a/b"],
+        &format!("{FAKE}\n"),
+    );
+    assert!(o.status.success(), "put: {}", stderr(&o));
+
+    let cfg = config(
+        home,
+        &format!(
+            r#"
+            [vaults.cloud]
+            kind = "cf"
+            url = "{}"
+            token_env = "{TOKEN_ENV}"
+            private_refs = true
+
+            [envs]
+            dev = {{ vault = "cloud" }}
+            "#,
+            mock.url()
+        ),
+    );
+
+    // no transform flag → a pointer, not a silent no-op
+    let o = run_cfg(home, &cfg, &["migrate"]);
+    assert!(!o.status.success(), "{}", stderr(&o));
+    assert!(stderr(&o).contains("--private-refs"), "{}", stderr(&o));
+
+    // the rewrite: human output reports the re-keyed row
+    let o = run_cfg(home, &cfg, &["migrate", "--private-refs"]);
+    assert!(o.status.success(), "migrate: {}", stderr(&o));
+    assert!(stderr(&o).contains("rewrote 1 ref"), "{}", stderr(&o));
+
+    // second run is a no-op — the --json shape reports it
+    let o = run_cfg(home, &cfg, &["migrate", "--private-refs", "--json"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
+    assert_eq!(v["ok"], true);
+    assert_eq!(v["migrated"][0]["vault"], "cloud");
+    assert_eq!(v["migrated"][0]["already_private"], 1);
+
+    // and the migrated row still reads end-to-end
+    let o = run_cfg(home, &cfg, &["get", "arca://a/b"]);
+    assert_eq!(stdout(&o).trim_end(), FAKE);
+}
+
+#[test]
 fn deploy_pushes_the_value_to_the_sink() {
     let home = tempfile::tempdir().unwrap();
     let home = home.path();

@@ -12,7 +12,9 @@ categories = ["development-tools"]
 [dependencies]
 arca-core.workspace = true
 arca-vault.workspace = true
+hmac.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 time.workspace = true
 
 [lints]

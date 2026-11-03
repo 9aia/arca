@@ -1,9 +1,10 @@
 //! Protocol fakes on top of [`HttpMock`] — in-memory reference
 //! implementations of the two remote surfaces arca talks to:
 //!
-//! - [`vault_wire`] — the `arca-vault-cf/1` wire protocol, the same
-//!   semantics `arca-vault-cf/worker/index.js` implements against
-//!   D1. Stores base64 ciphertext rows only — never plaintext.
+//! - [`vault_wire`] / [`vault_wire_v2`] — the `arca-vault-cf` wire
+//!   protocol, the same semantics `arca-vault-cf/worker/index.js`
+//!   implements against D1. Stores base64 ciphertext rows only —
+//!   never plaintext.
 //! - [`cf_secrets_store`] — the CF API v4 Secrets Store envelope
 //!   (`{success, errors, result}`) that `arca-deploy-cf` pushes to.
 //!   A real Secrets Store *is* a plaintext sink, so this fake
@@ -12,16 +13,20 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
+use hmac::{Hmac, Mac};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::httpmock::{HttpMock, Request, Response};
 
-/// One stored vault row (ciphertext is opaque to the store).
+/// One stored vault row (ciphertext and `name` are opaque to the
+/// store — the private-refs blob travels verbatim).
 #[derive(Clone)]
 struct VaultRow {
     ciphertext: String,
+    name: Option<String>,
     version: u64,
     created_at: String,
     rotated_at: Option<String>,
@@ -43,23 +48,148 @@ fn row_json(s: &VaultRow) -> String {
     .to_string()
 }
 
-/// The `arca-vault-cf/1` wire protocol, in memory. Bearer `token`
-/// required on every request; per-env keyspace; server-side
-/// version/created_at/rotated_at bookkeeping (the client's rotate
-/// is a `PUT` with `"rotate": true`, 404 on a missing ref).
+/// One scoped credential the v2 mock recognizes — the test-side of
+/// the Worker's `ARCA_VAULT_TOKENS` JSON map (P-003).
+#[derive(Clone)]
+pub struct ScopedToken {
+    /// The wire `token_id` (`ArcaHmac <id>, …`).
+    pub id: &'static str,
+    /// The shared secret — a fake value, by rule.
+    pub secret: &'static str,
+    /// `(env|"*", read, write)` grants — env entries win over `"*"`.
+    pub scopes: &'static [(&'static str, bool, bool)],
+}
+
+fn scope_map(scopes: &[(&str, bool, bool)]) -> BTreeMap<String, (bool, bool)> {
+    scopes
+        .iter()
+        .map(|(e, r, w)| (e.to_string(), (*r, *w)))
+        .collect()
+}
+
+fn scope_allows(scopes: &BTreeMap<String, (bool, bool)>, env: &str, write: bool) -> bool {
+    let (read, w) = scopes
+        .get(env)
+        .or_else(|| scopes.get("*"))
+        .copied()
+        .unwrap_or((false, false));
+    if write {
+        w
+    } else {
+        read
+    }
+}
+
+/// XOR-fold constant-time equality — the mock mirrors the worker's
+/// compare (P-006): no early exit, length folded in.
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    let mut diff = a.len() ^ b.len();
+    for i in 0..a.len().max(b.len()) {
+        diff |= (a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0)) as usize;
+    }
+    diff == 0
+}
+
+/// `HMAC-SHA256(key, msg)`; the expect documents the invariant that
+/// HMAC accepts keys of any length.
+#[allow(clippy::unwrap_used)]
+fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
+    let mut mac =
+        <Hmac<Sha256> as Mac>::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
+    mac.update(msg);
+    mac.finalize().into_bytes().into()
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push_str(&format!("{b:02x}"));
+    }
+    out
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// The worker's `authenticate` — Bearer against every configured
+/// token (and the legacy one), `ArcaHmac id, ts, sig` against the
+/// scoped table with the ±60s replay window. Returns the caller's
+/// scope map or `None`.
+fn authenticate(
+    req: &Request,
+    path: &str,
+    tokens: &[ScopedToken],
+    legacy: Option<&str>,
+) -> Option<BTreeMap<String, (bool, bool)>> {
+    let header = req.header("authorization")?;
+    if let Some(candidate) = header.strip_prefix("Bearer ") {
+        let mut scopes = None;
+        for t in tokens {
+            if ct_eq(candidate.as_bytes(), t.secret.as_bytes()) {
+                scopes = Some(scope_map(t.scopes));
+            }
+        }
+        if let Some(l) = legacy {
+            if ct_eq(candidate.as_bytes(), l.as_bytes()) {
+                scopes = Some(BTreeMap::from([("*".to_string(), (true, true))]));
+            }
+        }
+        return scopes;
+    }
+    if let Some(rest) = header.strip_prefix("ArcaHmac ") {
+        let parts: Vec<&str> = rest.split(',').map(|s| s.trim()).collect();
+        if parts.len() != 3 {
+            return None;
+        }
+        let (id, ts, sig) = (parts[0], parts[1], parts[2]);
+        let entry = tokens.iter().find(|t| t.id == id)?;
+        let t: u64 = ts.parse().ok()?;
+        if unix_now().abs_diff(t) > 60 {
+            return None;
+        }
+        let body_sha = hex_encode(&Sha256::digest(&req.body));
+        let msg = format!("{}\n{}\n{}\n{}", req.method, path, ts, body_sha);
+        let expect = hex_encode(&hmac_sha256(entry.secret.as_bytes(), msg.as_bytes()));
+        return if ct_eq(sig.as_bytes(), expect.as_bytes()) {
+            Some(scope_map(entry.scopes))
+        } else {
+            None
+        };
+    }
+    None
+}
+
+/// The `arca-vault-cf/1` wire: single bearer token, all envs — kept
+/// for the legacy-auth path; the store side is already v2-shaped
+/// (`name` column, keyed list items).
 pub fn vault_wire(token: &'static str) -> HttpMock {
+    vault_wire_v2(&[], Some(token))
+}
+
+/// The `arca-vault-cf/2` wire protocol, in memory: scoped tokens
+/// (`Bearer` against any entry's secret, `ArcaHmac` signed requests
+/// per token_id), per-env `{read, write}` scope enforcement,
+/// per-env keyspace, `name`-blob pass-through, and server-side
+/// version/created_at/rotated_at bookkeeping (the client's rotate
+/// is a `PUT` with `"rotate": true`, 404 on a missing key).
+pub fn vault_wire_v2(tokens: &'static [ScopedToken], legacy: Option<&'static str>) -> HttpMock {
     let store: Arc<Mutex<BTreeMap<(String, String), VaultRow>>> =
         Arc::new(Mutex::new(BTreeMap::new()));
     HttpMock::new(move |req: &Request| {
-        if req.header("authorization") != Some(format!("Bearer {token}").as_str()) {
-            return Response::json(401, r#"{"error":"unauthorized"}"#);
-        }
         let path = req.path.split('?').next().unwrap_or("");
+        let scopes = match authenticate(req, path, tokens, legacy) {
+            Some(s) => s,
+            None => return Response::json(401, r#"{"error":"unauthorized"}"#),
+        };
         let rest = match path.strip_prefix("/v1/") {
             Some(r) => r,
             None => return Response::json(404, r#"{"error":"no such route"}"#),
         };
-        // /v1/{env} lists; /v1/{env}/{ref…} addresses one record.
+        // /v1/{env} lists; /v1/{env}/{key…} addresses one record.
         let (env, rref) = match rest.split_once('/') {
             Some((env, rref)) => (env.to_string(), Some(rref.to_string())),
             None => (rest.to_string(), None),
@@ -67,13 +197,17 @@ pub fn vault_wire(token: &'static str) -> HttpMock {
         if env.is_empty() {
             return Response::json(404, r#"{"error":"no such route"}"#);
         }
+        let write = matches!(req.method.as_str(), "PUT" | "DELETE");
+        if !scope_allows(&scopes, &env, write) {
+            return Response::json(403, r#"{"error":"token scope denies this env/verb"}"#);
+        }
         let mut store = store.lock().unwrap();
         match (req.method.as_str(), rref) {
             ("GET", None) => {
-                let refs: Vec<String> = store
-                    .keys()
-                    .filter(|(e, _)| e == &env)
-                    .map(|(_, r)| r.clone())
+                let refs: Vec<serde_json::Value> = store
+                    .iter()
+                    .filter(|((e, _), _)| e == &env)
+                    .map(|((_, r), s)| json!({ "key": r, "name": s.name }))
                     .collect();
                 Response::json(200, json!({ "refs": refs }).to_string())
             }
@@ -82,6 +216,7 @@ pub fn vault_wire(token: &'static str) -> HttpMock {
                     200,
                     json!({
                         "ciphertext": s.ciphertext,
+                        "name": s.name,
                         "version": s.version,
                         "created_at": s.created_at,
                         "rotated_at": s.rotated_at,
@@ -97,6 +232,7 @@ pub fn vault_wire(token: &'static str) -> HttpMock {
                     Some(c) if !c.is_empty() => c.to_string(),
                     _ => return Response::json(400, r#"{"error":"missing ciphertext"}"#),
                 };
+                let name = body["name"].as_str().map(str::to_string);
                 let rotate = body["rotate"].as_bool().unwrap_or(false);
                 let key = (env, rref);
                 match (store.get(&key), rotate) {
@@ -104,6 +240,7 @@ pub fn vault_wire(token: &'static str) -> HttpMock {
                     (None, false) => {
                         let s = VaultRow {
                             ciphertext,
+                            name,
                             version: 1,
                             created_at: now(),
                             rotated_at: None,
@@ -115,6 +252,7 @@ pub fn vault_wire(token: &'static str) -> HttpMock {
                     (Some(old), rot) => {
                         let s = VaultRow {
                             ciphertext,
+                            name,
                             version: old.version + 1,
                             created_at: old.created_at.clone(),
                             rotated_at: if rot {
@@ -255,6 +393,22 @@ mod tests {
 
     const AUTH: &str = "Authorization: Bearer tok\r\n";
 
+    /// A correct `ArcaHmac` header for `req` under `id`/`secret` —
+    /// mirrors the client signer, for exercising the mock's own
+    /// verification path.
+    fn hmac_auth(id: &str, secret: &str, method: &str, path: &str, body: &str) -> String {
+        let ts = unix_now();
+        let msg = format!(
+            "{}\n{}\n{}\n{}",
+            method,
+            path,
+            ts,
+            hex_encode(&Sha256::digest(body.as_bytes()))
+        );
+        let sig = hex_encode(&hmac_sha256(secret.as_bytes(), msg.as_bytes()));
+        format!("Authorization: ArcaHmac {id}, {ts}, {sig}\r\n")
+    }
+
     #[test]
     fn vault_wire_rejects_bad_routes_and_shapes() {
         let mock = vault_wire("tok");
@@ -276,6 +430,67 @@ mod tests {
         // sanity: a real list still works
         let out = exchange(&mock, &format!("GET /v1/dev HTTP/1.1\r\n{AUTH}\r\n"));
         assert!(out.contains("200") && out.contains("\"refs\""), "{out}");
+    }
+
+    #[test]
+    fn vault_wire_v2_scopes_and_signs() {
+        let tokens = &[ScopedToken {
+            id: "ops/tok-dev",
+            secret: "fake-secret",
+            scopes: &[("dev", true, true), ("prod", true, false)],
+        }];
+        let mock = vault_wire_v2(tokens, None);
+        // bearer against a scoped secret → its scopes apply
+        let out = exchange(
+            &mock,
+            "GET /v1/dev HTTP/1.1\r\nAuthorization: Bearer fake-secret\r\n\r\n",
+        );
+        assert!(out.contains("200"), "{out}");
+        // prod is read-only for this token → PUT is 403
+        let out = exchange(
+            &mock,
+            "PUT /v1/prod/x/y HTTP/1.1\r\nAuthorization: Bearer fake-secret\r\nContent-Length: 19\r\n\r\n{\"ciphertext\":\"aa\"}",
+        );
+        assert!(out.contains("403"), "{out}");
+        // a valid ArcaHmac signature reads prod
+        let auth = hmac_auth("ops/tok-dev", "fake-secret", "GET", "/v1/prod", "");
+        let out = exchange(&mock, &format!("GET /v1/prod HTTP/1.1\r\n{auth}\r\n"));
+        assert!(out.contains("200"), "{out}");
+        // a signature over the wrong path → 401
+        let auth = hmac_auth("ops/tok-dev", "fake-secret", "GET", "/v1/dev", "");
+        let out = exchange(&mock, &format!("GET /v1/prod HTTP/1.1\r\n{auth}\r\n"));
+        assert!(out.contains("401"), "{out}");
+        // unknown token id → 401
+        let auth = hmac_auth("ghost", "fake-secret", "GET", "/v1/dev", "");
+        let out = exchange(&mock, &format!("GET /v1/dev HTTP/1.1\r\n{auth}\r\n"));
+        assert!(out.contains("401"), "{out}");
+        // a malformed ArcaHmac header (wrong field count) → 401
+        let out = exchange(
+            &mock,
+            "GET /v1/dev HTTP/1.1\r\nAuthorization: ArcaHmac only, two\r\n\r\n",
+        );
+        assert!(out.contains("401"), "{out}");
+        // a stale timestamp — outside the ±60s replay window → 401
+        let stale = unix_now() - 3600;
+        let msg = format!(
+            "GET\n/v1/dev\n{}\n{}",
+            stale,
+            hex_encode(&Sha256::digest(b""))
+        );
+        let sig = hex_encode(&hmac_sha256(b"fake-secret", msg.as_bytes()));
+        let out = exchange(
+            &mock,
+            &format!(
+                "GET /v1/dev HTTP/1.1\r\nAuthorization: ArcaHmac ops/tok-dev, {stale}, {sig}\r\n\r\n"
+            ),
+        );
+        assert!(out.contains("401"), "{out}");
+        // a garbage (non-numeric) ts → 401 too
+        let out = exchange(
+            &mock,
+            "GET /v1/dev HTTP/1.1\r\nAuthorization: ArcaHmac ops/tok-dev, not-a-ts, deadbeef\r\n\r\n",
+        );
+        assert!(out.contains("401"), "{out}");
     }
 
     #[test]

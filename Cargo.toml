@@ -63,6 +63,8 @@ age = { version = "0.12", default-features = false }
 # runtime (AGENTS.md). Pinned to a >7-day-old release on purpose.
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 base64 = "0.23"
+hmac = "0.12"
+sha2 = "0.10"
 ratatui = "0.30"
 crossterm = "0.29"
 clap-markdown = "0.1.5"
