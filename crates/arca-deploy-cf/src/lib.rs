@@ -326,6 +326,51 @@ mod tests {
         // a GET without a query works the no-query arm — it still
         // fails transport here since nothing listens
         assert!(t.request("GET", "http://127.0.0.1:1", None, None).is_err());
+        // a GET *with* a query works the query arm — same transport
+        // failure downstream
+        assert!(t
+            .request("GET", "http://127.0.0.1:1", Some(("name", "x")), None)
+            .is_err());
+    }
+
+    #[test]
+    fn a_body_short_of_content_length_is_an_io_error() {
+        // server promises 100 bytes, sends 5, drops — the
+        // read_to_string arm fires, not a transport error
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            use std::io::Write;
+            let mut buf = [0u8; 4096];
+            let _ = std::io::Read::read(&mut s, &mut buf);
+            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nshort");
+        });
+        let t = CfSecretsStore::with_token(
+            "prod",
+            "acc",
+            "sto",
+            "fake",
+            Some(&format!("http://127.0.0.1:{port}")),
+        );
+        let e = t.request("GET", &format!("http://127.0.0.1:{port}"), None, None);
+        assert!(e.is_err());
+    }
+
+    #[test]
+    fn request_serves_every_verb_shape() {
+        use arca_testkit::httpmock::{HttpMock, Request, Response};
+        let mock = HttpMock::new(|_req: &Request| Response::json(200, "{}"));
+        let t = CfSecretsStore::with_token("prod", "acc", "sto", "fake", Some(mock.url()));
+        for (method, body) in [
+            ("GET", None),
+            ("DELETE", None),
+            ("POST", Some(serde_json::json!({}))),
+            ("PATCH", Some(serde_json::json!({}))),
+        ] {
+            let (status, _) = t.request(method, mock.url(), None, body).unwrap();
+            assert_eq!(status, 200, "{method}");
+        }
     }
 
     #[test]

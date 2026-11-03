@@ -420,6 +420,20 @@ mod tests {
         assert!(v.request("PATCH", "http://x", None).is_err());
         assert!(v.request("GET", "http://x", Some("{}".into())).is_err());
         assert!(v.request("PUT", "http://x", None).is_err());
+        // transport death → the io map_err arm
+        assert!(v.request("GET", "http://127.0.0.1:1", None).is_err());
+    }
+
+    #[test]
+    fn request_serves_every_verb_shape() {
+        use arca_testkit::httpmock::{HttpMock, Request, Response};
+        let mock = HttpMock::new(|_req: &Request| Response::json(200, "{}"));
+        let id = x25519::Identity::generate();
+        let v = CfVault::with_identity(mock.url(), "t", id, &[]).unwrap();
+        for (method, body) in [("GET", None), ("DELETE", None), ("PUT", Some("{}".into()))] {
+            let (status, _) = v.request(method, mock.url(), body).unwrap();
+            assert_eq!(status, 200, "{method}");
+        }
     }
 
     #[test]
@@ -438,6 +452,25 @@ mod tests {
                 .err()
                 .unwrap();
             assert!(e.to_string().contains("empty"), "{e}");
+        });
+    }
+
+    #[test]
+    fn new_surfaces_missing_and_empty_inputs() {
+        let dir = tempfile::tempdir().unwrap();
+        let id_path = dir.path().join("identity.txt");
+        let id = x25519::Identity::generate();
+        use age::secrecy::ExposeSecret;
+        std::fs::write(&id_path, format!("{}\n", id.to_string().expose_secret())).unwrap();
+        // valid token env but a missing identity file → read_identity `?`
+        temp_env::with_var("ARCA_CF_TOKEN_TEST", Some("fake-tok"), || {
+            let missing = dir.path().join("nope.txt");
+            assert!(CfVault::new("http://x", "ARCA_CF_TOKEN_TEST", &missing, &[]).is_err());
+        });
+        // valid token + valid identity → the with_identity tail
+        temp_env::with_var("ARCA_CF_TOKEN_TEST", Some("fake-tok"), || {
+            let v = CfVault::new("http://127.0.0.1:1", "ARCA_CF_TOKEN_TEST", &id_path, &[]);
+            assert!(v.is_ok());
         });
     }
 
