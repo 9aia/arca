@@ -13,6 +13,7 @@ documented at source (doc comments).
 - [arca-identity](/arca/api/arca_identity/index.html) — adapter
 - [arca-identity-file](/arca/api/arca_identity_file/index.html) — adapter
 - [arca-identity-keyring](/arca/api/arca_identity_keyring/index.html) — adapter
+- [arca-serve](/arca/api/arca_serve/index.html) — adapter
 - [arca-shell](/arca/api/arca_shell/index.html) — adapter
 - [arca-testkit](/arca/api/arca_testkit/index.html) — adapter
 - [arca-tui](/arca/api/arca_tui/index.html) — adapter

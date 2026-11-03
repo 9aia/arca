@@ -9,7 +9,7 @@ kind of memory or authority, it belongs to a neighbor.
 | **myco** | work memory — tasks, issues, proposals, plans, ADRs, handoffs | this repo's `project/` ledger is myco's; arca has no PM surface |
 | **sturn** | ephemeral coordination — live claims/ops/topics | not secrets: sturn state is transient, arca state is sealed |
 | **kuda** | code memory — symbol/index knowledge | arca refs name *secrets*, not code entities |
-| **peregrin** | orchestration — campaigns, multi-actor arbitration, policy | campaigns consume secrets via `arca run`; audit aggregation + real policy are peregrin's (`ARCA_ACTOR` is self-claimed inside arca); a future `arca serve` ndjson wire is its embedding point |
+| **peregrin** | orchestration — campaigns, multi-actor arbitration, policy | campaigns consume secrets via `arca run`; audit aggregation + real policy are peregrin's (`ARCA_ACTOR` is self-claimed inside arca); `arca serve` — the ndjson IPC wire + `[serve.pdp]` exec consult (ADR-0003) — is its embedding point |
 | **bupha** | CI gate | asserts no plaintext secrets land in pipelines; `arca check` in pipeline steps |
 | **mimus** | critic | secrets resolve env → arca → legacy (keyring, `~/.config/mimus/env`) via `mimus-arca` shelling `arca`; vaults are canonical, writes land in them |
 | **sepia** | session lifecycle | session wrappers can capture arca's stderr audit stream |

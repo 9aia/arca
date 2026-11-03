@@ -11,6 +11,7 @@
 | `secrets` | `{VAR: arca://ref}` | optional | The declared secret surface: env-var name → `arca://` ref. Bounds what `run`/`env` may inject — least privilege, no ambient vault dump. |
 | `deploy` | `{name: target}` | optional | Named deploy targets — write-only sinks (`arca deploy` pushes a stored value in; nothing ever reads one back). |
 | `guardrails` | `table` | optional | Advisory op guardrails — accident prevention for standalone use, honestly *not* a policy boundary (a locally claimed actor is spoofable by construction). |
+| `serve` | `table` | optional | The `arca serve` surface — ndjson request/response on stdio plus the optional policy decision point. Absent, serve runs with no PDP — same advisory posture as the single-shot CLI. |
 
 ## `[vaults.NAME]` — a named vault backend
 
@@ -48,6 +49,20 @@
 | `default` | `"allow"|"deny"` | optional | Fallback for ops in neither list. |
 | `allow` | `op list` | optional | Ops always allowed. |
 | `deny` | `op list` | optional | Ops always refused — deny wins over allow. |
+| `deny_adhoc` | `bool` | optional | Refuse `-s VAR=arca://ref` ad-hoc injection on `run`/`env` (MED-5). Without it, a posture like `deny = ["get"]` is sidestepped: `arca run -s V=arca://x -- printenv V` *is* a get. Declared `[secrets]` injection is unaffected — the declared surface is auditable config, not an ad-hoc grab. |
+
+## `[serve]` — the `arca serve` surface
+
+| field | type | required | notes |
+|---|---|---|---|
+| `pdp` | `table` | optional | The external policy decision point serve consults before every vault-touching op (`get`/`put`/`rm`/`rotate`). Absent, no consult happens — the advisory posture only. |
+
+## `[serve.pdp]` — the external policy decision point
+
+| field | type | required | notes |
+|---|---|---|---|
+| `exec` | `string` | required | The exec driver command — run via `sh -c` once per decision, request JSON on stdin, verdict JSON on stdout. |
+| `allow_on_error` | `bool` | optional | What an unreachable PDP means. `false` (default) fails **closed** — the op is denied; a policy engine that can't answer must not silently mean "allowed". `true` fails open — the op runs anyway and the audit event records the degraded verdict. |
 
 ## `[envs]` route forms
 

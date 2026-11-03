@@ -18,6 +18,8 @@ SRCS = {
         "EnvRouteTable": "`[envs]` — env → vault routing (table form)",
         "DeployConfig": "`[deploy.NAME]` — a write-only push target",
         "Guardrails": "`[guardrails]` — advisory op table",
+        "ServeConfig": "`[serve]` — the `arca serve` surface",
+        "PdpConfig": "`[serve.pdp]` — the external policy decision point",
     },
 }
 SRC = {n: (ROOT / f).read_text()
@@ -33,7 +35,9 @@ SIMPLE = {"String": "string", "PathBuf": "path", "bool": "bool",
           "BTreeMap<String, Ref>": "{VAR: arca://ref}",
           "BTreeMap<String, DeployConfig>": "{name: target}",
           "Guardrails": "table",
-          "GuardDefault": '"allow"|"deny"'}
+          "GuardDefault": '"allow"|"deny"',
+          "ServeConfig": "table",
+          "PdpConfig": "table"}
 
 def fields(name):
     m = re.search(rf"pub struct {name} \{{(.*?)\n\}}", SRC[name], re.S)

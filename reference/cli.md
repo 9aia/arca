@@ -16,6 +16,7 @@ This document contains the help content for the `arca` command-line program.
 * [`arca check`↴](#arca-check)
 * [`arca migrate`↴](#arca-migrate)
 * [`arca deploy`↴](#arca-deploy)
+* [`arca serve`↴](#arca-serve)
 * [`arca ui`↴](#arca-ui)
 * [`arca manifest`↴](#arca-manifest)
 * [`arca schema`↴](#arca-schema)
@@ -41,6 +42,7 @@ Refs name logical secrets (`arca://billing/stripe`); `--env` picks the resolutio
 * `check` — Validate config + the declared surface: `[envs]` routes point at declared vaults, vaults decrypt, every `[secrets]` ref resolves in its routed env. Exit 1 on findings
 * `migrate` — Rewrite stored records for a wire/config upgrade. Currently one transform: `--private-refs` re-keys every plaintext-named row in each env routed to a cf vault with `[vaults.*] private_refs = true` — ciphertext moves verbatim, old keys are deleted after the new rows land
 * `deploy` — Push a stored secret to a write-only deploy target (`[deploy.NAME]` in arca.toml, e.g. a CF Secrets Store). The vault is the source of truth; the sink never gives the value back. With one configured target, `--target` may be omitted
+* `serve` — Serve the Vault port over ndjson — one JSON request per stdin line, one response per stdout line, audit events on stderr unchanged. For orchestrators embedding arca (peregrin); with `[serve.pdp]` configured, a policy decision point is consulted before every vault-touching op. `{"op":"manifest"}` on the wire describes the protocol
 * `ui` — Interactive vault browser (requires the `tui` feature)
 * `manifest` — Capabilities, JSON shapes, env vars, audit contract — agent self-discovery (always JSON)
 * `schema` — JSON Schema for `arca.toml`
@@ -142,7 +144,7 @@ argv mode needs no shell quoting — prefer it when the command has arguments. E
 
 ###### **Options:**
 
-* `-s`, `--secret <VAR=ARCA_REF>` — Extra `VAR=arca://ref` pairs to inject
+* `-s`, `--secret <VAR=ARCA_REF>` — Extra `VAR=arca://ref` pairs to inject (refused when `[guardrails] deny_adhoc` is set)
 
 
 
@@ -191,6 +193,14 @@ Push a stored secret to a write-only deploy target (`[deploy.NAME]` in arca.toml
 ###### **Options:**
 
 * `--target <NAME>` — Deploy target name (`[deploy.NAME]`); required when several are configured
+
+
+
+## `arca serve`
+
+Serve the Vault port over ndjson — one JSON request per stdin line, one response per stdout line, audit events on stderr unchanged. For orchestrators embedding arca (peregrin); with `[serve.pdp]` configured, a policy decision point is consulted before every vault-touching op. `{"op":"manifest"}` on the wire describes the protocol
+
+**Usage:** `arca serve`
 
 
 

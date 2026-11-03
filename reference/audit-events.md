@@ -20,14 +20,15 @@ breadcrumb.
 | `rref` | the resolved ref path, env pin stripped — same on `denied`/`error` when the arg parses, else the raw arg verbatim. **Absent** on op-scoped events |
 | `env` | the env the op ran under |
 | `outcome` | `ok` \| `denied` \| `error` |
+| `policy` | **serve-path only, optional** — the PDP verdict `{allow, reason?, obligations?}` behind the outcome; absent on every other path |
 
 ## When events fire
 
 | event | meaning |
 | --- | --- |
 | `ok`, ref-scoped | one **per ref** materialized or mutated — `put`, `get`, `rotate`, `rm`, `deploy`, and per resolved ref inside `run`/`env` |
-| `ok`, op-scoped | ref-less verb completed — `init`, `list`, `check`, `ui` |
-| `denied` | `[guardrails]` refused the op before it touched the vault; `rref` is the requested ref (normalized when parseable) |
+| `ok`, op-scoped | ref-less verb completed — `init`, `list`, `check`, `ui`, `serve` |
+| `denied` | `[guardrails]` — or a serve-path PDP verdict of `allow: false` (including fail-closed on an unreachable PDP) — refused the op before it touched the vault; `rref` is the requested ref (normalized when parseable) |
 | `error` | the op ran and failed — missing secret, vault i/o, bad ref; also emitted when config load itself fails (best-effort actor/env from flags + process env) |
 
 Two deliberate silences:
@@ -36,6 +37,19 @@ Two deliberate silences:
   pure introspection, no event.
 - A `run` child's non-zero exit is the *child's* outcome — no
   `error` event for it. arca's own exit code is the child's.
+
+## `serve` and the `policy` field
+
+`arca serve` emits the same events — `get`/`put`/`rm`/`rotate`
+requests audit exactly like the CLI verbs, under the request's
+claimed `actor` when it carries one. On the serve path only,
+every event a consulted `[serve.pdp]` gated gains a `policy`
+object — `{allow, reason?, obligations?}` — so the stream shows
+the verdict behind the outcome: a PDP allow, a PDP deny
+(`outcome: "denied"`, `policy.allow: false`), or a degraded
+allow recorded when `allow_on_error` overrode an unreachable
+PDP. The `serve` verb itself closes with one op-scoped `ok`.
+See [the serve protocol](serve-protocol.md).
 
 ## `ui` and the TUI
 

@@ -48,6 +48,7 @@ export default defineConfig({
           { text: "CLI", link: "/reference/cli" },
           { text: "Config", link: "/reference/config" },
           { text: "Audit events", link: "/reference/audit-events" },
+          { text: "Serve protocol", link: "/reference/serve-protocol" },
           { text: "Environment variables", link: "/reference/env-vars" },
           { text: "Crate API", link: "/reference/crate-api" },
         ],
