@@ -1,1 +1,1 @@
-{"id":"","ws":"serve","actor":"luis","ts":1793681970,"op":{"op":"snapshot","message":"feat(serve): arca serve — ndjson Vault-port IPC + [serve.pdp] exec policy wire (P-005, ADR-0003)"}}
+{"id":"","ws":"serve","actor":"luis","ts":1793682072,"op":{"op":"presence","status":"left"}}
