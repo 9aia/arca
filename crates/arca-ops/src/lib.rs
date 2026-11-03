@@ -11,7 +11,7 @@
 pub mod audit;
 mod error;
 
-pub use audit::{AuditEvent, Outcome};
+pub use audit::{AuditEvent, Outcome, PolicyVerdict};
 pub use error::OpsError;
 
 use std::collections::BTreeMap;
@@ -157,6 +157,9 @@ pub struct Ops {
     config_path: Option<PathBuf>,
     env: Env,
     actor: Actor,
+    /// The PDP verdict attached to every audit event this handle
+    /// emits — set by `arca serve` per request via [`Self::scoped`].
+    policy: Option<PolicyVerdict>,
 }
 
 impl Ops {
@@ -189,6 +192,7 @@ impl Ops {
             config_path: located,
             env,
             actor,
+            policy: None,
         })
     }
 
@@ -210,6 +214,32 @@ impl Ops {
     /// The acting identity (attribution).
     pub fn actor(&self) -> &Actor {
         &self.actor
+    }
+
+    /// A per-request view of this handle — `arca serve` overrides
+    /// actor and env per ndjson request without reloading config,
+    /// and attaches the PDP verdict so every event the scoped
+    /// handle emits carries the policy context behind it.
+    /// `None` keeps the loaded value.
+    pub fn scoped(
+        &self,
+        actor: Option<Actor>,
+        env: Option<Env>,
+        policy: Option<PolicyVerdict>,
+    ) -> Self {
+        Ops {
+            config: self.config.clone(),
+            config_path: self.config_path.clone(),
+            env: env.unwrap_or_else(|| self.env.clone()),
+            actor: actor.unwrap_or_else(|| self.actor.clone()),
+            policy,
+        }
+    }
+
+    /// Attach (or clear) the PDP verdict — serve sets it after the
+    /// consult so the op's audit events carry the policy context.
+    pub fn set_policy(&mut self, policy: Option<PolicyVerdict>) {
+        self.policy = policy;
     }
 
     /// Apply the env-pin rule: `arca://prod/x` resolves under `prod`
@@ -952,22 +982,17 @@ impl Ops {
     /// ref-less verb completions the front-end knows about.
     /// `rref` is the raw requested ref when the verb takes one.
     pub fn emit(&self, op: Op, rref: Option<&str>, outcome: Outcome) {
-        audit::emit(&AuditEvent::op(
-            self.actor.as_str(),
-            op,
-            rref,
-            self.env.as_str(),
-            outcome,
-        ));
+        audit::emit(
+            &AuditEvent::op(self.actor.as_str(), op, rref, self.env.as_str(), outcome)
+                .with_policy(self.policy.clone()),
+        );
     }
 
     fn audit(&self, op: Op, rref: &Ref, env: &Env) {
-        audit::emit(&AuditEvent::materialized(
-            self.actor.as_str(),
-            op,
-            &rref.path(),
-            env.as_str(),
-        ));
+        audit::emit(
+            &AuditEvent::materialized(self.actor.as_str(), op, &rref.path(), env.as_str())
+                .with_policy(self.policy.clone()),
+        );
     }
 }
 
@@ -1055,6 +1080,7 @@ mod tests {
             config_path: None,
             env: Env::dev(),
             actor: Actor::new("devin").unwrap(),
+            policy: None,
         };
         let (env, r) = ops.resolve(&Ref::new("arca://prod/billing/stripe").unwrap());
         assert_eq!(env.as_str(), "prod");
@@ -1084,6 +1110,7 @@ mod tests {
             config_path: None,
             env: Env::dev(),
             actor: Actor::new("devin").unwrap(),
+            policy: None,
         };
         // Isolate HOME so default vault paths miss deterministically.
         let home = tempfile::tempdir().unwrap();
@@ -1152,6 +1179,7 @@ mod tests {
             config_path: None,
             env: Env::dev(),
             actor: Actor::new("devin").unwrap(),
+            policy: None,
         };
         let report = ops.check();
         assert!(report.vaults.iter().all(|v| v.ok), "{:?}", report.vaults);
@@ -1169,12 +1197,36 @@ mod tests {
         );
     }
 
+    #[test]
+    fn scoped_overrides_actor_and_env_per_request() {
+        let ops = mk_ops(Config::default());
+        let scoped = ops.scoped(
+            Some(Actor::new("agent:peregrin").unwrap()),
+            Some(Env::new("prod").unwrap()),
+            Some(PolicyVerdict {
+                allow: true,
+                reason: None,
+                obligations: None,
+            }),
+        );
+        assert_eq!(scoped.actor().as_str(), "agent:peregrin");
+        assert_eq!(scoped.env().as_str(), "prod");
+        // resolution honors the scoped env; a pin still wins
+        let (env, _) = scoped.resolve(&Ref::new("arca://a/b").unwrap());
+        assert_eq!(env.as_str(), "prod");
+        // None keeps the loaded values
+        let same = ops.scoped(None, None, None);
+        assert_eq!(same.actor().as_str(), "devin");
+        assert_eq!(same.env().as_str(), "dev");
+    }
+
     fn mk_ops(config: Config) -> Ops {
         Ops {
             config,
             config_path: None,
             env: Env::dev(),
             actor: Actor::new("devin").unwrap(),
+            policy: None,
         }
     }
 

@@ -13,7 +13,8 @@ pub mod secret;
 
 pub use actor::{is_valid_actor, Actor, ParseActorError};
 pub use config::{
-    Config, DeployConfig, EnvRoute, EnvRouteTable, GuardDefault, Guardrails, VaultConfig,
+    Config, DeployConfig, EnvRoute, EnvRouteTable, GuardDefault, Guardrails, PdpConfig,
+    ServeConfig, VaultConfig,
 };
 pub use env::{is_valid_env, Env, ParseEnvError};
 pub use op::{Op, ParseOpError};

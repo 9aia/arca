@@ -72,6 +72,7 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/arca-ops` | Ops I/O — vault open/save, ref resolution, audit events, verb plumbing |
 | `crates/arca-testkit` | Vault conformance suite — every impl passes the same contract tests |
 | `crates/arca-tui` | Interactive vault TUI (ratatui) — thin front-end over arca-ops; `arca ui`, feature-gated |
+| `crates/arca-serve` | ndjson IPC surface — thin front-end over arca-ops; `arca serve`, the `[serve.pdp]` exec consult (ADR-0003) |
 | `crates/arca-cli` | The `arca` binary — clap, `--json` everywhere, `manifest`/`schema` |
 | `xtask` | check / test / coverage / install / site |
 
@@ -89,7 +90,8 @@ injection, redaction, audit. Neighbors own theirs:
 - **sturn** — ephemeral coordination (live claims/ops/topics).
 - **kuda** — code memory.
 - **peregrin** — orchestration; campaigns consume secrets via
-  `arca run`. A future `arca serve` (ndjson) is a later ADR.
+  `arca run`; embedding + the policy-decision wire is `arca serve`
+  (ndjson, ADR-0003) — arca consults, peregrin decides.
 - **bupha** — CI gate; asserts no plaintext secrets land in
   pipelines.
 - **mimus** — critic; secrets resolve env → arca → legacy

@@ -1,5 +1,5 @@
 //! The `arca.toml`-shaped config model every `arca-config` source
-//! loads. Five tables:
+//! loads. Six tables:
 //!
 //! ```toml
 //! [vaults.local]                 # named vault backends ("local" is
@@ -18,7 +18,11 @@
 //! default = "allow"              #   prevention, not policy
 //! allow = ["run", "list"]
 //! deny = ["put"]
-//! ```
+//!
+//! [serve.pdp]                    # `arca serve`'s external policy
+//! exec = "peregrin policy"       #   decision point — exec driver:
+//! allow_on_error = false         #   request on stdin, verdict on
+//! ```                            #   stdout; absent → fail closed
 //!
 //! Unknown keys are rejected so a typo fails loud instead of
 //! silently doing nothing.
@@ -59,6 +63,12 @@ pub struct Config {
     /// actor is spoofable by construction).
     #[serde(default)]
     pub guardrails: Option<Guardrails>,
+    /// The `arca serve` surface — ndjson request/response on
+    /// stdio plus the optional policy decision point. Absent,
+    /// serve runs with no PDP — same advisory posture as the
+    /// single-shot CLI.
+    #[serde(default)]
+    pub serve: Option<ServeConfig>,
 }
 
 impl Config {
@@ -263,6 +273,42 @@ impl Guardrails {
     }
 }
 
+/// One `[serve]` entry — `arca serve`'s config.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ServeConfig {
+    /// The external policy decision point serve consults before
+    /// every vault-touching op (`get`/`put`/`rm`/`rotate`).
+    /// Absent, no consult happens — the advisory posture only.
+    pub pdp: Option<PdpConfig>,
+}
+
+/// `[serve.pdp]` — where policy decisions come from (P-005).
+///
+/// The PDP is always *external* — peregrin's job, never arca's.
+/// One driver today: `exec`, a command run once per decision. The
+/// request (`{actor, attestation?, op, env, ref}`) goes in on
+/// stdin as one JSON line; the verdict comes back on stdout —
+/// `{"allow": bool, "reason"?: string, "obligations"?: [string]}`.
+/// Spawn failure, non-zero exit, or unparseable output all count
+/// as *unreachable* — `allow_on_error` decides what that means.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct PdpConfig {
+    /// The exec driver command — run via `sh -c` once per
+    /// decision, request JSON on stdin, verdict JSON on stdout.
+    pub exec: String,
+    /// What an unreachable PDP means. `false` (default) fails
+    /// **closed** — the op is denied; a policy engine that can't
+    /// answer must not silently mean "allowed". `true` fails
+    /// open — the op runs anyway and the audit event records the
+    /// degraded verdict.
+    #[serde(default)]
+    pub allow_on_error: bool,
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -369,6 +415,30 @@ mod tests {
         assert!(toml::from_str::<Config>("project_dir = \"project\"").is_err());
         assert!(toml::from_str::<Config>("[envs]\nPROD = \"local\"").is_err());
         assert!(toml::from_str::<Config>("[secrets]\nX = \"not-a-ref\"").is_err());
+    }
+
+    #[test]
+    fn serve_pdp_parses_and_defaults_fail_closed() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [serve.pdp]
+            exec = "peregrin policy decide"
+            "#,
+        )
+        .unwrap();
+        let pdp = cfg.serve.unwrap().pdp.unwrap();
+        assert_eq!(pdp.exec, "peregrin policy decide");
+        assert!(!pdp.allow_on_error, "default is fail-closed");
+        // allow_on_error parses when set; empty [serve] is valid
+        let cfg: Config =
+            toml::from_str("[serve.pdp]\nexec = \"x\"\nallow_on_error = true\n").unwrap();
+        assert!(cfg.serve.unwrap().pdp.unwrap().allow_on_error);
+        let cfg: Config = toml::from_str("[serve]\n").unwrap();
+        assert!(cfg.serve.unwrap().pdp.is_none());
+        // pdp without an exec command fails loud
+        assert!(toml::from_str::<Config>("[serve.pdp]\nallow_on_error = true\n").is_err());
+        // unknown keys fail loud here too
+        assert!(toml::from_str::<Config>("[serve.pdp]\nexec = \"x\"\nurl = \"y\"\n").is_err());
     }
 
     #[test]

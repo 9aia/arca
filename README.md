@@ -49,6 +49,7 @@ values never enter agent context.
 | `arca run [-s VAR=ref] -- cmd` | Inject `[secrets]` + ad-hoc pairs into a child. One arg → `bash -c`; several → argv exec, no shell |
 | `arca env [-s VAR=ref]` | `export VAR='…'` lines for `eval` — the human path |
 | `arca check` | Validate config, vault readability, declared-surface resolution; exit 1 on findings |
+| `arca serve` | ndjson IPC mode for orchestrators — the Vault port over stdin/stdout, optional `[serve.pdp]` policy consult |
 | `arca ui` | Interactive vault browser (TUI) |
 | `arca manifest` / `arca schema` | Machine-readable capabilities / `arca.toml` JSON Schema |
 
@@ -78,6 +79,10 @@ STRIPE_KEY = "arca://billing/stripe"
 
 [guardrails]                  # advisory op table — accident prevention,
 deny = ["get"]                # not policy (ARCA_ACTOR is self-claimed)
+
+[serve.pdp]                   # `arca serve`'s external policy decision
+exec = "peregrin policy"      # point: request on stdin, verdict on
+allow_on_error = false        # stdout; unreachable fails closed
 ```
 
 Refs: `arca://ns/name` names the secret; `--env`/`ARCA_ENV` picks
@@ -122,8 +127,9 @@ gate), **mimus** (critic — its key resolution migrates to arca),
 
 Working v1 — local age vault + remote `cf` vault (self-hosted
 Worker + D1), deploy sinks, the full verb surface, TUI browser,
-audit wire, agent skill, docs site. `arca serve` (ndjson IPC for
-peregrin) and a KMS-backed crypto port are later ADRs per
+audit wire, agent skill, docs site. `arca serve` — the ndjson IPC
+surface + `[serve.pdp]` policy-decision wire for peregrin — is in
+(ADR-0003); a KMS-backed crypto port is a later ADR per
 `project/plans/` and `project/proposals/`.
 
 ## Install

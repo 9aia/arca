@@ -196,6 +196,7 @@ dependencies = [
  "arca-config-toml",
  "arca-core",
  "arca-ops",
+ "arca-serve",
  "arca-shell",
  "arca-testkit",
  "arca-tui",
@@ -315,6 +316,22 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "time",
+]
+
+[[package]]
+name = "arca-serve"
+version = "0.1.0"
+dependencies = [
+ "arca-core",
+ "arca-identity",
+ "arca-identity-file",
+ "arca-ops",
+ "arca-vault",
+ "arca-vault-age",
+ "serde",
+ "serde_json",
+ "temp-env",
+ "tempfile",
 ]
 
 [[package]]

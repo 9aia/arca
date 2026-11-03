@@ -27,6 +27,26 @@ use time::OffsetDateTime;
 
 use arca_core::Op;
 
+/// What the policy decision point said — recorded on serve-path
+/// audit events so the stream shows the verdict behind the
+/// outcome, not just the outcome. `None` on every other path:
+/// standalone CLI ops have no PDP, and the field stays absent.
+#[derive(Debug, Clone, Serialize)]
+pub struct PolicyVerdict {
+    /// The verdict — `false` is what a `denied` outcome carries.
+    pub allow: bool,
+    /// The PDP's reason, when it gave one (a deny's "why", an
+    /// allow-on-error's "the PDP was unreachable").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Conditions the PDP attached (`allow-with-conditions` —
+    /// e.g. redact, session-bound). Advisory: serve surfaces them
+    /// in the response and records them here; enforcing them is
+    /// the requester's job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub obligations: Option<Vec<String>>,
+}
+
 /// How an audited op ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -59,6 +79,9 @@ pub struct AuditEvent {
     pub env: String,
     /// How it ended.
     pub outcome: Outcome,
+    /// The PDP verdict behind this event — serve-path only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy: Option<PolicyVerdict>,
 }
 
 impl AuditEvent {
@@ -82,7 +105,14 @@ impl AuditEvent {
             rref: rref.map(str::to_string),
             env: env.to_string(),
             outcome,
+            policy: None,
         }
+    }
+
+    /// Attach the PDP verdict that gated this event (serve path).
+    pub fn with_policy(mut self, verdict: Option<PolicyVerdict>) -> Self {
+        self.policy = verdict;
+        self
     }
 }
 
@@ -153,6 +183,35 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
         assert_eq!(v["outcome"], "denied");
         assert_eq!(v["rref"], "billing/stripe");
+    }
+
+    #[test]
+    fn policy_verdict_serializes_only_when_attached() {
+        let mut buf = Vec::new();
+        emit_to(
+            &mut buf,
+            &AuditEvent::op("devin", Op::Get, Some("a/b"), "prod", Outcome::Denied).with_policy(
+                Some(PolicyVerdict {
+                    allow: false,
+                    reason: Some("pdp: no prod reads".into()),
+                    obligations: Some(vec!["session-bound".into()]),
+                }),
+            ),
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&String::from_utf8(buf).unwrap()).unwrap();
+        assert_eq!(v["policy"]["allow"], false);
+        assert_eq!(v["policy"]["reason"], "pdp: no prod reads");
+        assert_eq!(v["policy"]["obligations"][0], "session-bound");
+        // unattached → the field stays absent (skip_serializing_if)
+        let mut buf = Vec::new();
+        emit_to(
+            &mut buf,
+            &AuditEvent::materialized("devin", Op::Get, "a/b", "dev"),
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&String::from_utf8(buf).unwrap()).unwrap();
+        assert!(v.get("policy").is_none());
     }
 
     #[test]

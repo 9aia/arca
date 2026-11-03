@@ -151,6 +151,13 @@ enum Cmd {
         #[arg(long, value_name = "NAME")]
         target: Option<String>,
     },
+    /// Serve the Vault port over ndjson — one JSON request per
+    /// stdin line, one response per stdout line, audit events on
+    /// stderr unchanged. For orchestrators embedding arca
+    /// (peregrin); with `[serve.pdp]` configured, a policy
+    /// decision point is consulted before every vault-touching
+    /// op. `{"op":"manifest"}` on the wire describes the protocol.
+    Serve,
     /// Interactive vault browser (requires the `tui` feature).
     Ui,
     /// Capabilities, JSON shapes, env vars, audit contract — agent
@@ -233,6 +240,7 @@ fn cmd_op(cmd: &Cmd) -> Op {
         Cmd::Migrate { .. } => Op::Migrate,
         Cmd::Deploy { .. } => Op::Deploy,
         Cmd::Ui => Op::Ui,
+        Cmd::Serve => Op::Serve,
         Cmd::Manifest => Op::Manifest,
         Cmd::Schema => Op::Schema,
         // Handled before ops load — this arm is only for
@@ -607,6 +615,13 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Cmd::Serve => {
+            let stdin = std::io::stdin();
+            let stdout = std::io::stdout();
+            arca_serve::run(ops, &mut stdin.lock(), &mut stdout.lock())?;
+            ops.emit(Op::Serve, None, Outcome::Ok);
+            Ok(ExitCode::SUCCESS)
+        }
         // Manifest/Schema/GenCliDocs are handled before ops load —
         // by dispatch only Ui reaches this arm, so the introspection
         // variants share it rather than own a provably-dead region.
@@ -711,6 +726,7 @@ fn manifest() -> serde_json::Value {
             "check": "validate config, vault readability, declared-surface resolution; exit 1 on findings",
             "migrate": "rewrite stored records for a wire upgrade — `--private-refs` re-keys cf rows under derived keys",
             "deploy": "push a stored value to a write-only [deploy.NAME] target (sink, never a source)",
+            "serve": "ndjson IPC mode for orchestrators — get/put/rm/rotate/list/check/manifest/shutdown on stdin→stdout, audit on stderr, optional [serve.pdp] policy consult",
             "ui": "interactive vault browser (tui feature)",
             "manifest": "this document (always JSON; before config load, no audit event)",
             "schema": "JSON Schema for arca.toml (before config load)",
@@ -760,15 +776,23 @@ fn manifest() -> serde_json::Value {
         },
         "config": {
             "search": ["--config", "$ARCA_CONFIG", "./arca.toml", "~/.config/arca/arca.toml"],
-            "tables": ["vaults", "envs", "secrets", "deploy", "guardrails"],
+            "tables": ["vaults", "envs", "secrets", "deploy", "guardrails", "serve"],
             "schema": "arca schema",
             "env_pin": "arca://prod/ns/name pins the env regardless of context",
         },
         "vault_kinds": ["age", "cf"],
         "deploy_kinds": ["cf-secrets-store"],
+        "serve": {
+            "wire": "one JSON request per stdin line → one JSON response per stdout line; audit stays on stderr",
+            "ops": ["get", "put", "rm", "rotate", "list", "check", "manifest", "shutdown"],
+            "request": {"id": "any — echoed", "op": "…", "ref": "arca://…", "env": "…", "value": "…", "actor": "claimed", "attestation": "opaque→PDP"},
+            "error_codes": ["bad_request", "unknown_op", "denied", "pdp_unreachable", "not_found", "op_error"],
+            "pdp": "[serve.pdp] exec = \"cmd…\" — sh -c per vault-touching op; request on stdin, {allow,reason?,obligations?} on stdout; unreachable fails CLOSED unless allow_on_error",
+            "details": "send {\"op\":\"manifest\"} on the wire for the full protocol doc",
+        },
         "audit": {
             "wire": "ndjson lines on stderr",
-            "event": {"ts": "rfc3339", "actor": "…", "op": "…", "rref": "…|absent when op-scoped", "env": "…", "outcome": "ok|denied|error"},
+            "event": {"ts": "rfc3339", "actor": "…", "op": "…", "rref": "…|absent when op-scoped", "env": "…", "outcome": "ok|denied|error", "policy?": "{allow, reason?, obligations?} — serve-path PDP verdicts only"},
             "shape": "per-ref event per materialized/mutated ref (put/get/rotate/rm/deploy, run/env); op-scoped event for init/list/check/ui; denied on guardrail refusal; error on op failure; manifest/schema emit none; a run child's exit code is not an arca failure",
         },
         "features": {
@@ -875,6 +899,7 @@ mod tests {
                 Op::Deploy,
             ),
             (Cmd::Ui, Op::Ui),
+            (Cmd::Serve, Op::Serve),
             (Cmd::Manifest, Op::Manifest),
             (Cmd::Schema, Op::Schema),
             (Cmd::GenCliDocs, Op::Schema),
