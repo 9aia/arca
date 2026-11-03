@@ -1,4 +1,79 @@
 name: arca-config-toml
 path: crates/arca-config-toml/Cargo.toml
-purpose: Config impl: arca.toml file
-api: []
+purpose: 'Config impl: arca.toml file (explicit path, env, ./, ~/.config)'
+api:
+- name: TomlSource
+  kind: type
+  file: crates/arca-config-toml/src/lib.rs
+  line: 8
+  module: arca-config-toml
+- name: arca-config-toml
+  kind: module
+  file: crates/arca-config-toml/Cargo.toml
+  line: 1
+  module: arca-config-toml
+- name: candidates
+  kind: function
+  file: crates/arca-config-toml/src/lib.rs
+  line: 15
+  module: arca-config-toml
+- name: default_search_builds_candidates
+  kind: function
+  file: crates/arca-config-toml/src/lib.rs
+  line: 111
+  module: arca-config-toml
+- name: explicit_missing_file_errors
+  kind: function
+  file: crates/arca-config-toml/src/lib.rs
+  line: 57
+  module: arca-config-toml
+- name: load
+  kind: function
+  file: crates/arca-config-toml/src/lib.rs
+  line: 39
+  module: arca-config-toml
+- name: locate
+  kind: function
+  file: crates/arca-config-toml/src/lib.rs
+  line: 33
+  module: arca-config-toml
+- name: located_but_unreadable_errors
+  kind: function
+  file: crates/arca-config-toml/src/lib.rs
+  line: 66
+  module: arca-config-toml
+- name: parses_secrets_table
+  kind: function
+  file: crates/arca-config-toml/src/lib.rs
+  line: 82
+  module: arca-config-toml
+- name: tests
+  kind: module
+  file: crates/arca-config-toml/src/lib.rs
+  line: 53
+  module: arca-config-toml
+- name: unknown_fields_fail_loud
+  kind: function
+  file: crates/arca-config-toml/src/lib.rs
+  line: 98
+  module: arca-config-toml
+deps:
+- arca-config
+- arca-core
+- toml
+- temp-env
+- arca-config
+notes: ''
+verify:
+- crates/arca-config-toml/Cargo.toml
+- crates/arca-config-toml/src/lib.rs
+provenance:
+  files:
+  - crates/arca-config-toml/Cargo.toml
+  - crates/arca-config-toml/src/lib.rs
+  hashes:
+  - 3bb6412ec59f79642d32c9aa8f4c45e38be95068
+  - 8cfdb3b79ab4cb773fe7fe5342c91d8388847253
+  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
+  generated_at: '1793684916'
+  generator: kuda-template/0.1.2

@@ -1,4 +1,30 @@
 name: arca-config
 path: crates/arca-config/Cargo.toml
-purpose: Config port: where arca.toml-shaped config comes from
-api: []
+purpose: 'Config port: where arca.toml-shaped config comes from'
+api:
+- name: ConfigSource
+  kind: trait
+  file: crates/arca-config/src/lib.rs
+  line: 5
+  module: arca-config
+- name: arca-config
+  kind: module
+  file: crates/arca-config/Cargo.toml
+  line: 1
+  module: arca-config
+deps:
+- arca-core
+notes: ''
+verify:
+- crates/arca-config/Cargo.toml
+- crates/arca-config/src/lib.rs
+provenance:
+  files:
+  - crates/arca-config/Cargo.toml
+  - crates/arca-config/src/lib.rs
+  hashes:
+  - cf00672b233762c2e1aa7121fa3921782757a2df
+  - bfeab7ce177cba4fff075d6fa993e58005e13278
+  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
+  generated_at: '1793684916'
+  generator: kuda-template/0.1.2

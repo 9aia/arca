@@ -1,0 +1,42 @@
+name: arca-deploy
+path: crates/arca-deploy/Cargo.toml
+purpose: 'Deploy port: write-only push targets (sinks) for secret values — never a source'
+api:
+- name: Deploy
+  kind: trait
+  file: crates/arca-deploy/src/lib.rs
+  line: 35
+  module: arca-deploy
+- name: DeployError
+  kind: type
+  file: crates/arca-deploy/src/lib.rs
+  line: 52
+  module: arca-deploy
+- name: PushReport
+  kind: type
+  file: crates/arca-deploy/src/lib.rs
+  line: 25
+  module: arca-deploy
+- name: arca-deploy
+  kind: module
+  file: crates/arca-deploy/Cargo.toml
+  line: 1
+  module: arca-deploy
+deps:
+- arca-core
+- thiserror
+- arca-core
+notes: ''
+verify:
+- crates/arca-deploy/Cargo.toml
+- crates/arca-deploy/src/lib.rs
+provenance:
+  files:
+  - crates/arca-deploy/Cargo.toml
+  - crates/arca-deploy/src/lib.rs
+  hashes:
+  - fc4e4318276c49bf88d4c39a46e2f04b1aeff9a4
+  - d373d5d1932a3e20283aa02833d5ff4c25333208
+  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
+  generated_at: '1793684916'
+  generator: kuda-template/0.1.2

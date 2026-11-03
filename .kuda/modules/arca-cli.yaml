@@ -1,4 +1,0 @@
-name: arca-cli
-path: crates/arca-cli/Cargo.toml
-purpose: arca — agent-first PM CLI
-api: []

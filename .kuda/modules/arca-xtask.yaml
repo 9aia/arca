@@ -1,0 +1,137 @@
+name: arca-xtask
+path: xtask/Cargo.toml
+purpose: 'Repo chores: check / test / coverage / install / site'
+api:
+- name: CARGO_STUB
+  kind: const
+  file: xtask/tests/verbs.rs
+  line: 32
+  module: arca-xtask
+- name: OK_STUB
+  kind: const
+  file: xtask/tests/verbs.rs
+  line: 42
+  module: arca-xtask
+- name: arca-xtask
+  kind: module
+  file: xtask/Cargo.toml
+  line: 1
+  module: arca-xtask
+- name: check
+  kind: function
+  file: xtask/src/main.rs
+  line: 57
+  module: arca-xtask
+- name: check_runs_fmt_and_clippy
+  kind: function
+  file: xtask/tests/verbs.rs
+  line: 60
+  module: arca-xtask
+- name: code
+  kind: function
+  file: xtask/tests/verbs.rs
+  line: 55
+  module: arca-xtask
+- name: coverage
+  kind: function
+  file: xtask/src/main.rs
+  line: 86
+  module: arca-xtask
+- name: coverage_needs_llvm_cov
+  kind: function
+  file: xtask/tests/verbs.rs
+  line: 83
+  module: arca-xtask
+- name: have
+  kind: function
+  file: xtask/src/main.rs
+  line: 37
+  module: arca-xtask
+- name: have_cargo_sub
+  kind: function
+  file: xtask/src/main.rs
+  line: 47
+  module: arca-xtask
+- name: install
+  kind: function
+  file: xtask/src/main.rs
+  line: 106
+  module: arca-xtask
+- name: install_delegates_to_cargo_install
+  kind: function
+  file: xtask/tests/verbs.rs
+  line: 108
+  module: arca-xtask
+- name: main
+  kind: function
+  file: xtask/src/main.rs
+  line: 126
+  module: arca-xtask
+- name: run
+  kind: function
+  file: xtask/src/main.rs
+  line: 13
+  module: arca-xtask
+- name: run_in
+  kind: function
+  file: xtask/src/main.rs
+  line: 24
+  module: arca-xtask
+- name: scratch
+  kind: function
+  file: xtask/tests/verbs.rs
+  line: 14
+  module: arca-xtask
+- name: site
+  kind: function
+  file: xtask/src/main.rs
+  line: 112
+  module: arca-xtask
+- name: site_needs_the_docs_worktree
+  kind: function
+  file: xtask/tests/verbs.rs
+  line: 116
+  module: arca-xtask
+- name: stub
+  kind: function
+  file: xtask/tests/verbs.rs
+  line: 20
+  module: arca-xtask
+- name: test
+  kind: function
+  file: xtask/src/main.rs
+  line: 76
+  module: arca-xtask
+- name: test_prefers_nextest_then_falls_back
+  kind: function
+  file: xtask/tests/verbs.rs
+  line: 74
+  module: arca-xtask
+- name: unknown_and_empty_verbs_print_usage
+  kind: function
+  file: xtask/tests/verbs.rs
+  line: 137
+  module: arca-xtask
+- name: xtask
+  kind: function
+  file: xtask/tests/verbs.rs
+  line: 44
+  module: arca-xtask
+deps: []
+notes: ''
+verify:
+- xtask/Cargo.toml
+- xtask/src/main.rs
+- xtask/tests/verbs.rs
+provenance:
+  files:
+  - xtask/Cargo.toml
+  - xtask/src/main.rs
+  - xtask/tests/verbs.rs
+  hashes:
+  - 9c55ec755d27dd29ba8bd214918b0213f0283c14
+  - fad3f6f344ce90eca5dbd73943c95eb4f4d9e238
+  - 18eeec9a39ef81f1b7b90a85ca743eecd1835eca
+  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
+  generated_at: '1793684916'
+  generator: kuda-template/0.1.2

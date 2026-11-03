@@ -1,0 +1,107 @@
+name: arca-identity
+path: crates/arca-identity/Cargo.toml
+purpose: 'Identity port: where the age identity (master key) comes from — file, keyring, later sealed variants'
+api:
+- name: IdentityError
+  kind: type
+  file: crates/arca-identity/src/lib.rs
+  line: 69
+  module: arca-identity
+- name: IdentitySource
+  kind: trait
+  file: crates/arca-identity/src/lib.rs
+  line: 30
+  module: arca-identity
+- name: Mem
+  kind: type
+  file: crates/arca-identity/src/lib.rs
+  line: 99
+  module: arca-identity
+- name: arca-identity
+  kind: module
+  file: crates/arca-identity/Cargo.toml
+  line: 1
+  module: arca-identity
+- name: describe
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 138
+  module: arca-identity
+- name: ensure
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 55
+  module: arca-identity
+- name: ensure_generates_once_then_loads
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 144
+  module: arca-identity
+- name: ensure_propagates_store_failures
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 154
+  module: arca-identity
+- name: failing
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 112
+  module: arca-identity
+- name: from
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 87
+  module: arca-identity
+- name: io_error_maps_to_the_io_variant
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 170
+  module: arca-identity
+- name: kind
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 134
+  module: arca-identity
+- name: load
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 121
+  module: arca-identity
+- name: mem_names_itself_like_any_source
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 163
+  module: arca-identity
+- name: new
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 105
+  module: arca-identity
+- name: store
+  kind: function
+  file: crates/arca-identity/src/lib.rs
+  line: 126
+  module: arca-identity
+- name: tests
+  kind: module
+  file: crates/arca-identity/src/lib.rs
+  line: 94
+  module: arca-identity
+deps:
+- age
+- thiserror
+- age
+notes: ''
+verify:
+- crates/arca-identity/Cargo.toml
+- crates/arca-identity/src/lib.rs
+provenance:
+  files:
+  - crates/arca-identity/Cargo.toml
+  - crates/arca-identity/src/lib.rs
+  hashes:
+  - d68fda81cc69983fbbdb3b9130c7c2e9540ea1a7
+  - a36d384d85f08322d78495c7d4c53a2e395ba5ab
+  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
+  generated_at: '1793684916'
+  generator: kuda-template/0.1.2

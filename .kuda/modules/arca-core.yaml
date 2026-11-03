@@ -1,4 +1,252 @@
 name: arca-core
 path: crates/arca-core/Cargo.toml
-purpose: arca domain core — pure, no I/O
-api: []
+purpose: 'arca domain core: arca:// refs, redacting Secret, env axis, actor, config model — pure, no I/O'
+api:
+- name: ALL
+  kind: const
+  file: crates/arca-core/src/op.rs
+  line: 49
+  module: arca-core
+- name: Actor
+  kind: type
+  file: crates/arca-core/src/actor.rs
+  line: 12
+  module: arca-core
+- name: Config
+  kind: type
+  file: crates/arca-core/src/config.rs
+  line: 43
+  module: arca-core
+- name: DeployConfig
+  kind: type
+  file: crates/arca-core/src/config.rs
+  line: 156
+  module: arca-core
+- name: Env
+  kind: type
+  file: crates/arca-core/src/env.rs
+  line: 12
+  module: arca-core
+- name: EnvRoute
+  kind: type
+  file: crates/arca-core/src/config.rs
+  line: 184
+  module: arca-core
+- name: EnvRouteTable
+  kind: type
+  file: crates/arca-core/src/config.rs
+  line: 195
+  module: arca-core
+- name: Err
+  kind: type
+  file: crates/arca-core/src/actor.rs
+  line: 47
+  module: arca-core
+- name: Err
+  kind: type
+  file: crates/arca-core/src/env.rs
+  line: 60
+  module: arca-core
+- name: Err
+  kind: type
+  file: crates/arca-core/src/op.rs
+  line: 97
+  module: arca-core
+- name: Err
+  kind: type
+  file: crates/arca-core/src/refs.rs
+  line: 98
+  module: arca-core
+- name: Error
+  kind: type
+  file: crates/arca-core/src/actor.rs
+  line: 55
+  module: arca-core
+- name: GuardDefault
+  kind: type
+  file: crates/arca-core/src/config.rs
+  line: 226
+  module: arca-core
+- name: Guardrails
+  kind: type
+  file: crates/arca-core/src/config.rs
+  line: 243
+  module: arca-core
+- name: LOCAL_VAULT
+  kind: const
+  file: crates/arca-core/src/config.rs
+  line: 37
+  module: arca-core
+- name: Op
+  kind: type
+  file: crates/arca-core/src/op.rs
+  line: 14
+  module: arca-core
+- name: ParseActorError
+  kind: type
+  file: crates/arca-core/src/actor.rs
+  line: 44
+  module: arca-core
+- name: ParseEnvError
+  kind: type
+  file: crates/arca-core/src/env.rs
+  line: 57
+  module: arca-core
+- name: ParseOpError
+  kind: type
+  file: crates/arca-core/src/op.rs
+  line: 71
+  module: arca-core
+- name: ParseRefError
+  kind: type
+  file: crates/arca-core/src/refs.rs
+  line: 95
+  module: arca-core
+- name: PdpConfig
+  kind: type
+  file: crates/arca-core/src/config.rs
+  line: 300
+  module: arca-core
+- name: Ref
+  kind: type
+  file: crates/arca-core/src/refs.rs
+  line: 23
+  module: arca-core
+- name: SCHEME
+  kind: const
+  file: crates/arca-core/src/refs.rs
+  line: 19
+  module: arca-core
+- name: Secret
+  kind: type
+  file: crates/arca-core/src/secret.rs
+  line: 16
+  module: arca-core
+- name: ServeConfig
+  kind: type
+  file: crates/arca-core/src/config.rs
+  line: 280
+  module: arca-core
+- name: VaultConfig
+  kind: type
+  file: crates/arca-core/src/config.rs
+  line: 104
+  module: arca-core
+- name: WELL_KNOWN
+  kind: const
+  file: crates/arca-core/src/env.rs
+  line: 17
+  module: arca-core
+- name: actor
+  kind: module
+  file: crates/arca-core/src/lib.rs
+  line: 7
+  module: arca-core
+- name: all_covers_schema
+  kind: function
+  file: crates/arca-core/src/op.rs
+  line: 136
+  module: arca-core
+- name: allows
+  kind: function
+  file: crates/arca-core/src/config.rs
+  line: 265
+  module: arca-core
+- name: arca-core
+  kind: module
+  file: crates/arca-core/Cargo.toml
+  line: 1
+  module: arca-core
+- name: as_str
+  kind: function
+  file: crates/arca-core/src/actor.rs
+  line: 26
+  module: arca-core
+- name: as_str
+  kind: function
+  file: crates/arca-core/src/env.rs
+  line: 34
+  module: arca-core
+- name: as_str
+  kind: function
+  file: crates/arca-core/src/op.rs
+  line: 75
+  module: arca-core
+- name: cf_tokens_and_private_refs_parse
+  kind: function
+  file: crates/arca-core/src/config.rs
+  line: 385
+  module: arca-core
+- name: config
+  kind: module
+  file: crates/arca-core/src/lib.rs
+  line: 8
+  module: arca-core
+- name: conversions_and_display
+  kind: function
+  file: crates/arca-core/src/actor.rs
+  line: 136
+  module: arca-core
+- name: default_deploy_kind
+  kind: function
+  file: crates/arca-core/src/config.rs
+  line: 175
+  module: arca-core
+- name: default_kind
+  kind: function
+  file: crates/arca-core/src/config.rs
+  line: 143
+  module: arca-core
+- name: deploy_config
+  kind: function
+  file: crates/arca-core/src/config.rs
+  line: 95
+  module: arca-core
+api_omitted: 86
+deps:
+- schemars
+- serde
+- thiserror
+- zeroize
+- serde_json
+- toml
+- zeroize
+- serde
+- actor
+- config
+- env
+- op
+- refs
+- secret
+notes: ''
+verify:
+- crates/arca-core/Cargo.toml
+- crates/arca-core/src/actor.rs
+- crates/arca-core/src/config.rs
+- crates/arca-core/src/env.rs
+- crates/arca-core/src/lib.rs
+- crates/arca-core/src/op.rs
+- crates/arca-core/src/refs.rs
+- crates/arca-core/src/secret.rs
+provenance:
+  files:
+  - crates/arca-core/Cargo.toml
+  - crates/arca-core/src/actor.rs
+  - crates/arca-core/src/config.rs
+  - crates/arca-core/src/env.rs
+  - crates/arca-core/src/lib.rs
+  - crates/arca-core/src/op.rs
+  - crates/arca-core/src/refs.rs
+  - crates/arca-core/src/secret.rs
+  hashes:
+  - 6dcc3b1198677927e82d542e41e26fab610796b1
+  - 969e8e3eff5b1be6a77238a69761993de6b31ea2
+  - 1ff04e1b411a491e41cf6b13f940525d7c8525d6
+  - e9ff49af7daccbb09ceb392ed413fdef16bd7b8b
+  - d5e558a9cf69e895f27042fcc542fdfce73a1cd0
+  - 55d8238f2ce4c4d16649d30958e24e4c4578d2d0
+  - 6b9cf52a6e8575ab8bdbd2a18219f4d41a4d0830
+  - 508fc79aa21a29585701837e6e0377f6775cf153
+  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
+  generated_at: '1793684916'
+  generator: kuda-template/0.1.2
