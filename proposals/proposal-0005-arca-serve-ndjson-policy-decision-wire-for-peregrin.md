@@ -45,3 +45,10 @@ local socket):
 Large — wire protocol, attestation format, peregrin-side PDP
 impl. Correctly sequenced after peregrin exists; this proposal
 only fixes the boundary contract so peregrin can build against it.
+
+## Note — local serving needs no cf
+
+`arca serve` exposes the `Vault` *port* itself over ndjson — any
+impl behind it. A local instance is the age vault served in
+process, no HTTP/D1 semantics involved; the cf wire is only for
+remote vaults.

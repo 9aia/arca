@@ -60,3 +60,11 @@ hatch either way.
 
 Medium — composite impl or cf flag, metadata freshness probe,
 write-through invalidation, env-scoped policy arm in config.
+
+## Note — cf is the remote-only option
+
+Serving locally doesn't need the cf worker at all: the age impl
+behind the same `Vault` port is vault-local today, and P-005's
+`serve` exposes the port itself. cf's value here is purely the
+*remote* half — one vault reachable from multiple machines; the
+cache/wire benefits are transport-agnostic.
