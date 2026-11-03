@@ -6,3 +6,4 @@
 - [ ] T-011 docs: regenerate + redeploy site (architecture.md 'serve future' line is stale; merge shipped) · pri:low · created:2026-11-03
 - [ ] T-012 fix .kuda/index.yaml — cards reference nonexistent arca-git crate (foreign repo's cards?) · pri:low · created:2026-11-03
 - [ ] T-013 fix I-003: vault.age mode 0666 produced no permission note · pri:low · owner:peregrin · created:2026-11-03 · #adversarial
+- [ ] T-014 merge feat/peregrin-campaign + commit pending README edits (campaigns section) · created:2026-11-03
