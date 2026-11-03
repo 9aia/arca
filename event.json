@@ -1,1 +1,1 @@
-{"id":"","ws":"serve-hardening","actor":"luis","ts":1793682665,"op":{"op":"claim","glob":"docs/reference/**","ttl_secs":3600}}
+{"id":"","ws":"serve-hardening","actor":"luis","ts":1793682665,"op":{"op":"claim","glob":"project/**","ttl_secs":3600}}
