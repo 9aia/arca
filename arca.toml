@@ -1,0 +1,17 @@
+# arca.toml — repo-level arca config (dogfooding). Search order:
+# --config → $ARCA_CONFIG → ./arca.toml → ~/.config/arca/arca.toml.
+# Secrets are refs, never values.
+
+# The declared secret surface — what `arca run`/`arca env` may inject.
+# The adversarial campaign (campaigns/adversarial/) runs under
+# `arca run --env dev -- peregrin campaign run …`, so its credentials
+# arrive through here. Fake values are all the campaign needs:
+#
+#   printf 'fake-devin-token' | arca put arca://agents/devin
+#   printf 'fake-cf-token'    | arca put arca://cf/token
+#
+[secrets]
+# agent-runner credential the campaign's agent nodes may consume
+DEVIN_API_KEY = "arca://agents/devin"
+# cf-vault bearer — materializes only when a [vaults.cloud] is wired
+ARCA_CF_TOKEN = "arca://cf/token"
