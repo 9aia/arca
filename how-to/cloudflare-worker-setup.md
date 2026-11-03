@@ -82,7 +82,7 @@ printf '%s' '<prod-token-secret>' | arca put arca://ops/cf-token-prod --env prod
 ```
 
 With a scoped token configured the client signs every request —
-`Authorization: ArcaHmac <token_id>, <ts>, <sig>` where
+`Authorization: ArcaHmac &lt;token_id&gt;, &lt;ts&gt;, &lt;sig&gt;` where
 `sig = hex HMAC-SHA256(token, method+path+ts+sha256(body))` and `ts`
 must be within the worker's 60-second replay window. **The token
 never travels.** `Bearer` stays accepted during migration, so a

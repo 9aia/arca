@@ -36,6 +36,9 @@ Design rules:
 | `arca-ops` | ops | arca ops I/O: config load, env/ref resolution, vault open, verb plumbing, audit emission |
 | `arca-config-toml` | adapter | Config impl: arca.toml file (explicit path, env, ./, ~/.config) |
 | `arca-deploy-cf` | adapter | Deploy impl: push secret values to a Cloudflare account Secrets Store (write-only sink) via the CF API v4 |
+| `arca-identity` | adapter | Identity port: where the age identity (master key) comes from — file, keyring, later sealed variants |
+| `arca-identity-file` | adapter | Identity impl: the ~/.config/arca/identity.txt age keyfile (0600) — the headless/CI default |
+| `arca-identity-keyring` | adapter | Identity impl: the platform session secret store (secret-service / Keychain / Credential Manager) via keyring-core |
 | `arca-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
 | `arca-testkit` | adapter | Vault conformance suite — every arca-vault impl passes the same contract tests (fake values only) |
 | `arca-tui` | adapter | arca — interactive vault TUI; a thin front-end over arca-ops (phase 5 polish) |

@@ -47,8 +47,8 @@ unlocks the local file vault and the remote `cf` vault alike.
 
 ## The cf wire (`arca-vault-cf/2`)
 
-- **Request signing** — `Authorization: ArcaHmac <token_id>, <ts>,
-  <sig>` with `sig = hex HMAC-SHA256(token, method+path+ts+
+- **Request signing** — `Authorization: ArcaHmac &lt;token_id&gt;, &lt;ts&gt;,
+  &lt;sig&gt;` with `sig = hex HMAC-SHA256(token, method+path+ts+
   sha256hex(body))`. The token is the HMAC key and never crosses
   the wire; a ±60s timestamp window bounds replay. Worker-side,
   `ARCA_VAULT_TOKENS` maps `token_id → {env → {read, write}}`

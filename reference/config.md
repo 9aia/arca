@@ -22,6 +22,8 @@
 | `recipients` | `list` | optional | Extra age recipients to encrypt to, beyond the identity's public key (`age1…` strings). |
 | `url` | `string` | optional | Worker base URL (`cf` impl), e.g. `https://arca-vault.you.workers.dev`. |
 | `token_env` | `string` | optional | Name of the env var holding the bearer token (`cf` impl) — the token *name* lives in config, the token *value* only in the process env. |
+| `tokens` | `BTreeMap<Env, Ref>` | optional | Per-env scoped credentials (`cf` impl, P-003): env → the `arca://` ref of a token stored in the `local` vault. Each resolved token authenticates as `ArcaHmac &lt;ref-path&gt;, ts, sig` — the ref path is the wire `token_id`. Token *refs* live in config, never token values. |
+| `private_refs` | `bool` | optional | Opt-in private ref metadata (`cf` impl, P-004): storage keys become HMAC-derived hex and every record carries an age-encrypted `name` blob, so the remote store can't see which secrets exist. Default false; `arca migrate --private-refs` rewrites existing rows. |
 
 ## `[envs]` — env → vault routing (table form)
 

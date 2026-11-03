@@ -14,6 +14,7 @@ This document contains the help content for the `arca` command-line program.
 * [`arca run`↴](#arca-run)
 * [`arca env`↴](#arca-env)
 * [`arca check`↴](#arca-check)
+* [`arca migrate`↴](#arca-migrate)
 * [`arca deploy`↴](#arca-deploy)
 * [`arca ui`↴](#arca-ui)
 * [`arca manifest`↴](#arca-manifest)
@@ -29,7 +30,7 @@ Refs name logical secrets (`arca://billing/stripe`); `--env` picks the resolutio
 
 ###### **Subcommands:**
 
-* `init` — Bootstrap: generate the age identity (0600) if missing and verify the vault opens
+* `init` — Bootstrap: store the age identity in the system keyring when a session secret store is reachable — importing an existing identity.txt rather than orphaning it — else the `~/.config/arca/identity.txt` keyfile (0600). Verifies the vault opens
 * `put` — Store a secret. The value comes from stdin (`printf … | arca put arca://ns/name`) or a hidden terminal prompt — never args, which land in shell history and `/proc`
 * `get` — Print a secret's value to stdout — the escape hatch. Prefer `arca run` so values never enter agent context; guardrails can deny this op
 * `list` — List the refs stored in the selected env — names only, never values
@@ -38,6 +39,7 @@ Refs name logical secrets (`arca://billing/stripe`); `--env` picks the resolutio
 * `run` — Run a command with declared secrets injected as env vars
 * `env` — Print `export VAR='…'` lines for `eval "$(arca env)"` — the human path (`run` is the agent path). Values print to stdout: `--json` emits a `VAR → value` map
 * `check` — Validate config + the declared surface: `[envs]` routes point at declared vaults, vaults decrypt, every `[secrets]` ref resolves in its routed env. Exit 1 on findings
+* `migrate` — Rewrite stored records for a wire/config upgrade. Currently one transform: `--private-refs` re-keys every plaintext-named row in each env routed to a cf vault with `[vaults.*] private_refs = true` — ciphertext moves verbatim, old keys are deleted after the new rows land
 * `deploy` — Push a stored secret to a write-only deploy target (`[deploy.NAME]` in arca.toml, e.g. a CF Secrets Store). The vault is the source of truth; the sink never gives the value back. With one configured target, `--target` may be omitted
 * `ui` — Interactive vault browser (requires the `tui` feature)
 * `manifest` — Capabilities, JSON shapes, env vars, audit contract — agent self-discovery (always JSON)
@@ -54,9 +56,13 @@ Refs name logical secrets (`arca://billing/stripe`); `--env` picks the resolutio
 
 ## `arca init`
 
-Bootstrap: generate the age identity (0600) if missing and verify the vault opens
+Bootstrap: store the age identity in the system keyring when a session secret store is reachable — importing an existing identity.txt rather than orphaning it — else the `~/.config/arca/identity.txt` keyfile (0600). Verifies the vault opens
 
-**Usage:** `arca init`
+**Usage:** `arca init [OPTIONS]`
+
+###### **Options:**
+
+* `--with-file` — Force the identity keyfile even when a keyring is available — the headless/CI mode
 
 
 
@@ -157,6 +163,18 @@ Print `export VAR='…'` lines for `eval "$(arca env)"` — the human path (`run
 Validate config + the declared surface: `[envs]` routes point at declared vaults, vaults decrypt, every `[secrets]` ref resolves in its routed env. Exit 1 on findings
 
 **Usage:** `arca check`
+
+
+
+## `arca migrate`
+
+Rewrite stored records for a wire/config upgrade. Currently one transform: `--private-refs` re-keys every plaintext-named row in each env routed to a cf vault with `[vaults.*] private_refs = true` — ciphertext moves verbatim, old keys are deleted after the new rows land
+
+**Usage:** `arca migrate [OPTIONS]`
+
+###### **Options:**
+
+* `--private-refs` — Re-key cf-vault rows under HMAC-derived storage keys, attaching the encrypted `name` blob (P-004)
 
 
 
