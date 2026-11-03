@@ -326,6 +326,7 @@ dependencies = [
  "arca-identity",
  "arca-identity-file",
  "arca-ops",
+ "arca-shell",
  "arca-vault",
  "arca-vault-age",
  "serde",

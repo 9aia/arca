@@ -66,14 +66,19 @@ const PASS_ENV: &[&str] = &[
 /// Env-var prefixes a child may keep (`LC_*`, `XDG_*`).
 const PASS_ENV_PREFIX: &[&str] = &["LC_", "XDG_"];
 
-/// Whether `name` survives the env scrub.
-fn allowed_var(name: &str) -> bool {
+/// Whether `name` survives the env scrub. Public so sibling
+/// crates spawning child processes (`arca-serve`'s PDP exec)
+/// apply the *same* allowlist — one scrub policy, not two.
+pub fn allowed_var(name: &str) -> bool {
     PASS_ENV.contains(&name) || PASS_ENV_PREFIX.iter().any(|p| name.starts_with(p))
 }
 
 /// Give `c` a scrubbed environment: the allowlist values copied
-/// out of the parent's env, then `vars` (resolved secrets) on top.
-fn scrub_env(c: &mut Command, vars: &[(String, String)]) {
+/// out of the parent's env, then `vars` on top. Every child arca
+/// spawns goes through this — `arca run` (injected secrets in
+/// `vars`) and `arca serve`'s PDP exec (empty `vars`) alike — so
+/// parent credentials can never leak into a subprocess.
+pub fn scrub_env(c: &mut Command, vars: &[(String, String)]) {
     c.env_clear();
     for (k, v) in std::env::vars() {
         if allowed_var(&k) {

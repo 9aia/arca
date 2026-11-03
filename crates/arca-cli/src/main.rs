@@ -467,7 +467,17 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
         }
         Cmd::Check => {
             let report = ops.check();
-            ops.emit(Op::Check, None, Outcome::Ok);
+            // A check that found problems exits 1 — the audit
+            // outcome mirrors it, not a blanket `ok`.
+            ops.emit(
+                Op::Check,
+                None,
+                if report.problems.is_empty() {
+                    Outcome::Ok
+                } else {
+                    Outcome::Error
+                },
+            );
             let ok = report.problems.is_empty();
             if cli.json {
                 let secrets: serde_json::Map<String, serde_json::Value> = report
@@ -616,6 +626,31 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
             Ok(ExitCode::SUCCESS)
         }
         Cmd::Serve => {
+            // Trust-root warning: a `[serve.pdp] exec` line is
+            // config that authorizes shell exec. When it arrives
+            // via the *implicit* ./arca.toml search — not a pinned
+            // --config/$ARCA_CONFIG and not the user's home
+            // config — the working directory itself is the trust
+            // root, so say so loudly before serving.
+            let implicit_local = cli.config.is_none()
+                && std::env::var_os("ARCA_CONFIG").is_none()
+                && ops.config_path().map(|p| p.as_path())
+                    == Some(std::path::Path::new("arca.toml"));
+            if implicit_local
+                && ops
+                    .config()
+                    .serve
+                    .as_ref()
+                    .and_then(|s| s.pdp.as_ref())
+                    .is_some()
+            {
+                eprintln!(
+                    "warning: ./arca.toml declares [serve.pdp] exec — \
+                     this config is a trust root authorizing shell execution \
+                     and was found on the implicit search path. \
+                     Pin it with --config or $ARCA_CONFIG if this is intended."
+                );
+            }
             let stdin = std::io::stdin();
             let stdout = std::io::stdout();
             arca_serve::run(ops, &mut stdin.lock(), &mut stdout.lock())?;
@@ -787,7 +822,7 @@ fn manifest() -> serde_json::Value {
             "ops": ["get", "put", "rm", "rotate", "list", "check", "manifest", "shutdown"],
             "request": {"id": "any — echoed", "op": "…", "ref": "arca://…", "env": "…", "value": "…", "actor": "claimed", "attestation": "opaque→PDP"},
             "error_codes": ["bad_request", "unknown_op", "denied", "pdp_unreachable", "not_found", "op_error"],
-            "pdp": "[serve.pdp] exec = \"cmd…\" — sh -c per vault-touching op; request on stdin, {allow,reason?,obligations?} on stdout; unreachable fails CLOSED unless allow_on_error",
+            "pdp": "[serve.pdp] exec = \"cmd…\" — sh -c per consulted op (get/put/rm/rotate/list/check; timeout_ms deadline, default 5000); request on stdin, {allow,reason?,obligations?} on stdout; unreachable fails CLOSED unless allow_on_error; child env is scrubbed to the arca-shell allowlist",
             "details": "send {\"op\":\"manifest\"} on the wire for the full protocol doc",
         },
         "audit": {

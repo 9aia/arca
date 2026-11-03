@@ -279,8 +279,9 @@ impl Guardrails {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ServeConfig {
     /// The external policy decision point serve consults before
-    /// every vault-touching op (`get`/`put`/`rm`/`rotate`).
-    /// Absent, no consult happens — the advisory posture only.
+    /// every op that can materialize (`get`/`put`/`rm`/`rotate`/
+    /// `list`/`check`). Absent, no consult happens — the advisory
+    /// posture only.
     pub pdp: Option<PdpConfig>,
 }
 
@@ -299,6 +300,10 @@ pub struct ServeConfig {
 pub struct PdpConfig {
     /// The exec driver command — run via `sh -c` once per
     /// decision, request JSON on stdin, verdict JSON on stdout.
+    /// **Trust root**: the line authorizes shell exec; the child
+    /// inherits only the `arca-shell` env allowlist. `arca serve`
+    /// warns when this arrives via an implicit `./arca.toml` —
+    /// pin config with `--config`/`$ARCA_CONFIG`.
     pub exec: String,
     /// What an unreachable PDP means. `false` (default) fails
     /// **closed** — the op is denied; a policy engine that can't
@@ -307,6 +312,12 @@ pub struct PdpConfig {
     /// degraded verdict.
     #[serde(default)]
     pub allow_on_error: bool,
+    /// Per-decision deadline in milliseconds — the child is
+    /// killed and the consult counts as *unreachable* past it.
+    /// A hung or flooding PDP must never freeze the serve loop;
+    /// absent → 5000.
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 #[cfg(test)]
