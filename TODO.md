@@ -5,3 +5,4 @@
 - [ ] T-010 peregrin adversarial campaign — attack→triage→fix→verify under arca run (feat/peregrin-campaign) · owner:devin · created:2026-11-03 · #campaign · #peregrin
 - [ ] T-011 docs: regenerate + redeploy site (architecture.md 'serve future' line is stale; merge shipped) · pri:low · created:2026-11-03
 - [ ] T-012 fix .kuda/index.yaml — cards reference nonexistent arca-git crate (foreign repo's cards?) · pri:low · created:2026-11-03
+- [ ] T-013 fix I-003: vault.age mode 0666 produced no permission note · pri:low · owner:peregrin · created:2026-11-03 · #adversarial
