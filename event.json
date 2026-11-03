@@ -1,1 +1,1 @@
-{"id":"","ws":"devin-t005","actor":"luis","ts":1793667600,"op":{"op":"write","path":"crates/arca-cli/tests/edges.rs","blob":"b600c345173512dc37ef548af3242d70c66fb3c8","intent":"T-005: 100% line coverage"}}
+{"id":"","ws":"devin-t005","actor":"luis","ts":1793667600,"op":{"op":"write","path":"crates/arca-deploy-cf/src/lib.rs","blob":"e6e5ce510c61e308a7aa532f7bfc9622065ba742","intent":"T-005: 100% line coverage"}}
