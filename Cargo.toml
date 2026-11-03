@@ -60,7 +60,9 @@ tempfile = "3"
 temp-env = "0.3"
 sigpipe = "0.1"
 rpassword = "7"
-zeroize = "1"
+# `serde` so Zeroizing<String> can sit inside serde structs
+# (arca-vault-age's Entry) — values still scrub on drop.
+zeroize = { version = "1", features = ["serde"] }
 # age (rage's Rust impl) — the fixed crypto choice per ADR-0001.
 # default-features off: no async/armor/plugin/ssh — binary
 # ciphertext, sync API, light dep tree.

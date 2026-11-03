@@ -13,7 +13,7 @@ const FAKE: &str = "fake-value-not-a-real-secret";
 const TOKEN: &str = "fake-cf-token";
 
 fn target(url: &str) -> CfSecretsStore {
-    CfSecretsStore::with_token("prod", "acc", "sto", TOKEN, Some(url))
+    CfSecretsStore::with_token("prod", "acc", "sto", TOKEN, Some(url)).unwrap()
 }
 
 #[test]
@@ -66,7 +66,7 @@ fn remove_true_then_false() {
 #[test]
 fn bad_token_maps_to_unauthorized() {
     let (mock, _seen) = mocks::cf_secrets_store("acc", "sto", TOKEN);
-    let t = CfSecretsStore::with_token("prod", "acc", "sto", "wrong", Some(mock.url()));
+    let t = CfSecretsStore::with_token("prod", "acc", "sto", "wrong", Some(mock.url())).unwrap();
     let err = t
         .push(
             &Env::dev(),

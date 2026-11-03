@@ -250,6 +250,14 @@ pub fn vault_wire_v2(tokens: &'static [ScopedToken], legacy: Option<&'static str
                         Response::json(200, out)
                     }
                     (Some(old), rot) => {
+                        // L8 (worker parity): a name blob may
+                        // neither be dropped nor gained in place
+                        if (old.name.is_some()) != name.is_some() {
+                            return Response::json(
+                                409,
+                                r#"{"error":"name blob mismatch — mixed-mode PUT"}"#,
+                            );
+                        }
                         let s = VaultRow {
                             ciphertext,
                             name,

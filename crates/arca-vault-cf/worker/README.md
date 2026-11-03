@@ -14,7 +14,11 @@ Two auth schemes; both are accepted during migration (P-003):
 - `Authorization: ArcaHmac <token_id>, <ts>, <sig>` — the token
   **signs** instead of traveling:
   `sig = hex HMAC-SHA256(token, method + "\n" + path + "\n" + ts + "\n" + sha256hex(body))`,
-  `ts` is unix seconds, `|now − ts| ≤ 60s` (replay window).
+  `ts` is unix seconds, `|now − ts| ≤ 60s` (replay window), and a
+  verified sig may be used **once** — the worker records
+  `sha256(sig)` in the `used_sig` D1 table (~120s TTL, cleaned
+  periodically) and rejects repeats with 401. A client retry
+  re-signs with a fresh `ts` and is unaffected.
 
 All comparisons are constant-time (P-006): byte-decode, XOR-fold
 over the longer input, length folded in — no early exit.
@@ -55,6 +59,7 @@ wrangler d1 create arca-vault          # prints a database_id
 #    → paste it into wrangler.toml [[d1_databases]]
 wrangler d1 execute arca-vault --file=schema.sql
 #    (upgrading a v1 db: ALTER TABLE secrets ADD COLUMN name TEXT)
+#    (pre-replay-guard db: CREATE TABLE used_sig — see schema.sql)
 
 # 2. set the tokens (Workers secrets, never in the repo)
 wrangler secret put ARCA_VAULT_TOKEN   # legacy single bearer, or:

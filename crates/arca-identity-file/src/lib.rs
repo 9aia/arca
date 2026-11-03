@@ -106,7 +106,18 @@ impl IdentitySource for FileIdentity {
             identity.to_public(),
             key.expose_secret(),
         );
-        std::fs::write(&self.path, body)?;
+        // Create 0600 at open() — a write+chmod sequence leaves the
+        // key material world/group-readable for a window (L10).
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        use std::io::Write;
+        opts.open(&self.path)
+            .and_then(|mut f| f.write_all(body.as_bytes()))?;
         // chmod'ing a file this process just created and owns
         // cannot realistically fail — an expect is honest here
         // where a `?` would imply a reachable error arm.

@@ -10,5 +10,8 @@ categories = ["development-tools"]
 
 [dependencies]
 
+[dev-dependencies]
+temp-env.workspace = true
+
 [lints]
 workspace = true

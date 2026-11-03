@@ -240,6 +240,13 @@ pub struct Guardrails {
     /// Ops always refused — deny wins over allow.
     #[serde(default)]
     pub deny: Vec<Op>,
+    /// Refuse `-s VAR=arca://ref` ad-hoc injection on `run`/`env`
+    /// (MED-5). Without it, a posture like `deny = ["get"]` is
+    /// sidestepped: `arca run -s V=arca://x -- printenv V` *is* a
+    /// get. Declared `[secrets]` injection is unaffected — the
+    /// declared surface is auditable config, not an ad-hoc grab.
+    #[serde(default)]
+    pub deny_adhoc: bool,
 }
 
 impl Guardrails {
@@ -370,8 +377,12 @@ mod tests {
             default: GuardDefault::Allow,
             allow: vec![Op::Get],
             deny: vec![Op::Get],
+            deny_adhoc: false,
         };
         assert!(!g.allows(Op::Get));
         assert!(g.allows(Op::Put));
+        // deny_adhoc parses; absent it defaults off
+        let cfg: Config = toml::from_str("[guardrails]\ndeny_adhoc = true\n").unwrap();
+        assert!(cfg.guardrails.unwrap().deny_adhoc);
     }
 }

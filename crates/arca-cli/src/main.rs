@@ -106,7 +106,8 @@ enum Cmd {
     /// argv mode needs no shell quoting — prefer it when the
     /// command has arguments. Exit code is the child's.
     Run {
-        /// Extra `VAR=arca://ref` pairs to inject.
+        /// Extra `VAR=arca://ref` pairs to inject (refused when
+        /// `[guardrails] deny_adhoc` is set).
         #[arg(short = 's', long = "secret", value_name = "VAR=ARCA_REF")]
         secrets: Vec<String>,
         /// Command to run (after `--`). One arg → `bash -c`;
@@ -496,6 +497,7 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
                         },
                         "allow": g.allow.iter().map(|o| o.as_str()).collect::<Vec<_>>(),
                         "deny": g.deny.iter().map(|o| o.as_str()).collect::<Vec<_>>(),
+                        "deny_adhoc": g.deny_adhoc,
                     })
                 });
                 let code = json_out(&serde_json::json!({
@@ -719,7 +721,7 @@ fn manifest() -> serde_json::Value {
             "--env ENV": "resolution context (dev/staging/prod/custom; overrides ARCA_ENV)",
             "--config PATH": "config override (else $ARCA_CONFIG → ./arca.toml → ~/.config/arca/arca.toml)",
             "--actor ACTOR": "audit attribution (else ARCA_ACTOR → $USER → anon)",
-            "-s VAR=arca://ref": "ad-hoc injection pair on run/env (repeatable)",
+            "-s VAR=arca://ref": "ad-hoc injection pair on run/env (repeatable; refused under [guardrails] deny_adhoc)",
             "--with-file": "on `arca init` — force the identity keyfile, skip the keyring",
             "--target NAME": "deploy target on `arca deploy` (required when several [deploy.*] tables exist)",
             "--private-refs": "on `arca migrate` — re-key cf-vault rows under HMAC-derived keys",
@@ -736,7 +738,7 @@ fn manifest() -> serde_json::Value {
                 "config": "path|null", "env": "dev", "vault": "local",
                 "vaults": [{"name": "local", "kind": "age", "path": "path|null", "ok": true, "error": "…|null"}],
                 "secrets": {"VAR": {"ref": "arca://ns/name", "env": "dev", "resolves": true}},
-                "guardrails": {"default": "allow|deny", "allow": ["run"], "deny": ["get"]},
+                "guardrails": {"default": "allow|deny", "allow": ["run"], "deny": ["get"], "deny_adhoc": false},
                 "errors": ["finding…"],
             },
             "deploy": {"ok": true, "ref": "arca://ns/name", "env": "dev", "target": "prod", "secret_name": "dev_ns_name", "created": true},
@@ -776,6 +778,7 @@ fn manifest() -> serde_json::Value {
             "values never enter via CLI args — put/rotate read stdin or a hidden /dev/tty prompt",
             "[secrets] bounds what run/env may inject (least privilege); -s covers one-offs",
             "guardrails are advisory — accident prevention, not policy; ARCA_ACTOR is self-claimed",
+            "run children start from an empty environment — only a small allowlist plus injected [secrets] cross; parent credentials (ARCA_*, deploy tokens) never leak",
             "list never carries values; get/env are the only surfaces that print them",
             "cf vaults store per-secret age ciphertext on a self-hosted Worker + D1 — the worker never sees plaintext",
             "cf wire is arca-vault-cf/2: ArcaHmac signed requests (token never travels) with per-env scopes; bearer still accepted during migration",

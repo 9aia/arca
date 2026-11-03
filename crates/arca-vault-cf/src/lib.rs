@@ -73,6 +73,11 @@ type HmacSha256 = Hmac<Sha256>;
 /// identity's key material.
 const PRIVATE_REFS_DOMAIN: &[u8] = b"arca-cf/private-refs/v1";
 
+/// Response bodies are vault rows and listings — a handful of KB.
+/// 4 MiB is generous headroom; an unbounded read lets a hostile or
+/// broken endpoint exhaust memory (L7).
+const MAX_RESPONSE_BODY: u64 = 4 * 1024 * 1024;
+
 /// One row of the wire protocol — `ciphertext` present only on the
 /// single-record GET, `name` is the private-refs blob (`null` on
 /// plain rows).
@@ -115,7 +120,10 @@ struct ErrorBody {
 }
 
 /// How the client authenticates a request.
-#[derive(Debug, Clone)]
+///
+/// `Debug` is hand-rolled and redacts — a derived impl would print
+/// `Bearer("…")`/`secret` verbatim into any `{cfg:?}` dump.
+#[derive(Clone)]
 pub enum Auth {
     /// `Bearer <token>` — legacy; the token travels on each request.
     Bearer(String),
@@ -130,11 +138,26 @@ pub enum Auth {
     },
 }
 
+impl std::fmt::Debug for Auth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Auth::Bearer(_) => f.write_str("Bearer(***)"),
+            Auth::Hmac { id, .. } => f
+                .debug_struct("Hmac")
+                .field("id", id)
+                .field("secret", &"***")
+                .finish(),
+        }
+    }
+}
+
 /// A resolved cf-vault configuration — mirrors `[vaults.<name>]
 /// kind = "cf"` after ops has resolved `arca://` token refs into
 /// credential values (no refs, no plaintext tokens in config).
 pub struct CfVaultConfig {
     /// Worker base URL, e.g. `https://arca-vault.you.workers.dev`.
+    /// Must be `https://` (loopback `http://` is allowed for
+    /// tests) — `./arca.toml` is the trust root for this endpoint.
     pub url: String,
     /// Env var holding the legacy bearer token — the fallback
     /// credential. The *name* is config; the value is process env.
@@ -253,6 +276,12 @@ impl CfVault {
 
     /// Full constructor: credential map + private-refs flag.
     /// `auth` keys are env names; `"*"` is the fallback.
+    ///
+    /// `url` must be `https://` — bearer tokens and HMAC-signed
+    /// ciphertext cross here, so plaintext HTTP is refused unless
+    /// the host is loopback (`127.0.0.0/8`, `::1`, `localhost`),
+    /// the test/mock case. `./arca.toml` is the trust root: it
+    /// chooses the endpoint credentials are sent to.
     pub fn with_auth(
         url: &str,
         auth: BTreeMap<String, Auth>,
@@ -260,6 +289,7 @@ impl CfVault {
         extra_recipients: &[String],
         private_refs: bool,
     ) -> Result<Self, VaultError> {
+        validate_base_url(url)?;
         if auth.is_empty() {
             return Err(VaultError::Config(
                 "cf vault has no credentials — set token_env or [vaults.*.tokens]".into(),
@@ -409,6 +439,8 @@ impl CfVault {
         let status = res.status().as_u16();
         let text = res
             .body_mut()
+            .with_config()
+            .limit(MAX_RESPONSE_BODY)
             .read_to_string()
             .map_err(|e| VaultError::Io(format!("{method} {url}: read body: {e}")))?;
         Ok((status, text))
@@ -701,6 +733,38 @@ fn unix_ts() -> u64 {
         .unwrap_or(0)
 }
 
+/// A base URL is trusted with credentials and ciphertext — it must
+/// be `https://`, or `http://` to a loopback host (the test/mock
+/// case). Anything else is a config error: `./arca.toml` is the
+/// trust root, and it must not be able to downgrade the wire.
+fn validate_base_url(url: &str) -> Result<(), VaultError> {
+    let host = url
+        .strip_prefix("https://")
+        .map(|h| (true, h))
+        .or_else(|| url.strip_prefix("http://").map(|h| (false, h)))
+        .and_then(|(secure, rest)| {
+            let hostport = rest.split(['/', '?', '#']).next().unwrap_or_default();
+            (!hostport.is_empty()).then_some((secure, hostport))
+        });
+    match host {
+        Some((true, _)) => Ok(()),
+        Some((false, hostport)) if is_loopback_host(hostport) => Ok(()),
+        _ => Err(VaultError::Config(format!(
+            "cf vault url {url:?} must be https:// (http:// is only \
+             allowed for loopback hosts)"
+        ))),
+    }
+}
+
+/// `localhost`, `127.0.0.0/8`, or `[::1]` — with an optional `:port`.
+fn is_loopback_host(hostport: &str) -> bool {
+    if let Some(rest) = hostport.strip_prefix('[') {
+        return rest.split(']').next() == Some("::1");
+    }
+    let host = hostport.split(':').next().unwrap_or_default();
+    host.eq_ignore_ascii_case("localhost") || host.starts_with("127.")
+}
+
 /// The path component of `url` (no query) — what the ArcaHmac
 /// signature covers. `request` only ever builds
 /// `{base}/v1/…` URLs; this extracts the same `url.pathname` the
@@ -760,9 +824,11 @@ fn open(identity: &x25519::Identity, cipher: &[u8]) -> Result<String, VaultError
     let mut reader = decryptor
         .decrypt(std::iter::once(identity as &dyn age::Identity))
         .map_err(|e| VaultError::Crypto(format!("decrypt: {e}")))?;
-    let mut buf = String::new();
+    // Zeroizing so the plaintext scratch buffer is scrubbed on
+    // drop — the returned String is moved out, not copied.
+    let mut buf = zeroize::Zeroizing::new(String::new());
     reader.read_to_string(&mut buf)?;
-    Ok(buf)
+    Ok(std::mem::take(&mut *buf))
 }
 
 #[cfg(test)]
@@ -783,10 +849,64 @@ mod tests {
 
     #[test]
     fn config_debug_shows_recipient_never_key_material() {
-        let cfg = test_config("http://x");
+        let mut cfg = test_config("https://x.invalid");
+        // canary credential values — a Debug dump must never carry
+        // them, in any auth shape (HIGH-1)
+        cfg.scoped
+            .insert("dev".into(), Auth::Bearer("fake-bearer-canary".into()));
+        cfg.scoped.insert(
+            "prod".into(),
+            Auth::Hmac {
+                id: "ops/tok".into(),
+                secret: "fake-hmac-canary".into(),
+            },
+        );
         let s = format!("{cfg:?}");
         assert!(s.contains("CfVaultConfig"), "{s}");
         assert!(s.contains("recipient"), "{s}");
+        assert!(!s.contains("fake-bearer-canary"), "{s}");
+        assert!(!s.contains("fake-hmac-canary"), "{s}");
+        // the token_id is wire-visible metadata — it may show
+        assert!(s.contains("ops/tok"), "{s}");
+    }
+
+    #[test]
+    fn base_url_must_be_https_or_loopback_http() {
+        let id = x25519::Identity::generate();
+        let auth = || BTreeMap::from([("*".to_string(), Auth::Bearer("t".into()))]);
+        // https anywhere is fine
+        assert!(
+            CfVault::with_auth("https://vault.example", auth(), id.clone(), &[], false).is_ok()
+        );
+        // http only on loopback — the test/mock case
+        for ok in [
+            "http://127.0.0.1:8787",
+            "http://127.10.20.30",
+            "http://localhost:8787",
+            "http://LOCALHOST",
+            "http://[::1]:8787",
+        ] {
+            assert!(
+                CfVault::with_auth(ok, auth(), id.clone(), &[], false).is_ok(),
+                "{ok}"
+            );
+        }
+        // plaintext http off-loopback, missing scheme, and empty
+        // host are all config errors — credentials must not cross
+        for bad in [
+            "http://vault.example",
+            "http://example.com:8080/x",
+            "vault.example",
+            "ftp://127.0.0.1",
+            "https://",
+            "http://",
+            "",
+        ] {
+            let e = CfVault::with_auth(bad, auth(), id.clone(), &[], false)
+                .err()
+                .unwrap_or_else(|| panic!("{bad} must be rejected"));
+            assert!(e.to_string().contains("https://"), "{bad}: {e}");
+        }
     }
 
     #[test]
@@ -869,7 +989,7 @@ mod tests {
     fn new_requires_credentials() {
         temp_env::with_var_unset("ARCA_CF_TOKEN_TEST", || {
             // unset, no scoped creds → error
-            let mut cfg = test_config("http://x");
+            let mut cfg = test_config("https://x.invalid");
             let e = CfVault::new(&cfg).err().unwrap();
             assert!(e.to_string().contains("unset"), "{e}");
             // no token_env at all and no scoped → error
@@ -879,7 +999,7 @@ mod tests {
         });
         // set but empty → always an error
         temp_env::with_var("ARCA_CF_TOKEN_TEST", Some(""), || {
-            let mut cfg = test_config("http://x");
+            let mut cfg = test_config("https://x.invalid");
             cfg.scoped.insert(
                 "dev".into(),
                 Auth::Hmac {
@@ -892,7 +1012,7 @@ mod tests {
         });
         // unset but scoped creds exist → the fallback is optional
         temp_env::with_var_unset("ARCA_CF_TOKEN_TEST", || {
-            let mut cfg = test_config("http://x");
+            let mut cfg = test_config("https://x.invalid");
             cfg.scoped.insert("dev".into(), Auth::Bearer("fake".into()));
             assert!(CfVault::new(&cfg).is_ok());
         });
@@ -904,11 +1024,11 @@ mod tests {
         // a set token + resolved identity opens — no network I/O
         // yet (identity validation lives in the arca-identity port)
         temp_env::with_var("ARCA_CF_TOKEN_TEST", Some("fake"), || {
-            let cfg = test_config("http://x");
+            let cfg = test_config("https://x.invalid");
             assert!(CfVault::new(&cfg).is_ok());
         });
         // invalid extra recipient strings are config errors
-        let e = CfVault::with_identity("http://x", "t", id.clone(), &["bad!!".into()])
+        let e = CfVault::with_identity("https://x.invalid", "t", id.clone(), &["bad!!".into()])
             .err()
             .unwrap();
         assert!(e.to_string().contains("invalid recipient"), "{e}");
@@ -918,13 +1038,13 @@ mod tests {
     fn auth_header_shapes() {
         let id = x25519::Identity::generate();
         // bearer passes the token verbatim
-        let v = CfVault::with_identity("http://h", "fake-tok", id.clone(), &[]).unwrap();
+        let v = CfVault::with_identity("https://h.invalid", "fake-tok", id.clone(), &[]).unwrap();
         let h = v.auth_header(&Env::dev(), "GET", "/v1/dev", b"").unwrap();
         assert_eq!(h, "Bearer fake-tok");
         // hmac: header is `ArcaHmac id, ts, sig` and the signature
         // recomputes over method+path+ts+body-sha
         let v = CfVault::with_auth(
-            "http://h",
+            "https://h.invalid",
             BTreeMap::from([(
                 "dev".to_string(),
                 Auth::Hmac {
@@ -976,7 +1096,7 @@ mod tests {
         let rref = Ref::new("arca://billing/stripe").unwrap();
         let mk = |private: bool| {
             CfVault::with_auth(
-                "http://h",
+                "https://h.invalid",
                 BTreeMap::from([("*".to_string(), Auth::Bearer("t".into()))]),
                 id.clone(),
                 &[],
@@ -994,7 +1114,7 @@ mod tests {
         assert_ne!(k1, p.storage_key(&Env::new("prod").unwrap(), &rref));
         // another identity → different key for the same ref
         let other = CfVault::with_auth(
-            "http://h",
+            "https://h.invalid",
             BTreeMap::from([("*".to_string(), Auth::Bearer("t".into()))]),
             x25519::Identity::generate(),
             &[],
@@ -1009,7 +1129,7 @@ mod tests {
     #[test]
     fn with_auth_rejects_empty_credentials() {
         let e = CfVault::with_auth(
-            "http://x",
+            "https://x.invalid",
             BTreeMap::new(),
             x25519::Identity::generate(),
             &[],
@@ -1024,7 +1144,7 @@ mod tests {
     fn open_name_rejects_garbage_and_foreign_blobs() {
         let id = x25519::Identity::generate();
         let v = CfVault::with_auth(
-            "http://x",
+            "https://x.invalid",
             BTreeMap::from([("*".to_string(), Auth::Bearer("t".into()))]),
             id.clone(),
             &[],
@@ -1074,7 +1194,7 @@ mod tests {
         let torn = &blob[..blob.len() - 16];
         assert!(open(&id, torn).is_err());
         // an unparseable extra recipient → a config error, not a panic
-        let e = CfVault::with_identity("http://x", "t", id, &["not-a-key".into()])
+        let e = CfVault::with_identity("https://x.invalid", "t", id, &["not-a-key".into()])
             .err()
             .unwrap();
         assert!(e.to_string().contains("invalid recipient"), "{e}");

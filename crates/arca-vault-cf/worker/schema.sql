@@ -17,5 +17,16 @@ CREATE TABLE IF NOT EXISTS secrets (
   PRIMARY KEY (env, ref)
 );
 
+-- Replay guard for the ArcaHmac scheme (MED-1): a verified
+-- signature's sha256 lands here once; a second sighting is a
+-- replay and fails auth. Rows age out after ~120s (> the ±60s
+-- ts window); cleanup is amortized in index.js.
+CREATE TABLE IF NOT EXISTS used_sig (
+  sig      TEXT PRIMARY KEY,               -- sha256 hex of the verified sig
+  seen_at  INTEGER NOT NULL                -- unix seconds
+);
+
 -- Upgrading a v1 database? Add the name column once:
 --   wrangler d1 execute arca-vault --command="ALTER TABLE secrets ADD COLUMN name TEXT"
+-- Upgrading a pre-replay-guard database? Add used_sig once:
+--   wrangler d1 execute arca-vault --command="CREATE TABLE IF NOT EXISTS used_sig (sig TEXT PRIMARY KEY, seen_at INTEGER NOT NULL)"

@@ -756,6 +756,21 @@ impl Ops {
         op: Op,
         extra: &[(String, String)],
     ) -> Result<BTreeMap<String, Secret>, OpsError> {
+        // `[guardrails] deny_adhoc` closes the `deny = ["get"]`
+        // bypass: ad-hoc -s pairs can expand the injectable surface
+        // arbitrarily — under the flag they're refused (MED-5).
+        if !extra.is_empty()
+            && self
+                .config
+                .guardrails
+                .as_ref()
+                .is_some_and(|g| g.deny_adhoc)
+        {
+            self.emit(op, None, Outcome::Denied);
+            return Err(OpsError::Msg(
+                "ad-hoc -s injection is denied by [guardrails] deny_adhoc".into(),
+            ));
+        }
         // declared surface first, then ad-hoc overrides/additions
         let mut wanted: BTreeMap<String, Ref> = self.config.secrets.clone();
         for (var, raw) in extra {
@@ -1589,6 +1604,36 @@ mod tests {
         isolate_home(&home, || {
             assert!(ops.resolve_for_injection(Op::Run, &[]).is_err());
         });
+    }
+
+    #[test]
+    fn deny_adhoc_blocks_dash_s_but_not_the_declared_surface() {
+        // MED-5: [guardrails] deny_adhoc refuses ad-hoc -s pairs —
+        // the `deny = ["get"]` bypass — while declared [secrets]
+        // injection is untouched.
+        let (_h, mut ops) = ops_with_vault(&Env::dev(), &["arca://x/y"]);
+        ops.config
+            .secrets
+            .insert("V".into(), Ref::new("arca://x/y").unwrap());
+        ops.config.guardrails = Some(arca_core::Guardrails {
+            deny_adhoc: true,
+            ..Default::default()
+        });
+        // -s is refused with a denied audit event
+        let e = ops
+            .resolve_for_injection(Op::Run, &[("X".into(), "arca://x/y".into())])
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("deny_adhoc"), "{e}");
+        // declared surface still resolves
+        let vars = ops.resolve_for_injection(Op::Run, &[]).unwrap();
+        assert_eq!(vars["V"].expose(), "fake-stored-value");
+        // guardrails absent → ad-hoc works as before
+        let (_h, ops) = ops_with_vault(&Env::dev(), &["arca://x/y"]);
+        let vars = ops
+            .resolve_for_injection(Op::Run, &[("X".into(), "arca://x/y".into())])
+            .unwrap();
+        assert_eq!(vars["X"].expose(), "fake-stored-value");
     }
 
     #[test]

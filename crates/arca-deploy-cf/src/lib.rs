@@ -31,6 +31,10 @@ pub const DEFAULT_BASE: &str = "https://api.cloudflare.com/client/v4";
 /// The default token env var when config doesn't name one.
 pub const DEFAULT_TOKEN_ENV: &str = "CLOUDFLARE_API_TOKEN";
 
+/// Response bodies are small CF envelopes — 4 MiB caps a hostile
+/// or broken endpoint's memory pressure (L7).
+const MAX_RESPONSE_BODY: u64 = 4 * 1024 * 1024;
+
 /// A [`Deploy`] target backed by a CF account Secrets Store.
 #[derive(Debug)]
 pub struct CfSecretsStore {
@@ -65,24 +69,29 @@ impl CfSecretsStore {
                 "env var {token_env} is empty — deploy tokens come via env, never config"
             )));
         }
-        Ok(Self::with_token(
-            name, account_id, store_id, &token, base_url,
-        ))
+        Self::with_token(name, account_id, store_id, &token, base_url)
     }
 
     /// Build with an explicit token — the test/embedding path.
+    ///
+    /// `base_url` must be `https://` — a plaintext or attacker URL
+    /// would receive the API token *and* every pushed value.
+    /// Loopback `http://` is permitted for tests/mocks.
     pub fn with_token(
         name: &str,
         account_id: &str,
         store_id: &str,
         token: &str,
         base_url: Option<&str>,
-    ) -> Self {
+    ) -> Result<Self, DeployError> {
+        if let Some(base) = base_url {
+            validate_base_url(base)?;
+        }
         let agent: Agent = Agent::config_builder()
             .timeout_global(Some(Duration::from_secs(15)))
             .build()
             .into();
-        CfSecretsStore {
+        Ok(CfSecretsStore {
             name: name.to_string(),
             agent,
             base: base_url
@@ -92,7 +101,7 @@ impl CfSecretsStore {
             auth: format!("Bearer {token}"),
             account_id: account_id.to_string(),
             store_id: store_id.to_string(),
-        }
+        })
     }
 
     /// The sink-side name for `(env, rref)`:
@@ -183,6 +192,8 @@ impl CfSecretsStore {
         let status = res.status().as_u16();
         let text = res
             .body_mut()
+            .with_config()
+            .limit(MAX_RESPONSE_BODY)
             .read_to_string()
             .map_err(|e| DeployError::Io(format!("{method} {url}: read body: {e}")))?;
         Ok((status, text))
@@ -232,6 +243,38 @@ impl CfSecretsStore {
             .and_then(|s| s["id"].as_str().map(str::to_string));
         Ok(found)
     }
+}
+
+/// A base URL receives the API token and every pushed value — it
+/// must be `https://`, or `http://` to a loopback host (the
+/// test/mock case). Anything else is a config error: `arca.toml`
+/// is the trust root and must not downgrade the wire.
+fn validate_base_url(url: &str) -> Result<(), DeployError> {
+    let host = url
+        .strip_prefix("https://")
+        .map(|h| (true, h))
+        .or_else(|| url.strip_prefix("http://").map(|h| (false, h)))
+        .and_then(|(secure, rest)| {
+            let hostport = rest.split(['/', '?', '#']).next().unwrap_or_default();
+            (!hostport.is_empty()).then_some((secure, hostport))
+        });
+    match host {
+        Some((true, _)) => Ok(()),
+        Some((false, hostport)) if is_loopback_host(hostport) => Ok(()),
+        _ => Err(DeployError::Config(format!(
+            "deploy base_url {url:?} must be https:// (http:// is only \
+             allowed for loopback hosts)"
+        ))),
+    }
+}
+
+/// `localhost`, `127.0.0.0/8`, or `[::1]` — with an optional `:port`.
+fn is_loopback_host(hostport: &str) -> bool {
+    if let Some(rest) = hostport.strip_prefix('[') {
+        return rest.split(']').next() == Some("::1");
+    }
+    let host = hostport.split(':').next().unwrap_or_default();
+    host.eq_ignore_ascii_case("localhost") || host.starts_with("127.")
 }
 
 impl Deploy for CfSecretsStore {
@@ -293,6 +336,7 @@ mod tests {
 
     fn target() -> CfSecretsStore {
         CfSecretsStore::with_token("prod", "acc", "sto", "fake", Some("http://127.0.0.1:1"))
+            .unwrap()
     }
 
     #[test]
@@ -311,6 +355,51 @@ mod tests {
             let t = CfSecretsStore::new("p", "a", "s", "ARCA_TEST_CF_DEPLOY_TOKEN", None).unwrap();
             assert_eq!(t.name(), "p");
             assert_eq!(t.base, DEFAULT_BASE);
+        });
+    }
+
+    #[test]
+    fn base_url_must_be_https_or_loopback_http() {
+        // a plaintext-HTTP non-loopback endpoint would receive the
+        // token and every pushed value — config must refuse it
+        for bad in [
+            "http://api.example.com",
+            "http://example.com:8080/x",
+            "api.example.com",
+            "https://",
+            "",
+        ] {
+            let e = CfSecretsStore::with_token("p", "a", "s", "fake", Some(bad))
+                .err()
+                .unwrap_or_else(|| panic!("{bad} must be rejected"));
+            assert!(e.to_string().contains("https://"), "{bad}: {e}");
+        }
+        // https anywhere, http on loopback — both accepted
+        for ok in [
+            "https://api.cloudflare.com/client/v4",
+            "http://127.0.0.1:8787",
+            "http://localhost",
+            "http://[::1]:8787",
+        ] {
+            assert!(
+                CfSecretsStore::with_token("p", "a", "s", "fake", Some(ok)).is_ok(),
+                "{ok}"
+            );
+        }
+        // None → the https default
+        assert!(CfSecretsStore::with_token("p", "a", "s", "fake", None).is_ok());
+        // and `new` enforces the same rule on the config path
+        temp_env::with_var("ARCA_TEST_CF_DEPLOY_TOKEN", Some("fake"), || {
+            let e = CfSecretsStore::new(
+                "p",
+                "a",
+                "s",
+                "ARCA_TEST_CF_DEPLOY_TOKEN",
+                Some("http://api.example.com"),
+            )
+            .err()
+            .unwrap();
+            assert!(e.to_string().contains("https://"), "{e}");
         });
     }
 
@@ -352,7 +441,8 @@ mod tests {
             "sto",
             "fake",
             Some(&format!("http://127.0.0.1:{port}")),
-        );
+        )
+        .unwrap();
         let e = t.request("GET", &format!("http://127.0.0.1:{port}"), None, None);
         assert!(e.is_err());
     }
@@ -361,7 +451,7 @@ mod tests {
     fn request_serves_every_verb_shape() {
         use arca_testkit::httpmock::{HttpMock, Request, Response};
         let mock = HttpMock::new(|_req: &Request| Response::json(200, "{}"));
-        let t = CfSecretsStore::with_token("prod", "acc", "sto", "fake", Some(mock.url()));
+        let t = CfSecretsStore::with_token("prod", "acc", "sto", "fake", Some(mock.url())).unwrap();
         for (method, body) in [
             ("GET", None),
             ("DELETE", None),
