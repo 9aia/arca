@@ -1,1 +1,1 @@
-{"id":"","ws":"peregrin-campaign","actor":"luis","ts":1793683707,"op":{"op":"claim","glob":"arca.toml","ttl_secs":3600}}
+{"id":"","ws":"peregrin-campaign","actor":"luis","ts":1793683707,"op":{"op":"claim","glob":"docs/**","ttl_secs":3600}}
