@@ -1,1 +1,1 @@
-{"id":"","ws":"serve","actor":"luis","ts":1793681962,"op":{"op":"write","path":"Cargo.lock","blob":"1a8a70f47216b8147a82292775182c8d9ba17641","intent":"P-005: arca serve — ndjson IPC surface + [serve.pdp] exec policy wire"}}
+{"id":"","ws":"serve","actor":"luis","ts":1793681962,"op":{"op":"write","path":"Cargo.toml","blob":"9e81c9bff9ce5f51e57c1cdf5c3dbefdbc272088","intent":"P-005: arca serve — ndjson IPC surface + [serve.pdp] exec policy wire"}}
