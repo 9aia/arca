@@ -1,1 +1,1 @@
-{"id":"","ws":"feat-cached-vault","actor":"luis","ts":1793684891,"op":{"op":"claim","glob":"README.md","ttl_secs":3600}}
+{"id":"","ws":"feat-cached-vault","actor":"luis","ts":1793684891,"op":{"op":"claim","glob":"examples/**","ttl_secs":3600}}
