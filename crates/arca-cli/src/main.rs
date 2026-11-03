@@ -54,9 +54,17 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Bootstrap: generate the age identity (0600) if missing and
-    /// verify the vault opens.
-    Init,
+    /// Bootstrap: store the age identity in the system keyring
+    /// when a session secret store is reachable — importing an
+    /// existing identity.txt rather than orphaning it — else the
+    /// `~/.config/arca/identity.txt` keyfile (0600). Verifies the
+    /// vault opens.
+    Init {
+        /// Force the identity keyfile even when a keyring is
+        /// available — the headless/CI mode.
+        #[arg(long)]
+        with_file: bool,
+    },
     /// Store a secret. The value comes from stdin (`printf … | arca
     /// put arca://ns/name`) or a hidden terminal prompt — never
     /// args, which land in shell history and `/proc`.
@@ -118,6 +126,17 @@ enum Cmd {
     /// point at declared vaults, vaults decrypt, every `[secrets]`
     /// ref resolves in its routed env. Exit 1 on findings.
     Check,
+    /// Rewrite stored records for a wire/config upgrade. Currently
+    /// one transform: `--private-refs` re-keys every plaintext-named
+    /// row in each env routed to a cf vault with
+    /// `[vaults.*] private_refs = true` — ciphertext moves verbatim,
+    /// old keys are deleted after the new rows land.
+    Migrate {
+        /// Re-key cf-vault rows under HMAC-derived storage keys,
+        /// attaching the encrypted `name` blob (P-004).
+        #[arg(long)]
+        private_refs: bool,
+    },
     /// Push a stored secret to a write-only deploy target
     /// (`[deploy.NAME]` in arca.toml, e.g. a CF Secrets Store).
     /// The vault is the source of truth; the sink never gives the
@@ -201,7 +220,7 @@ fn main() -> ExitCode {
 /// record.
 fn cmd_op(cmd: &Cmd) -> Op {
     match cmd {
-        Cmd::Init => Op::Init,
+        Cmd::Init { .. } => Op::Init,
         Cmd::Put { .. } => Op::Put,
         Cmd::Get { .. } => Op::Get,
         Cmd::List => Op::List,
@@ -210,6 +229,7 @@ fn cmd_op(cmd: &Cmd) -> Op {
         Cmd::Run { .. } => Op::Run,
         Cmd::Env { .. } => Op::Env,
         Cmd::Check => Op::Check,
+        Cmd::Migrate { .. } => Op::Migrate,
         Cmd::Deploy { .. } => Op::Deploy,
         Cmd::Ui => Op::Ui,
         Cmd::Manifest => Op::Manifest,
@@ -278,26 +298,44 @@ fn load(cli: &Cli) -> Result<Ops, OpsError> {
 
 fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
     match cmd {
-        Cmd::Init => {
-            let info = ops.init()?;
+        Cmd::Init { with_file } => {
+            let info = ops.init(&arca_ops::InitOpts {
+                with_file: *with_file,
+            })?;
             ops.emit(Op::Init, None, Outcome::Ok);
             if cli.json {
                 return Ok(json_out(&serde_json::json!({
-                    "identity": info.identity_path,
+                    "identity": info.identity,
+                    "backend": info.identity_backend,
                     "created": info.identity_created,
+                    "migrated": info.migrated,
+                    "file_remains": info.file_remains,
                     "recipient": info.recipient,
                     "vault": info.vault_path,
                 })));
             }
             eprintln!(
                 "identity: {}{}",
-                info.identity_path.display(),
+                info.identity,
                 if info.identity_created {
                     " (generated)"
                 } else {
                     ""
                 }
             );
+            // Requires a session secret store holding no identity —
+            // unreachable on headless CI where platform() always
+            // fails; exercised at ops level where sources inject.
+            #[cfg(not(coverage))]
+            if info.migrated {
+                if let Some(p) = &info.file_remains {
+                    eprintln!(
+                        "migrated:  imported into the keyring; {} kept as a \
+                         backup — remove it when ready",
+                        p.display()
+                    );
+                }
+            }
             eprintln!("recipient: {}", info.recipient);
             eprintln!("vault:     {}", info.vault_path.display());
             Ok(ExitCode::SUCCESS)
@@ -509,6 +547,42 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
                 ExitCode::FAILURE
             })
         }
+        Cmd::Migrate { private_refs } => {
+            if !private_refs {
+                return Err(OpsError::Msg(
+                    "migrate needs a target — currently only `--private-refs`".into(),
+                ));
+            }
+            let reports = ops.migrate_private_refs()?;
+            ops.emit(Op::Migrate, None, Outcome::Ok);
+            if cli.json {
+                let migrated: Vec<serde_json::Value> = reports
+                    .iter()
+                    .map(|r| {
+                        serde_json::json!({
+                            "vault": r.vault,
+                            "env": r.env.as_str(),
+                            "rewritten": r.rewritten,
+                            "already_private": r.already_private,
+                        })
+                    })
+                    .collect();
+                return Ok(json_out(&serde_json::json!({
+                    "ok": true,
+                    "migrated": migrated,
+                })));
+            }
+            for r in &reports {
+                eprintln!(
+                    "vault {:?} env {}: rewrote {} ref(s) ({} already private)",
+                    r.vault,
+                    r.env,
+                    r.rewritten.len(),
+                    r.already_private
+                );
+            }
+            Ok(ExitCode::SUCCESS)
+        }
         Cmd::Deploy { rref, target } => {
             let parsed = parse_ref(rref)?;
             let report = ops.deploy(&parsed, target.as_deref())?;
@@ -624,7 +698,7 @@ fn manifest() -> serde_json::Value {
         "protocol": "arca/1",
         "ops": arca_core::Op::ALL.iter().map(|o| o.as_str()).collect::<Vec<_>>(),
         "verbs": {
-            "init": "generate the age identity (0600) if missing; verify the vault opens",
+            "init": "store the age identity in the session keyring when reachable (importing an existing keyfile), else the 0600 keyfile; verify the vault opens",
             "put": "store a secret — value via stdin or hidden /dev/tty prompt, never args",
             "get": "print a secret's value (the escape hatch — prefer run)",
             "list": "refs stored in the selected env — names only, never values",
@@ -633,6 +707,7 @@ fn manifest() -> serde_json::Value {
             "run": "inject [secrets]+`-s` into a child — one arg → bash -c, several → argv exec (no shell)",
             "env": "export lines for eval (human path); --json → VAR→value map",
             "check": "validate config, vault readability, declared-surface resolution; exit 1 on findings",
+            "migrate": "rewrite stored records for a wire upgrade — `--private-refs` re-keys cf rows under derived keys",
             "deploy": "push a stored value to a write-only [deploy.NAME] target (sink, never a source)",
             "ui": "interactive vault browser (tui feature)",
             "manifest": "this document (always JSON; before config load, no audit event)",
@@ -645,10 +720,12 @@ fn manifest() -> serde_json::Value {
             "--config PATH": "config override (else $ARCA_CONFIG → ./arca.toml → ~/.config/arca/arca.toml)",
             "--actor ACTOR": "audit attribution (else ARCA_ACTOR → $USER → anon)",
             "-s VAR=arca://ref": "ad-hoc injection pair on run/env (repeatable)",
+            "--with-file": "on `arca init` — force the identity keyfile, skip the keyring",
             "--target NAME": "deploy target on `arca deploy` (required when several [deploy.*] tables exist)",
+            "--private-refs": "on `arca migrate` — re-key cf-vault rows under HMAC-derived keys",
         },
         "json_shapes": {
-            "init": {"identity": "path", "created": true, "recipient": "age1…", "vault": "path"},
+            "init": {"identity": "path|keyring locator", "backend": "file|keyring", "created": true, "migrated": false, "file_remains": "path|null", "recipient": "age1…", "vault": "path"},
             "put": {"ok": true, "ref": "arca://ns/name", "env": "dev", "version": 1, "created_at": "rfc3339", "rotated_at": "rfc3339|null"},
             "rotate": "same as put",
             "get": {"ref": "arca://ns/name", "env": "dev", "value": "plaintext", "version": 1, "created_at": "rfc3339", "rotated_at": "rfc3339|null"},
@@ -663,6 +740,7 @@ fn manifest() -> serde_json::Value {
                 "errors": ["finding…"],
             },
             "deploy": {"ok": true, "ref": "arca://ns/name", "env": "dev", "target": "prod", "secret_name": "dev_ns_name", "created": true},
+            "migrate": {"ok": true, "migrated": [{"vault": "cloud", "env": "prod", "rewritten": ["ns/name"], "already_private": 0}]},
             "run": "passthrough — child stdout/stderr/exit code; --json changes nothing",
             "error": {"error": "message (stderr, non-zero exit)"},
         },
@@ -674,7 +752,7 @@ fn manifest() -> serde_json::Value {
             "ARCA_CONFIG": "config file override",
             "ARCA_ENV": "env context (default dev)",
             "ARCA_ACTOR": "audit actor attribution",
-            "ARCA_IDENTITY_FILE": "age identity file override",
+            "ARCA_IDENTITY_FILE": "explicit identity keyfile path — pins file mode, skipping the session keyring",
             "ARCA_CF_TOKEN": "default cf-vault bearer env var ([vaults.*] token_env overrides the name)",
             "CLOUDFLARE_API_TOKEN": "default deploy-token env var ([deploy.*] token_env overrides the name)",
         },
@@ -700,6 +778,8 @@ fn manifest() -> serde_json::Value {
             "guardrails are advisory — accident prevention, not policy; ARCA_ACTOR is self-claimed",
             "list never carries values; get/env are the only surfaces that print them",
             "cf vaults store per-secret age ciphertext on a self-hosted Worker + D1 — the worker never sees plaintext",
+            "cf wire is arca-vault-cf/2: ArcaHmac signed requests (token never travels) with per-env scopes; bearer still accepted during migration",
+            "[vaults.*] private_refs = true hides ref names from the cf store — HMAC-derived keys + encrypted name blobs; `arca migrate --private-refs` rewrites existing rows",
             "deploy targets are write-only sinks — the value crosses to the sink in plaintext, never fetched back",
         ],
     })
@@ -748,7 +828,7 @@ mod tests {
         // the match still has to be total. All other arms map 1:1
         // to the audit [`Op`].
         let cases = [
-            (Cmd::Init, Op::Init),
+            (Cmd::Init { with_file: false }, Op::Init),
             (
                 Cmd::Put {
                     rref: "arca://a/b".into(),
@@ -783,6 +863,7 @@ mod tests {
             ),
             (Cmd::Env { secrets: vec![] }, Op::Env),
             (Cmd::Check, Op::Check),
+            (Cmd::Migrate { private_refs: true }, Op::Migrate),
             (
                 Cmd::Deploy {
                     rref: "arca://a/b".into(),
