@@ -1,7 +1,7 @@
 +++
 id = "P-005"
 title = "arca serve — ndjson policy-decision wire for peregrin"
-status = "open"
+status = "in-progress"
 created = "2026-11-02"
 priority = "low"
 labels = ["architecture", "peregrin"]
