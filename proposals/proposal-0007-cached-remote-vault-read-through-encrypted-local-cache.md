@@ -1,7 +1,7 @@
 +++
 id = "P-007"
 title = "cached remote vault — read-through encrypted local cache"
-status = "open"
+status = "in-progress"
 created = "2026-11-03"
 priority = "medium"
 labels = ["security", "ux", "vault-cf"]
