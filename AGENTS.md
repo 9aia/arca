@@ -74,7 +74,7 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/arca-tui` | Interactive vault TUI (ratatui) — thin front-end over arca-ops; `arca ui`, feature-gated |
 | `crates/arca-serve` | ndjson IPC surface — thin front-end over arca-ops; `arca serve`, the `[serve.pdp]` exec consult (ADR-0003) |
 | `crates/arca-cli` | The `arca` binary — clap, `--json` everywhere, `manifest`/`schema` |
-| `xtask` | check / test / coverage / install / site |
+| `xtask` (pkg `arca-xtask`) | check / test / coverage / install / site |
 
 `arca-vault-aws` stays a spike — proved on a local branch that the
 `Vault` port fits a second backend family unchanged, then deleted

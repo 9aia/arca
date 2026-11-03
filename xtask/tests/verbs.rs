@@ -42,7 +42,7 @@ exit "${CARGO_EXIT:-0}"
 const OK_STUB: &str = "#!/bin/sh\nexit 0\n";
 
 fn xtask(dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_xtask"));
+    let mut c = Command::new(env!("CARGO_BIN_EXE_arca-xtask"));
     c.args(args)
         // the stub bin dir is the whole PATH — unstubbed tools are
         // "not installed" and unstubbed spawns fail, on purpose

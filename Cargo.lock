@@ -420,6 +420,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "arca-xtask"
+version = "0.1.0"
+
+[[package]]
 name = "atomic"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3792,10 +3796,6 @@ dependencies = [
  "serde",
  "zeroize",
 ]
-
-[[package]]
-name = "xtask"
-version = "0.1.0"
 
 [[package]]
 name = "zerocopy"
