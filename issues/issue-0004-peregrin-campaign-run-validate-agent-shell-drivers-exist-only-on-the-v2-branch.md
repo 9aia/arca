@@ -1,7 +1,7 @@
 +++
 id = "I-004"
 title = "peregrin campaign run/validate + agent/shell drivers exist only on the v2 branch"
-status = "open"
+status = "done"
 created = "2026-11-03"
 owner = "devin"
 priority = "medium"
