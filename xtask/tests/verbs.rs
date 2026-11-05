@@ -80,6 +80,31 @@ fn test_prefers_nextest_then_falls_back() {
 }
 
 #[test]
+fn worker_and_test_wire_the_bun_smoke_test() {
+    let dir = scratch("worker");
+    stub(&dir, "cargo", CARGO_STUB);
+    // no bun → `worker` fails with a message; `test` skips the
+    // smoke test but the Rust suite still runs
+    assert_eq!(code(&xtask(&dir, &["worker"], &[])), 1);
+    assert_eq!(code(&xtask(&dir, &["test"], &[])), 0);
+    // bun installed: `test` runs the smoke test inside the worker
+    // dir — it must exist relative to cwd
+    stub(&dir, "bun", OK_STUB);
+    std::fs::create_dir_all(dir.join("crates/arca-vault-cf/worker")).unwrap();
+    assert_eq!(code(&xtask(&dir, &["worker"], &[])), 0);
+    assert_eq!(code(&xtask(&dir, &["test"], &[])), 0);
+    // a failing smoke test fails both `worker` and `test` — the
+    // stub passes the `--version` probe, fails `bun test`
+    stub(
+        &dir,
+        "bun",
+        "#!/bin/sh\n[ \"$1\" = \"--version\" ] && exit 0\nexit 1\n",
+    );
+    assert_eq!(code(&xtask(&dir, &["worker"], &[])), 1);
+    assert_eq!(code(&xtask(&dir, &["test"], &[])), 1);
+}
+
+#[test]
 fn coverage_needs_llvm_cov() {
     let dir = scratch("coverage");
     stub(&dir, "cargo", CARGO_STUB);

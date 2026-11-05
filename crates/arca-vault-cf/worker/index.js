@@ -22,11 +22,15 @@
 // Auth — wire `arca-vault-cf/2` (P-003):
 //   Authorization: Bearer <token>
 //     Legacy mode, still accepted during migration.
-//   Authorization: ArcaHmac <token_id>, <ts>, <sig>
-//     sig = hex HMAC-SHA256(token, method+"\n"+path+"\n"+ts+"\n"+sha256hex(body)).
+//   Authorization: ArcaHmac <token_id>, <ts>, <nonce>, <sig>
+//     sig = hex HMAC-SHA256(token, method+"\n"+path+"\n"+ts+"\n"+nonce+"\n"+sha256hex(body)).
 //     The token never travels; |now - ts| must be ≤ 60s (replay window)
 //     AND a verified sig may be used once — replays die on the
-//     `used_sig` D1 table (MED-1).
+//     `used_sig` D1 table (MED-1). The nonce makes two identical
+//     requests in the same second sign differently — a legit retry
+//     isn't a replay (F7). The pre-nonce 3-field form
+//     `<token_id>, <ts>, <sig>` (signed without the nonce line) is
+//     still accepted while old clients migrate.
 //
 // Token config — `wrangler secret put ARCA_VAULT_TOKENS` (JSON):
 //   {"<token_id>": {"token": "<secret>",
@@ -35,7 +39,11 @@
 // one bearer token with read+write on every env. Rotation is a
 // `wrangler secret put` away — no admin route.
 
-const JSON = { "content-type": "application/json" };
+// Response header block — NEVER name this `JSON`: shadowing the
+// global makes every JSON.parse/stringify throw and every request
+// 500 (F1). The worker smoke test (index.test.js) exists because
+// the Rust wire mock can't catch a bug that lives only here.
+const JSON_HEADERS = { "content-type": "application/json" };
 
 const REPLAY_WINDOW_S = 60;
 // Rows in `used_sig` outlive the ts window so a replayed request
@@ -49,7 +57,7 @@ const CLEANUP_EVERY_N = 50;
 let reqCount = 0;
 
 function json(body, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: JSON });
+  return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 }
 
 function err(status, msg) {
@@ -153,18 +161,31 @@ async function authenticate(request, env, path, bodyText) {
       .slice("ArcaHmac ".length)
       .split(",")
       .map((s) => s.trim());
-    if (parts.length !== 3) return null;
-    const [id, ts, sig] = parts;
-    const entry = table[id];
-    if (!entry || typeof entry.token !== "string") return null;
+    // Current form: `<id>, <ts>, <nonce>, <sig>` — the nonce is
+    // signed material so identical requests in one second differ
+    // (F7). The pre-nonce `<id>, <ts>, <sig>` form stays accepted
+    // during migration, signed without the nonce line.
+    if (parts.length !== 3 && parts.length !== 4) return null;
+    const [id, ts] = parts;
+    const nonce = parts.length === 4 ? parts[2] : "";
+    const sig = parts.length === 4 ? parts[3] : parts[2];
+    if (parts.length === 4 && !nonce) return null; // empty nonce ≠ 3-field form
     const t = Number(ts);
     const now = Math.floor(Date.now() / 1000);
     if (!Number.isFinite(t) || Math.abs(now - t) > REPLAY_WINDOW_S) return null;
-    const expect = await hmacSha256Hex(
-      entry.token,
-      `${request.method}\n${path}\n${ts}\n${await sha256Hex(bodyText)}`
-    );
-    if (!ctEq(sig, expect)) return null;
+    // Uniform work (F8): an unknown token id must not short-circuit
+    // before the HMAC — the id→known/unknown timing oracle. Sign
+    // with a throwaway key derived from the id itself and let the
+    // compare fail on its own.
+    const entry = Object.hasOwn(table, id) ? table[id] : null;
+    const key =
+      entry && typeof entry.token === "string" ? entry.token : `arca-unknown-id:${id}`;
+    const signed =
+      parts.length === 4
+        ? `${request.method}\n${path}\n${ts}\n${nonce}\n${await sha256Hex(bodyText)}`
+        : `${request.method}\n${path}\n${ts}\n${await sha256Hex(bodyText)}`;
+    const expect = await hmacSha256Hex(key, signed);
+    if (!entry || !ctEq(sig, expect)) return null;
     // Replay guard (MED-1): a signature may only be used once.
     // INSERT OR IGNORE loses on the second sighting — the PK is
     // the sig's own hash, so two concurrent deliveries can't both
@@ -190,7 +211,18 @@ async function authenticate(request, env, path, bodyText) {
 // `scopes` is `{env|"*": {read, write}}` — env entries win over the
 // wildcard; a missing capability denies.
 function scopeAllows(scopes, envName, write) {
-  const s = (scopes && (scopes[envName] || scopes["*"])) || {};
+  if (!scopes || typeof scopes !== "object") return false;
+  // Own-property lookups only (F5): a plain `scopes[envName]` walk
+  // hits the prototype chain, so a request for env "constructor"
+  // or "__proto__" would "find" Object.prototype members. And an
+  // explicit env entry wins even when falsy (F4): `"prod": null`
+  // is a configured *deny*, not an invitation to inherit "*".
+  const s = Object.hasOwn(scopes, envName)
+    ? scopes[envName]
+    : Object.hasOwn(scopes, "*")
+      ? scopes["*"]
+      : null;
+  if (!s || typeof s !== "object") return false;
   return write ? s.write === true : s.read === true;
 }
 
@@ -222,36 +254,44 @@ export default {
     const declared = Number(request.headers.get("content-length") || "0");
     if (declared > MAX_BODY_BYTES) return err(413, "payload too large");
     let bodyText;
-    if (request.body && request.body.getReader) {
-      const reader = request.body.getReader();
-      const chunks = [];
-      let total = 0;
-      let over = false;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        total += value.byteLength;
-        if (total > MAX_BODY_BYTES) {
-          over = true;
-          break;
+    let scopes;
+    try {
+      if (request.body && request.body.getReader) {
+        const reader = request.body.getReader();
+        const chunks = [];
+        let total = 0;
+        let over = false;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          total += value.byteLength;
+          if (total > MAX_BODY_BYTES) {
+            over = true;
+            break;
+          }
+          chunks.push(value);
         }
-        chunks.push(value);
+        if (over) {
+          await reader.cancel();
+          return err(413, "payload too large");
+        }
+        const buf = new Uint8Array(total);
+        let off = 0;
+        for (const c of chunks) {
+          buf.set(c, off);
+          off += c.byteLength;
+        }
+        bodyText = new TextDecoder().decode(buf);
+      } else {
+        bodyText = await request.text();
       }
-      if (over) {
-        await reader.cancel();
-        return err(413, "payload too large");
-      }
-      const buf = new Uint8Array(total);
-      let off = 0;
-      for (const c of chunks) {
-        buf.set(c, off);
-        off += c.byteLength;
-      }
-      bodyText = new TextDecoder().decode(buf);
-    } else {
-      bodyText = await request.text();
+      // authenticate() runs D1 (the replay guard) — a throw here
+      // escaped the route try/catch below and became a 500 carrying
+      // backend internals (F9). Same static message as the route arm.
+      scopes = await authenticate(request, env, url.pathname, bodyText);
+    } catch {
+      return err(500, "backend error");
     }
-    const scopes = await authenticate(request, env, url.pathname, bodyText);
     if (scopes === null) return err(401, "unauthorized");
     if (!scopeAllows(scopes, envName, isWrite)) {
       return err(403, "token scope denies this env/verb");
@@ -314,24 +354,30 @@ export default {
             return err(409, "row has no name blob — PUT must not add one");
           }
 
-          const version = old ? old.version + 1 : 1;
-          const created_at = old ? old.created_at : now;
-          const rotated_at = rotate ? now : old ? old.rotated_at : null;
-
-          await db
+          // The version bump is atomic (F6): a SELECT-then-INSERT
+          // pair lets two concurrent PUTs each compute
+          // old.version+1 and lose a generation. The upsert derives
+          // the next version from the row *at write time*;
+          // rotated_at is stamped only on rotate writes (NULL is
+          // "keep the stored stamp"), and created_at is untouched
+          // on conflict — the winning INSERT's value survives.
+          // RETURNING reports what actually landed, not what the
+          // pre-read `old` believed.
+          const row = await db
             .prepare(
               `INSERT INTO secrets (env, ref, ciphertext, name, version, created_at, rotated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, 1, ?, ?)
                ON CONFLICT (env, ref) DO UPDATE SET
                  ciphertext = excluded.ciphertext,
                  name = excluded.name,
-                 version = excluded.version,
-                 rotated_at = excluded.rotated_at`
+                 version = secrets.version + 1,
+                 rotated_at = COALESCE(excluded.rotated_at, secrets.rotated_at)
+               RETURNING version, created_at, rotated_at`
             )
-            .bind(envName, keyPath, body.ciphertext, name, version, created_at, rotated_at)
-            .run();
+            .bind(envName, keyPath, body.ciphertext, name, now, rotate ? now : null)
+            .first();
 
-          return json({ version, created_at, rotated_at });
+          return json(row);
         }
 
         case "DELETE": {

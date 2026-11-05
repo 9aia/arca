@@ -116,14 +116,18 @@ fn unix_now() -> u64 {
 }
 
 /// The worker's `authenticate` — Bearer against every configured
-/// token (and the legacy one), `ArcaHmac id, ts, sig` against the
-/// scoped table with the ±60s replay window. Returns the caller's
+/// token (and the legacy one), `ArcaHmac id, ts, nonce, sig`
+/// against the scoped table with the ±60s replay window. The
+/// pre-nonce `id, ts, sig` form stays accepted (migration), signed
+/// without the nonce line. A verified sig may be used once —
+/// `seen` is the mock's `used_sig` table. Returns the caller's
 /// scope map or `None`.
 fn authenticate(
     req: &Request,
     path: &str,
     tokens: &[ScopedToken],
     legacy: Option<&str>,
+    seen: &Mutex<std::collections::HashSet<String>>,
 ) -> Option<BTreeMap<String, (bool, bool)>> {
     let header = req.header("authorization")?;
     if let Some(candidate) = header.strip_prefix("Bearer ") {
@@ -142,23 +146,36 @@ fn authenticate(
     }
     if let Some(rest) = header.strip_prefix("ArcaHmac ") {
         let parts: Vec<&str> = rest.split(',').map(|s| s.trim()).collect();
-        if parts.len() != 3 {
+        if parts.len() != 3 && parts.len() != 4 {
             return None;
         }
-        let (id, ts, sig) = (parts[0], parts[1], parts[2]);
-        let entry = tokens.iter().find(|t| t.id == id)?;
+        let (id, ts) = (parts[0], parts[1]);
+        let nonce = if parts.len() == 4 { parts[2] } else { "" };
+        let sig = if parts.len() == 4 { parts[3] } else { parts[2] };
+        if parts.len() == 4 && nonce.is_empty() {
+            return None;
+        }
         let t: u64 = ts.parse().ok()?;
         if unix_now().abs_diff(t) > 60 {
             return None;
         }
+        let entry = tokens.iter().find(|t| t.id == id)?;
         let body_sha = hex_encode(&Sha256::digest(&req.body));
-        let msg = format!("{}\n{}\n{}\n{}", req.method, path, ts, body_sha);
-        let expect = hex_encode(&hmac_sha256(entry.secret.as_bytes(), msg.as_bytes()));
-        return if ct_eq(sig.as_bytes(), expect.as_bytes()) {
-            Some(scope_map(entry.scopes))
+        let msg = if parts.len() == 4 {
+            format!("{}\n{}\n{}\n{}\n{}", req.method, path, ts, nonce, body_sha)
         } else {
-            None
+            format!("{}\n{}\n{}\n{}", req.method, path, ts, body_sha)
         };
+        let expect = hex_encode(&hmac_sha256(entry.secret.as_bytes(), msg.as_bytes()));
+        if !ct_eq(sig.as_bytes(), expect.as_bytes()) {
+            return None;
+        }
+        // Replay guard (worker parity): a verified sig is spent —
+        // a second sighting fails auth.
+        if !seen.lock().unwrap().insert(sig.to_string()) {
+            return None;
+        }
+        return Some(scope_map(entry.scopes));
     }
     None
 }
@@ -179,9 +196,12 @@ pub fn vault_wire(token: &'static str) -> HttpMock {
 pub fn vault_wire_v2(tokens: &'static [ScopedToken], legacy: Option<&'static str>) -> HttpMock {
     let store: Arc<Mutex<BTreeMap<(String, String), VaultRow>>> =
         Arc::new(Mutex::new(BTreeMap::new()));
+    // The worker's `used_sig` table — spent signatures.
+    let seen: Arc<Mutex<std::collections::HashSet<String>>> =
+        Arc::new(Mutex::new(std::collections::HashSet::new()));
     HttpMock::new(move |req: &Request| {
         let path = req.path.split('?').next().unwrap_or("");
-        let scopes = match authenticate(req, path, tokens, legacy) {
+        let scopes = match authenticate(req, path, tokens, legacy, &seen) {
             Some(s) => s,
             None => return Response::json(401, r#"{"error":"unauthorized"}"#),
         };
@@ -402,19 +422,23 @@ mod tests {
     const AUTH: &str = "Authorization: Bearer tok\r\n";
 
     /// A correct `ArcaHmac` header for `req` under `id`/`secret` —
-    /// mirrors the client signer, for exercising the mock's own
-    /// verification path.
+    /// mirrors the client signer (4-field form with a fresh nonce),
+    /// for exercising the mock's own verification path.
     fn hmac_auth(id: &str, secret: &str, method: &str, path: &str, body: &str) -> String {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
         let ts = unix_now();
+        let nonce = format!("test-nonce-{}", SEQ.fetch_add(1, Ordering::Relaxed));
         let msg = format!(
-            "{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}",
             method,
             path,
             ts,
+            nonce,
             hex_encode(&Sha256::digest(body.as_bytes()))
         );
         let sig = hex_encode(&hmac_sha256(secret.as_bytes(), msg.as_bytes()));
-        format!("Authorization: ArcaHmac {id}, {ts}, {sig}\r\n")
+        format!("Authorization: ArcaHmac {id}, {ts}, {nonce}, {sig}\r\n")
     }
 
     #[test]
@@ -458,13 +482,52 @@ mod tests {
             )],
             body: body.as_bytes().to_vec(),
         };
+        let seen = Mutex::new(std::collections::HashSet::new());
         // a correct signature → Some(scopes)
         let auth = hmac_auth("ops/tok-dev", "fake-secret", "GET", "/v1/dev", "");
-        let scopes = authenticate(&req("GET", "/v1/dev", auth, ""), "/v1/dev", tokens, None);
+        let scopes = authenticate(
+            &req("GET", "/v1/dev", auth.clone(), ""),
+            "/v1/dev",
+            tokens,
+            None,
+            &seen,
+        );
         assert!(scopes.is_some());
+        // the identical signed request again → a spent sig → None
+        // (the worker's used_sig replay guard)
+        assert!(authenticate(
+            &req("GET", "/v1/dev", auth, ""),
+            "/v1/dev",
+            tokens,
+            None,
+            &seen
+        )
+        .is_none());
         // a wrong signature → None
         let auth = hmac_auth("ops/tok-dev", "wrong", "GET", "/v1/dev", "");
-        assert!(authenticate(&req("GET", "/v1/dev", auth, ""), "/v1/dev", tokens, None).is_none());
+        assert!(authenticate(
+            &req("GET", "/v1/dev", auth, ""),
+            "/v1/dev",
+            tokens,
+            None,
+            &seen
+        )
+        .is_none());
+        // a 4-field header with an empty nonce → the degenerate
+        // form is rejected outright
+        assert!(authenticate(
+            &req(
+                "GET",
+                "/v1/dev",
+                "Authorization: ArcaHmac ops/tok-dev, 1, , deadbeef\n".into(),
+                ""
+            ),
+            "/v1/dev",
+            tokens,
+            None,
+            &seen
+        )
+        .is_none());
         // header present but neither scheme → None
         assert!(authenticate(
             &req(
@@ -477,7 +540,8 @@ mod tests {
             ),
             "/v1/dev",
             tokens,
-            None
+            None,
+            &seen
         )
         .is_none());
     }
@@ -541,6 +605,18 @@ mod tests {
             "GET /v1/dev HTTP/1.1\r\nAuthorization: ArcaHmac ops/tok-dev, not-a-ts, deadbeef\r\n\r\n",
         );
         assert!(out.contains("401"), "{out}");
+        // the pre-nonce 3-field form still verifies — the migration
+        // path (signed without the nonce line)
+        let ts = unix_now();
+        let msg = format!("GET\n/v1/dev\n{}\n{}", ts, hex_encode(&Sha256::digest(b"")));
+        let sig = hex_encode(&hmac_sha256(b"fake-secret", msg.as_bytes()));
+        let out = exchange(
+            &mock,
+            &format!(
+                "GET /v1/dev HTTP/1.1\r\nAuthorization: ArcaHmac ops/tok-dev, {ts}, {sig}\r\n\r\n"
+            ),
+        );
+        assert!(out.contains("200"), "{out}");
     }
 
     #[test]

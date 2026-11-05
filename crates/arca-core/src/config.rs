@@ -127,8 +127,8 @@ pub struct VaultConfig {
     /// Per-env scoped credentials (`cf` impl, P-003): env → the
     /// `arca://` ref of a token stored in the `local` vault. Each
     /// resolved token authenticates as `ArcaHmac <ref-path>, ts,
-    /// sig` — the ref path is the wire `token_id`. Token *refs*
-    /// live in config, never token values.
+    /// nonce, sig` — the ref path is the wire `token_id`. Token
+    /// *refs* live in config, never token values.
     #[serde(default)]
     pub tokens: BTreeMap<Env, Ref>,
     /// Opt-in private ref metadata (`cf` impl, P-004): storage keys

@@ -1,4 +1,4 @@
-name = "arca-vault"
+name = "arca"
 main = "index.js"
 compatibility_date = "2025-10-01"
 
@@ -7,8 +7,12 @@ compatibility_date = "2025-10-01"
 # then paste the real database_id below.
 [[d1_databases]]
 binding = "DB"
-database_name = "arca-vault"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_name = "arca"
+database_id = "4b0fbf31-5dac-48f4-ab88-bdf5ec6c0f3f"
 
 # The bearer token is NOT here — set it with:
 #   wrangler secret put ARCA_VAULT_TOKEN
+
+[[routes]]
+pattern = "arca.luisfuturist.com"
+custom_domain = true

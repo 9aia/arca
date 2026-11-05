@@ -11,14 +11,17 @@ crosses its boundary.
 Two auth schemes; both are accepted during migration (P-003):
 
 - `Authorization: Bearer <token>` — legacy mode.
-- `Authorization: ArcaHmac <token_id>, <ts>, <sig>` — the token
-  **signs** instead of traveling:
-  `sig = hex HMAC-SHA256(token, method + "\n" + path + "\n" + ts + "\n" + sha256hex(body))`,
+- `Authorization: ArcaHmac <token_id>, <ts>, <nonce>, <sig>` — the
+  token **signs** instead of traveling:
+  `sig = hex HMAC-SHA256(token, method + "\n" + path + "\n" + ts + "\n" + nonce + "\n" + sha256hex(body))`,
   `ts` is unix seconds, `|now − ts| ≤ 60s` (replay window), and a
   verified sig may be used **once** — the worker records
   `sha256(sig)` in the `used_sig` D1 table (~120s TTL, cleaned
-  periodically) and rejects repeats with 401. A client retry
-  re-signs with a fresh `ts` and is unaffected.
+  periodically) and rejects repeats with 401. The `nonce` keeps a
+  legit retry alive: two identical requests inside the same second
+  sign differently, so a retry isn't a replay. The pre-nonce
+  three-field form `<token_id>, <ts>, <sig>` (signed without the
+  nonce line) stays accepted while old clients migrate.
 
 All comparisons are constant-time (P-006): byte-decode, XOR-fold
 over the longer input, length folded in — no early exit.
@@ -48,6 +51,24 @@ client-computed versions. Errors are `{"error": "…"}` + non-2xx.
 
 The reference implementation of these semantics for tests lives in
 `arca-testkit`'s `mocks::vault_wire_v2` — keep the two in sync.
+
+## Smoke test
+
+`index.test.js` executes **this file** — the real worker, not the
+Rust mock — over a `bun:sqlite` shim for the D1 binding, applying
+the real `schema.sql`. It covers auth (bearer + both ArcaHmac
+forms), the replay guard, scope semantics, versioning, and the
+route/error surface. It exists because the mock reimplements the
+semantics and can't catch a worker-only bug (e.g. F1: a `const
+JSON` shadow once made every request 500 while the Rust suite
+stayed green).
+
+```bash
+cd crates/arca-vault-cf/worker
+bun test            # or, from the repo root: cargo xtask worker
+```
+
+`cargo xtask test` runs it automatically when `bun` is installed.
 
 ## Deploy
 
