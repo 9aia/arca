@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CfVault"]};
+window.SIDEBAR_ITEMS = {"enum":["Auth"],"struct":["CfVault","CfVaultConfig","MigrateReport"]};

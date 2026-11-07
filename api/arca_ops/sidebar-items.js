@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["OpsError"],"mod":["audit"],"struct":["CheckReport","DeployReport","InitInfo","LoadOpts","Ops","SecretCheck","VaultCheck"]};
+window.SIDEBAR_ITEMS = {"enum":["OpsError"],"mod":["audit"],"struct":["CheckReport","DeployReport","InitInfo","InitOpts","LoadOpts","MigrateReport","Ops","SecretCheck","VaultCheck"]};
