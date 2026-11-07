@@ -10,6 +10,27 @@
 #   printf 'fake-devin-token' | arca put arca://agents/devin
 #   printf 'fake-cf-token'    | arca put arca://cf/token
 #
+# Values live in the 9aia CF vault (arca.9aia.com, Gaia account);
+# the local age vault keeps only the scoped-token refs below.
+
+[envs]
+dev     = { vault = "nine" }
+staging = { vault = "nine" }
+preview = { vault = "nine" }
+prod    = { vault = "nine" }
+
+[vaults.nine]
+kind = "cf"
+url = "https://arca.9aia.com"
+token_env = "ARCA_CF_TOKEN"
+cache = ["dev", "preview"] # prod reads live — no stale-prod footgun
+
+[vaults.nine.tokens]
+dev     = "arca://9aia/cf-token-dev"
+staging = "arca://9aia/cf-token-staging"
+preview = "arca://9aia/cf-token-preview"
+prod    = "arca://9aia/cf-token-prod"
+
 [secrets]
 # agent-runner credential the campaign's agent nodes may consume
 DEVIN_API_KEY = "arca://agents/devin"
