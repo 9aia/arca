@@ -1,0 +1,9 @@
+name = "cuora"
+main = "index.js"
+compatibility_date = "2025-10-01"
+account_id = "2c03574ae47e534415b762ab3c474815"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "arca-vault"
+database_id = "fed697ca-14ac-47ec-b1ff-e9d51fab4458"
