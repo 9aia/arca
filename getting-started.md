@@ -39,7 +39,9 @@ same — that's the headless/CI path.
 
 Already have an `identity.txt`? `arca init` imports it into the
 keyring rather than orphaning it, and leaves the file as a backup
-you can delete when ready.
+you can delete when ready. (On a brand-new keyring with no
+collections yet, arca claims the `default` collection alias
+automatically — no manual step.)
 
 ## Seal a secret
 

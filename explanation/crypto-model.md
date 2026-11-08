@@ -13,7 +13,10 @@ unlocks the local file vault and the remote `cf` vault alike.
   file — `ARCA_IDENTITY_FILE` or `[vaults.*].identity` — pins the
   keyfile outright; that is the headless/CI path. `arca init`
   bootstraps whichever backend applies and prints the public
-  `age1…` recipient.
+  `age1…` recipient. On a reachable-but-empty Secret Service (fresh
+  daemon, no collections yet) the keyring impl claims the `default`
+  collection alias on first use — `dbus-secret-service-keyring-store`'s
+  create path can't bootstrap one itself (I-006).
 - **Recipients** — `[vaults.*].recipients` encrypts to extra
   public keys beyond the identity's own — a team recipient list
   without sharing the private key.
