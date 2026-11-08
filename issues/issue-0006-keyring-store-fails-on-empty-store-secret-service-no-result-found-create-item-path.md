@@ -1,7 +1,7 @@
 +++
 id = "I-006"
 title = "keyring store fails on empty store — 'Secret Service: no result found' (create-item path)"
-status = "open"
+status = "in-progress"
 created = "2026-11-08"
 owner = "devin"
 priority = "high"
