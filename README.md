@@ -22,7 +22,7 @@ agent ──► arca run -- cmd ──► resolve refs ──► inject env ─�
 ```sh
 cargo install --git https://github.com/9aia/arca arca
 
-arca init                                   # age identity, 0600, once
+arca init                                   # age identity (keyring, fail closed), once
 printf '%s' "$STRIPE_KEY" | arca put arca://billing/stripe
 
 # the agent path — the value exists only inside the child

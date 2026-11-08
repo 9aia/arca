@@ -546,19 +546,22 @@ impl Ops {
     ///
     /// 1. an **explicit file override** (`ARCA_IDENTITY_FILE`, then
     ///    `[vaults.*].identity`) — always honored, always required;
-    /// 2. the **session keyring** when one is reachable and holds
-    ///    an `arca` identity;
-    /// 3. the **default keyfile** (`~/.config/arca/identity.txt`).
-    ///
-    /// `[identity] backend` / `ARCA_IDENTITY_BACKEND` picks the
-    /// mode: `keyring` (default) fails closed; `auto` falls back
-    /// to the file with a stderr note — a headless box is a
-    /// degraded session, not a crash; `file` skips the store
-    /// probe entirely.
+    /// 2. the backend `[identity] backend` / `ARCA_IDENTITY_BACKEND`
+    ///    picks the mode: `keyring` (default) fails closed —
+    ///    unreachable store or missing identity is an error, the
+    ///    keyfile is never read; `auto` falls back to the file
+    ///    with a stderr note — a headless box is a degraded
+    ///    session, not a crash; `file` skips the store probe
+    ///    entirely.
     fn resolve_identity(&self, cfg: Option<&VaultConfig>) -> Result<x25519::Identity, OpsError> {
         // An explicit file pins the source — skip the store probe
         // entirely (no dbus round-trip, no misleading fallback note).
         if explicit_identity_file(cfg).is_some() {
+            // The pin beats even fail-closed `keyring` — say so
+            // once, since it looks like it should have errored.
+            if self.identity_backend() == IdentityBackend::Keyring {
+                fallback_note("explicit identity file pin overrides backend=keyring");
+            }
             return self.resolve_identity_in(cfg, None);
         }
         match self.identity_backend() {
@@ -568,25 +571,7 @@ impl Ops {
             // identity is an error, never a silent file read.
             IdentityBackend::Keyring => keyring_required(&*strict_keyring()?),
             IdentityBackend::Auto => {
-                // The real probe only exists off-coverage: any
-                // Ok-arm expression is unreachable in headless
-                // coverage runs (no session store), so it would be
-                // a phantom miss.
-                #[cfg(not(coverage))]
-                let keyring: Option<Arc<dyn IdentitySource>> = match KeyringIdentity::platform() {
-                    Ok(k) => Some(Arc::new(k)),
-                    Err(e) => {
-                        fallback_note(&format!(
-                            "no session keyring reachable ({e}) — using the identity file"
-                        ));
-                        None
-                    }
-                };
-                #[cfg(coverage)]
-                let keyring: Option<Arc<dyn IdentitySource>> = {
-                    fallback_note("no session keyring reachable — using the identity file");
-                    None
-                };
+                let keyring = auto_keyring_probe();
                 self.resolve_identity_in(cfg, keyring.as_deref())
             }
         }
@@ -594,8 +579,8 @@ impl Ops {
 
     /// Which identity backend this run uses — `ARCA_IDENTITY_BACKEND`
     /// env wins over `[identity] backend`, absent both → `keyring`
-    /// (fail closed). An unrecognized env value is ignored
-    /// (config/default apply).
+    /// (fail closed). An unrecognized env value is ignored with
+    /// a stderr note (config/default apply).
     fn identity_backend(&self) -> IdentityBackend {
         std::env::var("ARCA_IDENTITY_BACKEND")
             .ok()
@@ -603,7 +588,14 @@ impl Ops {
                 "auto" => Some(IdentityBackend::Auto),
                 "keyring" => Some(IdentityBackend::Keyring),
                 "file" => Some(IdentityBackend::File),
-                _ => None,
+                _ => {
+                    // A typo'd opt-out must not silently fail
+                    // closed — say the value was ignored.
+                    fallback_note(&format!(
+                        "unrecognized ARCA_IDENTITY_BACKEND {v:?} — ignoring"
+                    ));
+                    None
+                }
             })
             .or_else(|| self.config.identity.as_ref().map(|i| i.backend))
             .unwrap_or_default()
@@ -631,16 +623,23 @@ impl Ops {
         load_required(&FileIdentity::default())
     }
 
-    /// `arca init` — store the identity in the session keyring when
-    /// one is reachable (importing an existing keyfile identity
-    /// rather than orphaning its ciphertext), else the `0600`
-    /// keyfile; then verify the vault opens. `opts.with_file`
-    /// forces the keyfile path.
+    /// `arca init` — store the identity per `[identity] backend`
+    /// (default `keyring`: fail closed when no session store is
+    /// reachable; `auto` falls back to the keyfile; `file` forces
+    /// it), importing an existing keyfile identity rather than
+    /// orphaning its ciphertext; then verify the vault opens.
+    /// `opts.with_file` forces the keyfile path.
     pub fn init(&self, opts: &InitOpts) -> Result<InitInfo, OpsError> {
         let name = self.config.vault_for(&self.env);
         let cfg = self.config.vault_config(name);
         let keyring: Option<Arc<dyn IdentitySource>> =
             if opts.with_file || explicit_identity_file(cfg).is_some() {
+                if !opts.with_file
+                    && explicit_identity_file(cfg).is_some()
+                    && self.identity_backend() == IdentityBackend::Keyring
+                {
+                    fallback_note("explicit identity file pin overrides backend=keyring");
+                }
                 None
             } else {
                 match self.identity_backend() {
@@ -648,28 +647,7 @@ impl Ops {
                     // Fail closed — `init` can't store into a
                     // session store that isn't there.
                     IdentityBackend::Keyring => Some(strict_keyring()?),
-                    IdentityBackend::Auto => {
-                        // See resolve_identity — the probe's Ok arm
-                        // is unreachable in headless coverage runs.
-                        #[cfg(not(coverage))]
-                        match KeyringIdentity::platform() {
-                            Ok(k) => Some(Arc::new(k)),
-                            Err(e) => {
-                                // Headless init is the expected
-                                // case — say why the file was
-                                // chosen, once.
-                                fallback_note(&format!(
-                                    "no session keyring reachable ({e}) — using the identity file"
-                                ));
-                                None
-                            }
-                        }
-                        #[cfg(coverage)]
-                        {
-                            fallback_note("no session keyring reachable — using the identity file");
-                            None
-                        }
-                    }
+                    IdentityBackend::Auto => auto_keyring_probe(),
                 }
             };
         self.init_in(opts, keyring.as_deref())
@@ -1136,6 +1114,31 @@ fn ensure_on(src: &dyn IdentitySource) -> Result<(x25519::Identity, bool), OpsEr
         .map_err(|e| OpsError::Identity(IdentityError::Store(format!("{}: {e}", src.describe()))))
 }
 
+/// The `auto`-mode probe — a reachable session store or `None`
+/// with a one-time stderr note. The real probe only exists
+/// off-coverage: any Ok-arm expression is unreachable in headless
+/// coverage runs (no session store), so it would be a phantom
+/// miss there by construction.
+fn auto_keyring_probe() -> Option<Arc<dyn IdentitySource>> {
+    #[cfg(not(coverage))]
+    match KeyringIdentity::platform() {
+        Ok(k) => Some(Arc::new(k)),
+        Err(e) => {
+            // Headless is the expected case — say why the file
+            // was chosen, once.
+            fallback_note(&format!(
+                "no session keyring reachable ({e}) — using the identity file"
+            ));
+            None
+        }
+    }
+    #[cfg(coverage)]
+    {
+        fallback_note("no session keyring reachable — using the identity file");
+        None
+    }
+}
+
 /// Session-store probe for `backend = "keyring"` — reachable or
 /// an `Unavailable` error, never `None`: fail-closed means the
 /// caller decides, not the probe.
@@ -1145,7 +1148,8 @@ fn strict_keyring() -> Result<Arc<dyn IdentitySource>, OpsError> {
         .map(|k| Arc::new(k) as Arc<dyn IdentitySource>)
         .map_err(|e| {
             OpsError::Identity(IdentityError::Unavailable(format!(
-                "identity backend=keyring: {e}"
+                "identity backend=keyring: {e} — \
+                 set ARCA_IDENTITY_BACKEND=auto|file for headless/CI"
             )))
         })
 }
@@ -1155,7 +1159,9 @@ fn strict_keyring() -> Result<Arc<dyn IdentitySource>, OpsError> {
 #[cfg(coverage)]
 fn strict_keyring() -> Result<Arc<dyn IdentitySource>, OpsError> {
     Err(OpsError::Identity(IdentityError::Unavailable(
-        "identity backend=keyring: no session keyring reachable".into(),
+        "identity backend=keyring: no session keyring reachable — \
+         set ARCA_IDENTITY_BACKEND=auto|file for headless/CI"
+            .into(),
     )))
 }
 
