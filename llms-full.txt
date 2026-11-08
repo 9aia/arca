@@ -1,9 +1,9 @@
 ---
-url: /arca/tutorials/first-secret.md
+url: /cuora/tutorials/first-secret.md
 ---
 # Your first secret
 
-A full arca lifecycle — bootstrap, seal, declare, inject, audit —
+A full cuora lifecycle — bootstrap, seal, declare, inject, audit —
 in a throwaway `HOME` so nothing touches your real config. All
 values below are fake.
 
@@ -14,16 +14,16 @@ export HOME="$(mktemp -d)"        # scratch HOME for this tutorial
 export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_DATA_HOME="$HOME/.local/share"
 
-arca init
+cuora init
 ```
 
 ```text
-identity: /tmp/tmp.…/.config/arca/identity.txt (generated)
+identity: /tmp/tmp.…/.config/cuora/identity.txt (generated)
 recipient: age1…
-vault:     /tmp/tmp.…/.local/share/arca/vault.age
+vault:     /tmp/tmp.…/.local/share/cuora/vault.age
 ```
 
-On stderr you'll also see the first audit event — every arca op
+On stderr you'll also see the first audit event — every cuora op
 emits one ndjson line there:
 
 ```json
@@ -33,29 +33,29 @@ emits one ndjson line there:
 ## Seal a value
 
 ```sh
-printf '%s' 'sk_test_FAKE000000000000000000' | arca put arca://billing/stripe
+printf '%s' 'sk_test_FAKE000000000000000000' | cuora put cuora://billing/stripe
 ```
 
 ```text
-stored arca://billing/stripe (v1)
+stored cuora://billing/stripe (v1)
 ```
 
 The plaintext went in on stdin — never an argument. What's on
 disk is age ciphertext:
 
 ```sh
-file "$XDG_DATA_HOME/arca/vault.age"   # data — not readable
+file "$XDG_DATA_HOME/cuora/vault.age"   # data — not readable
 ```
 
 ## Declare and inject
 
 ```sh
-cat > arca.toml <<'EOF'
+cat > cuora.toml <<'EOF'
 [secrets]
-STRIPE_KEY = "arca://billing/stripe"
+STRIPE_KEY = "cuora://billing/stripe"
 EOF
 
-arca run -- 'echo "key starts with: ${STRIPE_KEY:0:7}…"'
+cuora run -- 'echo "key starts with: ${STRIPE_KEY:0:7}…"'
 ```
 
 ```text
@@ -73,11 +73,11 @@ recorded the materialization:
 ## List without spilling
 
 ```sh
-arca list
-# arca://billing/stripe
+cuora list
+# cuora://billing/stripe
 
-arca list --json
-# [{"ref":"arca://billing/stripe","env":"dev","version":1,"created_at":"…","rotated_at":null}]
+cuora list --json
+# [{"ref":"cuora://billing/stripe","env":"dev","version":1,"created_at":"…","rotated_at":null}]
 ```
 
 `list` is names plus metadata — never values. The only surfaces
@@ -87,14 +87,14 @@ that print a value are `get` (the escape hatch) and `env`
 ## Rotate and verify
 
 ```sh
-printf '%s' 'sk_test_FAKE111111111111111111' | arca rotate arca://billing/stripe
-# rotated arca://billing/stripe (v2)
+printf '%s' 'sk_test_FAKE111111111111111111' | cuora rotate cuora://billing/stripe
+# rotated cuora://billing/stripe (v2)
 
-arca check
-# config: /tmp/tmp.…/arca.toml
+cuora check
+# config: /tmp/tmp.…/cuora.toml
 # env: dev → vault "local"
 # vault "local" (age): readable
-# secret STRIPE_KEY → arca://billing/stripe (env dev): resolves
+# secret STRIPE_KEY → cuora://billing/stripe (env dev): resolves
 # ok
 ```
 
@@ -119,16 +119,16 @@ rm -rf "$HOME"      # the scratch vault and identity go with it
 ---
 
 ---
-url: /arca/how-to/add-a-secret.md
+url: /cuora/how-to/add-a-secret.md
 ---
 # Add a secret
 
-Store a value under an `arca://` ref in the vault backing an env.
+Store a value under an `cuora://` ref in the vault backing an env.
 
 ## The pipe path (scripts and agents)
 
 ```sh
-printf '%s' "$VALUE" | arca put arca://ns/name
+printf '%s' "$VALUE" | cuora put cuora://ns/name
 ```
 
 * stdin is read to EOF; **one** trailing newline is stripped, the
@@ -140,14 +140,14 @@ printf '%s' "$VALUE" | arca put arca://ns/name
 Other sources that already hold the value pipe the same way:
 
 ```sh
-pass show stripe/test | arca put arca://billing/stripe
-op read "op://vault/stripe/test" | arca put arca://billing/stripe --env dev
+pass show stripe/test | cuora put cuora://billing/stripe
+op read "op://vault/stripe/test" | cuora put cuora://billing/stripe --env dev
 ```
 
 ## The interactive path (humans)
 
 ```sh
-arca put arca://ns/name          # stdin is a tty → hidden /dev/tty prompt
+cuora put cuora://ns/name          # stdin is a tty → hidden /dev/tty prompt
 ```
 
 The prompt doesn't echo — paste the value, hit enter.
@@ -155,14 +155,14 @@ The prompt doesn't echo — paste the value, hit enter.
 ## Pick the env
 
 Env is resolution *context*, not part of the name — the same
-`arca://ns/name` ref can hold different values per env:
+`cuora://ns/name` ref can hold different values per env:
 
 ```sh
-printf dev-token   | arca put arca://billing/stripe --env dev
-printf prod-token  | arca put arca://prod/billing/stripe   # env pin
+printf dev-token   | cuora put cuora://billing/stripe --env dev
+printf prod-token  | cuora put cuora://prod/billing/stripe   # env pin
 ```
 
-`arca://prod/…` pins the env regardless of `--env`/`ARCA_ENV`;
+`cuora://prod/…` pins the env regardless of `--env`/`CUORA_ENV`;
 the bare form resolves under the selected env.
 
 ## Upsert semantics
@@ -170,72 +170,72 @@ the bare form resolves under the selected env.
 `put` is an upsert: a new ref starts at `version = 1`; re-putting
 an existing ref replaces the value and bumps the version but is
 *not* a rotation (`rotated_at` stays untouched — use
-[`arca rotate`](rotate-a-secret.md) for deliberate rotations).
+[`cuora rotate`](rotate-a-secret.md) for deliberate rotations).
 
 ## Remove
 
 ```sh
-arca rm arca://ns/name
+cuora rm cuora://ns/name
 ```
 
 ## Verify
 
 ```sh
-arca list [--env prod]      # refs only — never values
-arca check                  # declared [secrets] entries resolve?
+cuora list [--env prod]      # refs only — never values
+cuora check                  # declared [secrets] entries resolve?
 ```
 
 ---
 
 ---
-url: /arca/how-to/inject-into-a-process.md
+url: /cuora/how-to/inject-into-a-process.md
 ---
 # Inject secrets into a process
 
-`arca run` is the agent path — resolved values become env vars in
-the child and nowhere else. `arca env` is the human path — export
+`cuora run` is the agent path — resolved values become env vars in
+the child and nowhere else. `cuora env` is the human path — export
 lines for `eval`.
 
 ## Declare the surface
 
-`[secrets]` in `arca.toml` bounds what `run`/`env` may inject:
+`[secrets]` in `cuora.toml` bounds what `run`/`env` may inject:
 
 ```toml
 [secrets]
-STRIPE_KEY   = "arca://billing/stripe"
-DATABASE_URL = "arca://prod/db/url"     # env pin: prod, always
+STRIPE_KEY   = "cuora://billing/stripe"
+DATABASE_URL = "cuora://prod/db/url"     # env pin: prod, always
 ```
 
 Nothing outside this table (plus `-s` ad-hoc pairs) is injectable
-— least privilege, and `arca check` verifies every entry resolves.
+— least privilege, and `cuora check` verifies every entry resolves.
 
-## `arca run` — two exec modes
+## `cuora run` — two exec modes
 
 ```sh
 # one arg → bash -c — pipes, redirects, $VAR expansion
-arca run -- 'psql "$DATABASE_URL" -c "select 1" | tee out.log'
+cuora run -- 'psql "$DATABASE_URL" -c "select 1" | tee out.log'
 
 # several args → argv[0] exec'd directly, NO shell —
 # the program reads its own environment
-arca run -- stripe charges list --limit 3
+cuora run -- stripe charges list --limit 3
 ```
 
 Prefer argv mode when the command has arguments — no quoting
 puzzles. One caveat: with no shell in the child there is no
 `$VAR` expansion — write `$STRIPE_KEY` in argv and *your* outer
-shell eats it (to an empty string) before arca runs. Use `bash
+shell eats it (to an empty string) before cuora runs. Use `bash
 -c` mode when the command line itself needs the value.
 
-Exit code is the child's; a child's non-zero exit is not an arca
+Exit code is the child's; a child's non-zero exit is not an cuora
 failure (no `error` audit event).
 
-## Ad-hoc pairs: `-s VAR=arca://ref`
+## Ad-hoc pairs: `-s VAR=cuora://ref`
 
 Repeatable, merged over `[secrets]` (same `VAR` — the `-s` pair
 wins):
 
 ```sh
-arca run -s TEMP_TOKEN=arca://ci/token -- ./deploy.sh
+cuora run -s TEMP_TOKEN=cuora://ci/token -- ./deploy.sh
 ```
 
 ## Missing secrets fail closed
@@ -243,12 +243,12 @@ arca run -s TEMP_TOKEN=arca://ci/token -- ./deploy.sh
 If any declared or `-s` ref isn't stored in its env, `run` fails
 before spawning — partial injection is worse than none.
 
-## `arca env` — the human path
+## `cuora env` — the human path
 
 ```sh
-eval "$(arca env)"                              # export every declared VAR
-eval "$(arca env -s EXTRA=arca://misc/extra)"   # plus ad-hoc pairs
-arca env --json                                 # {"VAR": "value"} map
+eval "$(cuora env)"                              # export every declared VAR
+eval "$(cuora env -s EXTRA=cuora://misc/extra)"   # plus ad-hoc pairs
+cuora env --json                                 # {"VAR": "value"} map
 ```
 
 Output is `export VAR='…'` with shell-safe quoting for any value.
@@ -265,7 +265,7 @@ Each resolved ref emits one materialization event on stderr —
 ---
 
 ---
-url: /arca/how-to/rotate-a-secret.md
+url: /cuora/how-to/rotate-a-secret.md
 ---
 # Rotate a secret
 
@@ -273,8 +273,8 @@ Replace a stored value deliberately — version bump plus a
 `rotated_at` timestamp, and an audit event.
 
 ```sh
-printf '%s' "$NEW_VALUE" | arca rotate arca://billing/stripe
-# rotated arca://billing/stripe (v3)
+printf '%s' "$NEW_VALUE" | cuora rotate cuora://billing/stripe
+# rotated cuora://billing/stripe (v3)
 ```
 
 Like `put`, the value arrives on stdin (or a hidden `/dev/tty`
@@ -294,28 +294,28 @@ typo'd ref or wrong env that `put` would silently create.
 ## Rotate in a specific env
 
 ```sh
-printf '%s' "$PROD_VALUE" | arca rotate arca://prod/billing/stripe
+printf '%s' "$PROD_VALUE" | cuora rotate cuora://prod/billing/stripe
 # or: --env prod
 ```
 
 ## Verify
 
 ```sh
-arca list --json --env prod
+cuora list --json --env prod
 # … "version": 3, "rotated_at": "2026-…"
 ```
 
 Downstream consumers pick the new value up on their next
-`arca run` — resolution happens at exec time, nothing caches it.
+`cuora run` — resolution happens at exec time, nothing caches it.
 
 If the value was pushed to a deploy sink, re-push it:
-[`arca deploy arca://billing/stripe`](deploy-to-a-sink.md) — the
+[`cuora deploy cuora://billing/stripe`](deploy-to-a-sink.md) — the
 sink is write-only and doesn't follow the vault on its own.
 
 ---
 
 ---
-url: /arca/how-to/route-envs-to-vaults.md
+url: /cuora/how-to/route-envs-to-vaults.md
 ---
 # Route envs to vaults
 
@@ -332,8 +332,8 @@ kind = "age"
 
 [vaults.cloud]
 kind = "cf"                    # self-hosted Worker + D1, age ciphertext
-url = "https://arca-vault.you.workers.dev"
-token_env = "ARCA_CF_TOKEN"    # env var NAME — token value stays in env
+url = "https://cuora-vault.you.workers.dev"
+token_env = "CUORA_CF_TOKEN"    # env var NAME — token value stays in env
 
 [envs]
 dev = "local"                  # bare-name form
@@ -348,17 +348,17 @@ Rules:
   exist; `[envs]` keys add custom envs (`ci`, `qa`, …).
 * `token_env` names the env var carrying the credential — the
   *name* is in config, the *value* only in the process env.
-* `ARCA_IDENTITY_FILE` overrides the age identity path globally.
+* `CUORA_IDENTITY_FILE` overrides the age identity path globally.
 
 ## What changes at run time
 
 ```sh
-arca list --env prod          # opens the "cloud" vault over HTTPS
-arca put arca://prod/x/y      # pin → writes to "cloud"
-arca run --env prod -- ./app  # [secrets] resolve under prod → cloud
+cuora list --env prod          # opens the "cloud" vault over HTTPS
+cuora put cuora://prod/x/y      # pin → writes to "cloud"
+cuora run --env prod -- ./app  # [secrets] resolve under prod → cloud
 ```
 
-The ref spelling doesn't change — `arca://ns/name` is env-agnostic;
+The ref spelling doesn't change — `cuora://ns/name` is env-agnostic;
 routing decides which backend serves it.
 
 ## The `cf` backend
@@ -371,7 +371,7 @@ see [Cloudflare Worker setup](cloudflare-worker-setup.md).
 ## Verify routing
 
 ```sh
-arca check
+cuora check
 # env: dev → vault "local"
 # vault "local" (age): readable
 # vault "cloud" (cf): readable      ← actually probed over the wire
@@ -384,7 +384,7 @@ undeclared vault names.
 ---
 
 ---
-url: /arca/how-to/cached-vaults.md
+url: /cuora/how-to/cached-vaults.md
 ---
 # Cache a remote vault locally
 
@@ -399,8 +399,8 @@ write-through, and a remote failure falls back to the stale copy.
 ```toml
 [vaults.cloud]
 kind = "cf"
-url = "https://arca-vault.you.workers.dev"
-token_env = "ARCA_CF_TOKEN"
+url = "https://cuora-vault.you.workers.dev"
+token_env = "CUORA_CF_TOKEN"
 cache = ["dev"]              # cache only the dev env
 # cache = true              # or: cache every env
 # cache_ttl_secs = 600      # freshness window, default 300
@@ -412,8 +412,8 @@ are the same as leaving it out.
 
 ## What lands on disk
 
-Rows mirror into `$XDG_CACHE_HOME/arca/<vault>.age` (else
-`~/.cache/arca/`) — an ordinary age vault encrypted to the same
+Rows mirror into `$XDG_CACHE_HOME/cuora/<vault>.age` (else
+`~/.cache/cuora/`) — an ordinary age vault encrypted to the same
 identity and recipients as the vault itself, so the cache needs
 no new key material and no new threat surface. Each cached row
 carries the remote `version`/`rotated_at` verbatim plus a
@@ -424,7 +424,7 @@ values). It's a cache: delete the directory and it rebuilds.
 ## Freshness model
 
 * **Within the TTL** a cached `get`/`list` answers with no
-  network at all — a burst of `arca run`s costs one round-trip.
+  network at all — a burst of `cuora run`s costs one round-trip.
 * **Past the TTL** the read goes remote and rewrites the row.
 * **Remote unreachable** — the stale copy answers. That's the
   offline mode the cache exists for, not an error.
@@ -451,10 +451,10 @@ is a footgun; the scope is the safety rail.
 ## Verify
 
 ```sh
-arca get arca://a/b       # first call: remote fetch + write-through
-arca get arca://a/b       # second call: cache hit, no round-trip
-ls ~/.cache/arca/         # cloud.age + cloud.listed.json
-arca check                # probes the remote like before
+cuora get cuora://a/b       # first call: remote fetch + write-through
+cuora get cuora://a/b       # second call: cache hit, no round-trip
+ls ~/.cache/cuora/         # cloud.age + cloud.listed.json
+cuora check                # probes the remote like before
 ```
 
 A cache file that won't decrypt is moved aside to
@@ -464,12 +464,12 @@ remote-only reads, never to a wrong answer.
 ---
 
 ---
-url: /arca/how-to/deploy-to-a-sink.md
+url: /cuora/how-to/deploy-to-a-sink.md
 ---
 # Deploy a secret to a sink
 
-`arca deploy` pushes a vault-stored value to a write-only target —
-a `[deploy.NAME]` table in `arca.toml`. The vault is the source of
+`cuora deploy` pushes a vault-stored value to a write-only target —
+a `[deploy.NAME]` table in `cuora.toml`. The vault is the source of
 truth; the sink serves your runtimes directly (e.g. a Worker
 reading a Secrets Store binding).
 
@@ -489,8 +489,8 @@ The API token comes from the env var named by `token_env`
 ## Push
 
 ```sh
-arca deploy arca://billing/stripe --target prod
-# deployed arca://billing/stripe → "prod" as dev_billing_stripe (created)
+cuora deploy cuora://billing/stripe --target prod
+# deployed cuora://billing/stripe → "prod" as dev_billing_stripe (created)
 ```
 
 * `--target` may be omitted when exactly one `[deploy.*]` table is
@@ -503,28 +503,28 @@ arca deploy arca://billing/stripe --target prod
 
 Deploy targets are **sinks**, not sources: the plaintext crosses
 to the sink exactly once, at push time, and nothing ever reads it
-back through arca. A deploy emits a `deploy` audit event for the
+back through cuora. A deploy emits a `deploy` audit event for the
 ref.
 
 ## Rotate → re-deploy
 
-`arca rotate` changes the vault; the sink doesn't follow on its
+`cuora rotate` changes the vault; the sink doesn't follow on its
 own. Re-push after rotation:
 
 ```sh
-printf '%s' "$NEW_VALUE" | arca rotate arca://prod/billing/stripe
-arca deploy arca://prod/billing/stripe --target prod
+printf '%s' "$NEW_VALUE" | cuora rotate cuora://prod/billing/stripe
+cuora deploy cuora://prod/billing/stripe --target prod
 ```
 
 ## Verify
 
-`arca check` validates deploy tables (kind known, `account_id` +
+`cuora check` validates deploy tables (kind known, `account_id` +
 `store_id` present) as findings — it doesn't push anything.
 
 ---
 
 ---
-url: /arca/how-to/guardrails-for-agents.md
+url: /cuora/how-to/guardrails-for-agents.md
 ---
 # Guardrails for agents
 
@@ -545,7 +545,7 @@ allow = ["run", "list", "check", "manifest", "schema"]
 
 * `deny` wins over `allow`; `default` covers the rest
   (default `"allow"`).
-* Op names match `arca manifest`'s `ops` list:
+* Op names match `cuora manifest`'s `ops` list:
   `init, put, get, list, rm, rotate, run, env, check, deploy,
   ui, serve, manifest, schema`.
 * `manifest`/`schema`/`gen-cli-docs` run before config load —
@@ -554,7 +554,7 @@ allow = ["run", "list", "check", "manifest", "schema"]
 ## What a denial looks like
 
 ```text
-arca: op 'get' denied by guardrails in ./arca.toml
+cuora: op 'get' denied by guardrails in ./cuora.toml
        (advisory — remove/relax the rule to allow)
 ```
 
@@ -565,11 +565,11 @@ ref. Exit is non-zero; `--json` emits `{"error": "…"}`.
 
 Guardrails are accident prevention, not enforcement:
 
-* `ARCA_ACTOR` (and `--actor`) is self-claimed — attribution, not
+* `CUORA_ACTOR` (and `--actor`) is self-claimed — attribution, not
   identity.
-* Nothing stops a determined process from editing `arca.toml` or
+* Nothing stops a determined process from editing `cuora.toml` or
   running the binary differently. Real policy enforcement is
-  peregrin's job (arca's orchestrator neighbor); arca's contract
+  peregrin's job (cuora's orchestrator neighbor); cuora's contract
   is to *honor* the declared rules and *record* every refusal.
 
 If a guardrail denies your op as an agent: don't work around it.
@@ -587,18 +587,18 @@ default = "deny"
 allow = ["run", "list", "check", "ui"]
 ```
 
-The agent can `arca run` (values materialize inside the child,
+The agent can `cuora run` (values materialize inside the child,
 never in its context) and can list refs — but `get`/`env`, the
 plaintext printers, are off.
 
 ---
 
 ---
-url: /arca/how-to/cloudflare-worker-setup.md
+url: /cuora/how-to/cloudflare-worker-setup.md
 ---
 # Cloudflare Worker setup
 
-The `cf` vault kind is two halves: `arca-vault-cf` in the CLI
+The `cf` vault kind is two halves: `cuora-vault-cf` in the CLI
 (client-side age encryption + blocking HTTP) and a Worker you
 self-host — a thin store fronting D1 that holds **opaque
 ciphertext only**. The worker has no key material and cannot read
@@ -609,10 +609,10 @@ what it serves.
 The worker source, schema, and the authoritative deploy
 walkthrough live in the repo:
 
-* [`crates/arca-vault-cf/worker/README.md`](https://github.com/9aia/arca/blob/main/crates/arca-vault-cf/worker/README.md)
-  — wire protocol (`arca-vault-cf/2`), `wrangler` steps
+* [`crates/cuora-vault-cf/worker/README.md`](https://github.com/9aia/cuora/blob/main/crates/cuora-vault-cf/worker/README.md)
+  — wire protocol (`cuora-vault-cf/2`), `wrangler` steps
 * `worker/index.js` — the Worker (constant-time auth, scoped
-  tokens, ArcaHmac verification + REST verbs)
+  tokens, CuoraHmac verification + REST verbs)
 * `worker/schema.sql` — the D1 table (`name` column added in v2 —
   `ALTER TABLE secrets ADD COLUMN name TEXT` on an existing db)
 * `worker/wrangler.toml` — binding config
@@ -620,33 +620,33 @@ walkthrough live in the repo:
 The short version:
 
 ```sh
-cd crates/arca-vault-cf/worker
-wrangler d1 create arca-vault                  # → paste database_id into wrangler.toml
-wrangler d1 execute arca-vault --file=schema.sql
-wrangler secret put ARCA_VAULT_TOKEN           # legacy single bearer, or:
-wrangler secret put ARCA_VAULT_TOKENS          # scoped token map (JSON) — below
+cd crates/cuora-vault-cf/worker
+wrangler d1 create cuora-vault                  # → paste database_id into wrangler.toml
+wrangler d1 execute cuora-vault --file=schema.sql
+wrangler secret put CUORA_VAULT_TOKEN           # legacy single bearer, or:
+wrangler secret put CUORA_VAULT_TOKENS          # scoped token map (JSON) — below
 wrangler deploy
 ```
 
-Then point a vault at it in `arca.toml`:
+Then point a vault at it in `cuora.toml`:
 
 ```toml
 [vaults.cloud]
 kind = "cf"
-url = "https://arca-vault.you.workers.dev"
-token_env = "ARCA_CF_TOKEN"
+url = "https://cuora-vault.you.workers.dev"
+token_env = "CUORA_CF_TOKEN"
 
 [envs]
 prod = { vault = "cloud" }
 ```
 
 and export the bearer token under the name `token_env` chose
-(`export ARCA_CF_TOKEN=…`).
+(`export CUORA_CF_TOKEN=…`).
 
 ## Scoped tokens (wire v2)
 
 One static bearer for every env is a big blast radius. Wire v2
-scopes tokens per env: the worker reads `ARCA_VAULT_TOKENS`, a JSON
+scopes tokens per env: the worker reads `CUORA_VAULT_TOKENS`, a JSON
 map of `token_id → {token, scopes}`, and enforces
 `{env|"*" → {read, write}}` after auth — a leaked `dev` token can't
 read `prod`.
@@ -664,30 +664,30 @@ read `prod`.
 }
 ```
 
-On the client side, each scoped credential is an `arca://` ref —
+On the client side, each scoped credential is an `cuora://` ref —
 the token itself lives as a secret in the **`local` vault** under
 the env it scopes; the ref path is the wire `token_id`:
 
 ```toml
 [vaults.cloud.tokens]
-dev = "arca://ops/cf-token-dev"
-prod = "arca://ops/cf-token-prod"
+dev = "cuora://ops/cf-token-dev"
+prod = "cuora://ops/cf-token-prod"
 ```
 
 ```sh
-printf '%s' '<dev-token-secret>' | arca put arca://ops/cf-token-dev --env dev
-printf '%s' '<prod-token-secret>' | arca put arca://ops/cf-token-prod --env prod
+printf '%s' '<dev-token-secret>' | cuora put cuora://ops/cf-token-dev --env dev
+printf '%s' '<prod-token-secret>' | cuora put cuora://ops/cf-token-prod --env prod
 ```
 
 With a scoped token configured the client signs every request —
-`Authorization: ArcaHmac &lt;token_id&gt;, &lt;ts&gt;, &lt;sig&gt;` where
+`Authorization: CuoraHmac &lt;token_id&gt;, &lt;ts&gt;, &lt;sig&gt;` where
 `sig = hex HMAC-SHA256(token, method+path+ts+sha256(body))` and `ts`
 must be within the worker's 60-second replay window. **The token
 never travels.** `Bearer` stays accepted during migration, so a
 mixed fleet upgrades gracefully.
 
 **Rotation is `wrangler secret put`** — replace the value inside
-`ARCA_VAULT_TOKENS`, then `arca put` the new secret at the token
+`CUORA_VAULT_TOKENS`, then `cuora put` the new secret at the token
 ref. There is deliberately no admin route.
 
 ## Private refs (opt-in)
@@ -710,7 +710,7 @@ private_refs = true
 Existing rows aren't rewritten by the flag alone — run:
 
 ```sh
-arca migrate --private-refs
+cuora migrate --private-refs
 ```
 
 which re-keys every plaintext-named row (ciphertext moves verbatim,
@@ -735,7 +735,7 @@ identity means a full re-key + migrate.
 ## Verify
 
 ```sh
-arca check --env prod
+cuora check --env prod
 # vault "cloud" (cf): readable     ← probes the worker over HTTPS
 ```
 
@@ -749,140 +749,140 @@ Don't confuse the two CF surfaces:
 * `[vaults.cloud] kind = "cf"` — a *readable* ciphertext store
   (your Worker + D1). Source of truth.
 * `[deploy.prod] kind = "cf-secrets-store"` — a *write-only*
-  Cloudflare Secrets Store sink `arca deploy` pushes plaintext
+  Cloudflare Secrets Store sink `cuora deploy` pushes plaintext
   into for Workers to consume via bindings. See
   [deploy to a sink](deploy-to-a-sink.md).
 
 ---
 
 ---
-url: /arca/reference/cli.md
+url: /cuora/reference/cli.md
 ---
-# Command-Line Help for `arca`
+# Command-Line Help for `cuora`
 
-This document contains the help content for the `arca` command-line program.
+This document contains the help content for the `cuora` command-line program.
 
 **Command Overview:**
 
-* [`arca`↴](#arca)
-* [`arca init`↴](#arca-init)
-* [`arca put`↴](#arca-put)
-* [`arca get`↴](#arca-get)
-* [`arca list`↴](#arca-list)
-* [`arca rm`↴](#arca-rm)
-* [`arca rotate`↴](#arca-rotate)
-* [`arca run`↴](#arca-run)
-* [`arca env`↴](#arca-env)
-* [`arca check`↴](#arca-check)
-* [`arca migrate`↴](#arca-migrate)
-* [`arca deploy`↴](#arca-deploy)
-* [`arca serve`↴](#arca-serve)
-* [`arca ui`↴](#arca-ui)
-* [`arca manifest`↴](#arca-manifest)
-* [`arca schema`↴](#arca-schema)
+* [`cuora`↴](#cuora)
+* [`cuora init`↴](#cuora-init)
+* [`cuora put`↴](#cuora-put)
+* [`cuora get`↴](#cuora-get)
+* [`cuora list`↴](#cuora-list)
+* [`cuora rm`↴](#cuora-rm)
+* [`cuora rotate`↴](#cuora-rotate)
+* [`cuora run`↴](#cuora-run)
+* [`cuora env`↴](#cuora-env)
+* [`cuora check`↴](#cuora-check)
+* [`cuora migrate`↴](#cuora-migrate)
+* [`cuora deploy`↴](#cuora-deploy)
+* [`cuora serve`↴](#cuora-serve)
+* [`cuora ui`↴](#cuora-ui)
+* [`cuora manifest`↴](#cuora-manifest)
+* [`cuora schema`↴](#cuora-schema)
 
-## `arca`
+## `cuora`
 
-arca — secrets broker for agents: `arca://` refs, redaction, env-injection instead of plaintext.
+cuora — secrets broker for agents: `cuora://` refs, redaction, env-injection instead of plaintext.
 
-Refs name logical secrets (`arca://billing/stripe`); `--env` picks the resolution context. `[secrets]` in arca.toml bounds what `run`/`env` may inject. `manifest`/`schema` describe the surface for machines; every verb honors `--json`.
+Refs name logical secrets (`cuora://billing/stripe`); `--env` picks the resolution context. `[secrets]` in cuora.toml bounds what `run`/`env` may inject. `manifest`/`schema` describe the surface for machines; every verb honors `--json`.
 
-**Usage:** `arca [OPTIONS] <COMMAND>`
+**Usage:** `cuora [OPTIONS] <COMMAND>`
 
 ###### **Subcommands:**
 
-* `init` — Bootstrap: store the age identity in the system keyring when a session secret store is reachable — importing an existing identity.txt rather than orphaning it — else the `~/.config/arca/identity.txt` keyfile (0600). Verifies the vault opens
-* `put` — Store a secret. The value comes from stdin (`printf … | arca put arca://ns/name`) or a hidden terminal prompt — never args, which land in shell history and `/proc`
-* `get` — Print a secret's value to stdout — the escape hatch. Prefer `arca run` so values never enter agent context; guardrails can deny this op
+* `init` — Bootstrap: store the age identity in the system keyring when a session secret store is reachable — importing an existing identity.txt rather than orphaning it — else the `~/.config/cuora/identity.txt` keyfile (0600). Verifies the vault opens
+* `put` — Store a secret. The value comes from stdin (`printf … | cuora put cuora://ns/name`) or a hidden terminal prompt — never args, which land in shell history and `/proc`
+* `get` — Print a secret's value to stdout — the escape hatch. Prefer `cuora run` so values never enter agent context; guardrails can deny this op
 * `list` — List the refs stored in the selected env — names only, never values
 * `rm` — Remove a secret from the selected env
 * `rotate` — Rotate a secret to a new value (stdin or hidden prompt, like `put`); bumps version + rotated_at
 * `run` — Run a command with declared secrets injected as env vars
-* `env` — Print `export VAR='…'` lines for `eval "$(arca env)"` — the human path (`run` is the agent path). Values print to stdout: `--json` emits a `VAR → value` map
+* `env` — Print `export VAR='…'` lines for `eval "$(cuora env)"` — the human path (`run` is the agent path). Values print to stdout: `--json` emits a `VAR → value` map
 * `check` — Validate config + the declared surface: `[envs]` routes point at declared vaults, vaults decrypt, every `[secrets]` ref resolves in its routed env. Exit 1 on findings
 * `migrate` — Rewrite stored records for a wire/config upgrade. Currently one transform: `--private-refs` re-keys every plaintext-named row in each env routed to a cf vault with `[vaults.*] private_refs = true` — ciphertext moves verbatim, old keys are deleted after the new rows land
-* `deploy` — Push a stored secret to a write-only deploy target (`[deploy.NAME]` in arca.toml, e.g. a CF Secrets Store). The vault is the source of truth; the sink never gives the value back. With one configured target, `--target` may be omitted
-* `serve` — Serve the Vault port over ndjson — one JSON request per stdin line, one response per stdout line, audit events on stderr unchanged. For orchestrators embedding arca (peregrin); with `[serve.pdp]` configured, a policy decision point is consulted before every vault-touching op. `{"op":"manifest"}` on the wire describes the protocol
+* `deploy` — Push a stored secret to a write-only deploy target (`[deploy.NAME]` in cuora.toml, e.g. a CF Secrets Store). The vault is the source of truth; the sink never gives the value back. With one configured target, `--target` may be omitted
+* `serve` — Serve the Vault port over ndjson — one JSON request per stdin line, one response per stdout line, audit events on stderr unchanged. For orchestrators embedding cuora (peregrin); with `[serve.pdp]` configured, a policy decision point is consulted before every vault-touching op. `{"op":"manifest"}` on the wire describes the protocol
 * `ui` — Interactive vault browser (requires the `tui` feature)
 * `manifest` — Capabilities, JSON shapes, env vars, audit contract — agent self-discovery (always JSON)
-* `schema` — JSON Schema for `arca.toml`
+* `schema` — JSON Schema for `cuora.toml`
 
 ###### **Options:**
 
 * `--json` — Emit JSON — stable machine shapes on every verb; errors are `{"error": "…"}` on stderr with a non-zero exit
-* `--env <ENV>` — Env context — `dev`/`staging`/`prod`/custom. Overrides `ARCA_ENV`; default `dev`
-* `--config <PATH>` — Config file, overriding the search ($ARCA_CONFIG → ./arca.toml → ~/.config/arca/arca.toml)
-* `--actor <ACTOR>` — Actor attribution for audit events (default $ARCA_ACTOR, else $USER)
+* `--env <ENV>` — Env context — `dev`/`staging`/`prod`/custom. Overrides `CUORA_ENV`; default `dev`
+* `--config <PATH>` — Config file, overriding the search ($CUORA_CONFIG → ./cuora.toml → ~/.config/cuora/cuora.toml)
+* `--actor <ACTOR>` — Actor attribution for audit events (default $CUORA_ACTOR, else $USER)
 
-## `arca init`
+## `cuora init`
 
-Bootstrap: store the age identity in the system keyring when a session secret store is reachable — importing an existing identity.txt rather than orphaning it — else the `~/.config/arca/identity.txt` keyfile (0600). Verifies the vault opens
+Bootstrap: store the age identity in the system keyring when a session secret store is reachable — importing an existing identity.txt rather than orphaning it — else the `~/.config/cuora/identity.txt` keyfile (0600). Verifies the vault opens
 
-**Usage:** `arca init [OPTIONS]`
+**Usage:** `cuora init [OPTIONS]`
 
 ###### **Options:**
 
 * `--with-file` — Force the identity keyfile even when a keyring is available — the headless/CI mode
 
-## `arca put`
+## `cuora put`
 
-Store a secret. The value comes from stdin (`printf … | arca put arca://ns/name`) or a hidden terminal prompt — never args, which land in shell history and `/proc`
+Store a secret. The value comes from stdin (`printf … | cuora put cuora://ns/name`) or a hidden terminal prompt — never args, which land in shell history and `/proc`
 
-**Usage:** `arca put <RREF>`
-
-###### **Arguments:**
-
-* `<RREF>` — `arca://` ref, e.g. arca://billing/stripe
-
-## `arca get`
-
-Print a secret's value to stdout — the escape hatch. Prefer `arca run` so values never enter agent context; guardrails can deny this op
-
-**Usage:** `arca get <RREF>`
+**Usage:** `cuora put <RREF>`
 
 ###### **Arguments:**
 
-* `<RREF>` — `arca://` ref
+* `<RREF>` — `cuora://` ref, e.g. cuora://billing/stripe
 
-## `arca list`
+## `cuora get`
+
+Print a secret's value to stdout — the escape hatch. Prefer `cuora run` so values never enter agent context; guardrails can deny this op
+
+**Usage:** `cuora get <RREF>`
+
+###### **Arguments:**
+
+* `<RREF>` — `cuora://` ref
+
+## `cuora list`
 
 List the refs stored in the selected env — names only, never values
 
-**Usage:** `arca list`
+**Usage:** `cuora list`
 
-## `arca rm`
+## `cuora rm`
 
 Remove a secret from the selected env
 
-**Usage:** `arca rm <RREF>`
+**Usage:** `cuora rm <RREF>`
 
 ###### **Arguments:**
 
-* `<RREF>` — `arca://` ref
+* `<RREF>` — `cuora://` ref
 
-## `arca rotate`
+## `cuora rotate`
 
 Rotate a secret to a new value (stdin or hidden prompt, like `put`); bumps version + rotated_at
 
-**Usage:** `arca rotate <RREF>`
+**Usage:** `cuora rotate <RREF>`
 
 ###### **Arguments:**
 
-* `<RREF>` — `arca://` ref
+* `<RREF>` — `cuora://` ref
 
-## `arca run`
+## `cuora run`
 
 Run a command with declared secrets injected as env vars.
 
-Injection surface = `[secrets]` in arca.toml plus `-s VAR=arca://ref` ad-hoc pairs; nothing else is injectable. Two exec modes after `--`:
+Injection surface = `[secrets]` in cuora.toml plus `-s VAR=cuora://ref` ad-hoc pairs; nothing else is injectable. Two exec modes after `--`:
 
-`arca run -- 'pnpm test | tee log'` — one string → `bash -c`
+`cuora run -- 'pnpm test | tee log'` — one string → `bash -c`
 
-`arca run -- pnpm test --filter x` — argv → direct exec
+`cuora run -- pnpm test --filter x` — argv → direct exec
 
 argv mode needs no shell quoting — prefer it when the command has arguments. Exit code is the child's.
 
-**Usage:** `arca run [OPTIONS] -- <CMD>...`
+**Usage:** `cuora run [OPTIONS] -- <CMD>...`
 
 ###### **Arguments:**
 
@@ -890,71 +890,71 @@ argv mode needs no shell quoting — prefer it when the command has arguments. E
 
 ###### **Options:**
 
-* `-s`, `--secret <VAR=ARCA_REF>` — Extra `VAR=arca://ref` pairs to inject (refused when `[guardrails] deny_adhoc` is set)
+* `-s`, `--secret <VAR=CUORA_REF>` — Extra `VAR=cuora://ref` pairs to inject (refused when `[guardrails] deny_adhoc` is set)
 
-## `arca env`
+## `cuora env`
 
-Print `export VAR='…'` lines for `eval "$(arca env)"` — the human path (`run` is the agent path). Values print to stdout: `--json` emits a `VAR → value` map
+Print `export VAR='…'` lines for `eval "$(cuora env)"` — the human path (`run` is the agent path). Values print to stdout: `--json` emits a `VAR → value` map
 
-**Usage:** `arca env [OPTIONS]`
+**Usage:** `cuora env [OPTIONS]`
 
 ###### **Options:**
 
-* `-s`, `--secret <VAR=ARCA_REF>` — Extra `VAR=arca://ref` pairs to resolve
+* `-s`, `--secret <VAR=CUORA_REF>` — Extra `VAR=cuora://ref` pairs to resolve
 
-## `arca check`
+## `cuora check`
 
 Validate config + the declared surface: `[envs]` routes point at declared vaults, vaults decrypt, every `[secrets]` ref resolves in its routed env. Exit 1 on findings
 
-**Usage:** `arca check`
+**Usage:** `cuora check`
 
-## `arca migrate`
+## `cuora migrate`
 
 Rewrite stored records for a wire/config upgrade. Currently one transform: `--private-refs` re-keys every plaintext-named row in each env routed to a cf vault with `[vaults.*] private_refs = true` — ciphertext moves verbatim, old keys are deleted after the new rows land
 
-**Usage:** `arca migrate [OPTIONS]`
+**Usage:** `cuora migrate [OPTIONS]`
 
 ###### **Options:**
 
 * `--private-refs` — Re-key cf-vault rows under HMAC-derived storage keys, attaching the encrypted `name` blob (P-004)
 
-## `arca deploy`
+## `cuora deploy`
 
-Push a stored secret to a write-only deploy target (`[deploy.NAME]` in arca.toml, e.g. a CF Secrets Store). The vault is the source of truth; the sink never gives the value back. With one configured target, `--target` may be omitted
+Push a stored secret to a write-only deploy target (`[deploy.NAME]` in cuora.toml, e.g. a CF Secrets Store). The vault is the source of truth; the sink never gives the value back. With one configured target, `--target` may be omitted
 
-**Usage:** `arca deploy [OPTIONS] <RREF>`
+**Usage:** `cuora deploy [OPTIONS] <RREF>`
 
 ###### **Arguments:**
 
-* `<RREF>` — `arca://` ref to push
+* `<RREF>` — `cuora://` ref to push
 
 ###### **Options:**
 
 * `--target <NAME>` — Deploy target name (`[deploy.NAME]`); required when several are configured
 
-## `arca serve`
+## `cuora serve`
 
-Serve the Vault port over ndjson — one JSON request per stdin line, one response per stdout line, audit events on stderr unchanged. For orchestrators embedding arca (peregrin); with `[serve.pdp]` configured, a policy decision point is consulted before every vault-touching op. `{"op":"manifest"}` on the wire describes the protocol
+Serve the Vault port over ndjson — one JSON request per stdin line, one response per stdout line, audit events on stderr unchanged. For orchestrators embedding cuora (peregrin); with `[serve.pdp]` configured, a policy decision point is consulted before every vault-touching op. `{"op":"manifest"}` on the wire describes the protocol
 
-**Usage:** `arca serve`
+**Usage:** `cuora serve`
 
-## `arca ui`
+## `cuora ui`
 
 Interactive vault browser (requires the `tui` feature)
 
-**Usage:** `arca ui`
+**Usage:** `cuora ui`
 
-## `arca manifest`
+## `cuora manifest`
 
 Capabilities, JSON shapes, env vars, audit contract — agent self-discovery (always JSON)
 
-**Usage:** `arca manifest`
+**Usage:** `cuora manifest`
 
-## `arca schema`
+## `cuora schema`
 
-JSON Schema for `arca.toml`
+JSON Schema for `cuora.toml`
 
-**Usage:** `arca schema`
+**Usage:** `cuora schema`
 
 &#xA;This document was generated automatically by
 clap-markdown.&#xA;
@@ -962,9 +962,9 @@ clap-markdown.&#xA;
 ---
 
 ---
-url: /arca/reference/config.md
+url: /cuora/reference/config.md
 ---
-# Config — `arca.toml`
+# Config — `cuora.toml`
 
 ## Top level
 
@@ -972,25 +972,25 @@ url: /arca/reference/config.md
 |---|---|---|---|
 | `vaults` | `{name: vault}` | optional | Named vault backends. `local` always exists implicitly (age, default paths); an entry only overrides it or adds more. |
 | `envs` | `{env: vault|{vault}}` | optional | Env → vault routing. Envs not listed route to `local`; `dev`/`staging`/`prod` always exist. |
-| `secrets` | `{VAR: arca://ref}` | optional | The declared secret surface: env-var name → `arca://` ref. Bounds what `run`/`env` may inject — least privilege, no ambient vault dump. |
-| `deploy` | `{name: target}` | optional | Named deploy targets — write-only sinks (`arca deploy` pushes a stored value in; nothing ever reads one back). |
+| `secrets` | `{VAR: cuora://ref}` | optional | The declared secret surface: env-var name → `cuora://` ref. Bounds what `run`/`env` may inject — least privilege, no ambient vault dump. |
+| `deploy` | `{name: target}` | optional | Named deploy targets — write-only sinks (`cuora deploy` pushes a stored value in; nothing ever reads one back). |
 | `guardrails` | `table` | optional | Advisory op guardrails — accident prevention for standalone use, honestly *not* a policy boundary (a locally claimed actor is spoofable by construction). |
-| `serve` | `table` | optional | The `arca serve` surface — ndjson request/response on stdio plus the optional policy decision point. Absent, serve runs with no PDP — same advisory posture as the single-shot CLI. |
+| `serve` | `table` | optional | The `cuora serve` surface — ndjson request/response on stdio plus the optional policy decision point. Absent, serve runs with no PDP — same advisory posture as the single-shot CLI. |
 | `identity` | `IdentityConfig` | optional | Which backend holds the age identity — `[identity]`. Absent → `keyring` (fail closed; `auto`/`file` opt out). |
 
 ## `[vaults.NAME]` — a named vault backend
 
 | field | type | required | notes |
 |---|---|---|---|
-| `kind` | `string` | optional | Backend kind — `"age"` (built-in, local file) or `"cf"` (self-hosted Cloudflare Worker + D1, `arca-vault-cf`). |
+| `kind` | `string` | optional | Backend kind — `"age"` (built-in, local file) or `"cf"` (self-hosted Cloudflare Worker + D1, `cuora-vault-cf`). |
 | `path` | `string` | optional | Vault file path override (age impl; `~` is *not* expanded — write the path in full). |
-| `identity` | `string` | optional | Age identity file override (`ARCA_IDENTITY_FILE` wins over this; see `arca-ops`). `cf` vaults decrypt with the same keyfile — all vault impls store age ciphertext (ADR-0001). |
+| `identity` | `string` | optional | Age identity file override (`CUORA_IDENTITY_FILE` wins over this; see `cuora-ops`). `cf` vaults decrypt with the same keyfile — all vault impls store age ciphertext (ADR-0001). |
 | `recipients` | `list` | optional | Extra age recipients to encrypt to, beyond the identity's public key (`age1…` strings). |
-| `url` | `string` | optional | Worker base URL (`cf` impl), e.g. `https://arca-vault.you.workers.dev`. |
+| `url` | `string` | optional | Worker base URL (`cf` impl), e.g. `https://cuora-vault.you.workers.dev`. |
 | `token_env` | `string` | optional | Name of the env var holding the bearer token (`cf` impl) — the token *name* lives in config, the token *value* only in the process env. |
-| `tokens` | `BTreeMap<Env, Ref>` | optional | Per-env scoped credentials (`cf` impl, P-003): env → the `arca://` ref of a token stored in the `local` vault. Each resolved token authenticates as `ArcaHmac &lt;ref-path&gt;, ts, nonce, sig` — the ref path is the wire `token_id`. Token *refs* live in config, never token values. |
-| `private_refs` | `bool` | optional | Opt-in private ref metadata (`cf` impl, P-004): storage keys become HMAC-derived hex and every record carries an age-encrypted `name` blob, so the remote store can't see which secrets exist. Default false; `arca migrate --private-refs` rewrites existing rows. |
-| `cache` | `CacheScope` | optional | Read-through encrypted local cache in front of this vault (P-007): `true` caches every env; a name or list scopes it — `cache = "dev"` or `cache = ["dev", "staging"]`. Rows land at `$XDG_CACHE_HOME/arca/&lt;name&gt;.age` as ordinary age ciphertext carrying the remote `version`/`rotated_at` verbatim; freshness is TTL-bounded (`cache_ttl_secs`) and writes are always remote-first. Meant for remote backends — `dev` may cache, `prod` should live-fetch. |
+| `tokens` | `BTreeMap<Env, Ref>` | optional | Per-env scoped credentials (`cf` impl, P-003): env → the `cuora://` ref of a token stored in the `local` vault. Each resolved token authenticates as `CuoraHmac &lt;ref-path&gt;, ts, nonce, sig` — the ref path is the wire `token_id`. Token *refs* live in config, never token values. |
+| `private_refs` | `bool` | optional | Opt-in private ref metadata (`cf` impl, P-004): storage keys become HMAC-derived hex and every record carries an age-encrypted `name` blob, so the remote store can't see which secrets exist. Default false; `cuora migrate --private-refs` rewrites existing rows. |
+| `cache` | `CacheScope` | optional | Read-through encrypted local cache in front of this vault (P-007): `true` caches every env; a name or list scopes it — `cache = "dev"` or `cache = ["dev", "staging"]`. Rows land at `$XDG_CACHE_HOME/cuora/&lt;name&gt;.age` as ordinary age ciphertext carrying the remote `version`/`rotated_at` verbatim; freshness is TTL-bounded (`cache_ttl_secs`) and writes are always remote-first. Meant for remote backends — `dev` may cache, `prod` should live-fetch. |
 | `cache_ttl_secs` | `int` | optional | Cache freshness window in seconds — a cached row or env listing younger than this answers without a remote round-trip; past it the remote is re-fetched and the cache updated. A remote *failure* falls back to the stale copy — the offline mode. Absent → 300. |
 
 ## `[envs]` — env → vault routing (table form)
@@ -1003,7 +1003,7 @@ url: /arca/reference/config.md
 
 | field | type | required | notes |
 |---|---|---|---|
-| `kind` | `string` | optional | Target kind — `"cf-secrets-store"` (Cloudflare account Secrets Store, `arca-deploy-cf`). |
+| `kind` | `string` | optional | Target kind — `"cf-secrets-store"` (Cloudflare account Secrets Store, `cuora-deploy-cf`). |
 | `account_id` | `string` | optional | Cloudflare account id (`cf-secrets-store`). |
 | `store_id` | `string` | optional | Secrets Store id (`cf-secrets-store`). |
 | `token_env` | `string` | optional | Name of the env var holding the API token — never the token itself (`cf-secrets-store` defaults to `CLOUDFLARE_API_TOKEN`). |
@@ -1016,9 +1016,9 @@ url: /arca/reference/config.md
 | `default` | `"allow"|"deny"` | optional | Fallback for ops in neither list. |
 | `allow` | `op list` | optional | Ops always allowed. |
 | `deny` | `op list` | optional | Ops always refused — deny wins over allow. |
-| `deny_adhoc` | `bool` | optional | Refuse `-s VAR=arca://ref` ad-hoc injection on `run`/`env` (MED-5). Without it, a posture like `deny = ["get"]` is sidestepped: `arca run -s V=arca://x -- printenv V` *is* a get. Declared `[secrets]` injection is unaffected — the declared surface is auditable config, not an ad-hoc grab. |
+| `deny_adhoc` | `bool` | optional | Refuse `-s VAR=cuora://ref` ad-hoc injection on `run`/`env` (MED-5). Without it, a posture like `deny = ["get"]` is sidestepped: `cuora run -s V=cuora://x -- printenv V` *is* a get. Declared `[secrets]` injection is unaffected — the declared surface is auditable config, not an ad-hoc grab. |
 
-## `[serve]` — the `arca serve` surface
+## `[serve]` — the `cuora serve` surface
 
 | field | type | required | notes |
 |---|---|---|---|
@@ -1028,7 +1028,7 @@ url: /arca/reference/config.md
 
 | field | type | required | notes |
 |---|---|---|---|
-| `exec` | `string` | required | The exec driver command — run via `sh -c` once per decision, request JSON on stdin, verdict JSON on stdout. **Trust root**: the line authorizes shell exec; the child inherits only the `arca-shell` env allowlist. `arca serve` warns when this arrives via an implicit `./arca.toml` — pin config with `--config`/`$ARCA_CONFIG`. |
+| `exec` | `string` | required | The exec driver command — run via `sh -c` once per decision, request JSON on stdin, verdict JSON on stdout. **Trust root**: the line authorizes shell exec; the child inherits only the `cuora-shell` env allowlist. `cuora serve` warns when this arrives via an implicit `./cuora.toml` — pin config with `--config`/`$CUORA_CONFIG`. |
 | `allow_on_error` | `bool` | optional | What an unreachable PDP means. `false` (default) fails **closed** — the op is denied; a policy engine that can't answer must not silently mean "allowed". `true` fails open — the op runs anyway and the audit event records the degraded verdict. |
 | `timeout_ms` | `int` | optional | Per-decision deadline in milliseconds — the child is killed and the consult counts as *unreachable* past it. A hung or flooding PDP must never freeze the serve loop; absent → 5000. |
 
@@ -1045,25 +1045,25 @@ prod = { vault = "cloud" }
 ## Constraints
 
 * `deny_unknown_fields`: typos in field names fail the load.
-* Search order: `--config` → `$ARCA_CONFIG` → `./arca.toml` →
-  `~/.config/arca/arca.toml`. The file is optional — no
-  `arca.toml` anywhere just means defaults (local age vault,
+* Search order: `--config` → `$CUORA_CONFIG` → `./cuora.toml` →
+  `~/.config/cuora/cuora.toml`. The file is optional — no
+  `cuora.toml` anywhere just means defaults (local age vault,
   `dev` env).
 * Token values never live in the file — `token_env` fields name
   the env var that carries them.
-* `arca schema` emits the JSON Schema for this shape;
-  `arca check` validates a real file end-to-end.
+* `cuora schema` emits the JSON Schema for this shape;
+  `cuora check` validates a real file end-to-end.
 
 ---
 
 ---
-url: /arca/reference/audit-events.md
+url: /cuora/reference/audit-events.md
 ---
 # Audit events
 
 The audit wire: one ndjson line on **stderr** per op outcome,
 plus an OTLP span per event when `OTEL_EXPORTER_OTLP_ENDPOINT`
-is set. arca keeps no local ledger (ADR-0001 — aggregation is
+is set. cuora keeps no local ledger (ADR-0001 — aggregation is
 peregrin's); the stderr stream *is* the human contract and the
 OTLP stream the machine one, so a wrapper — peregrin, sepia,
 your own harness — can capture either, and a human sees a
@@ -1078,7 +1078,7 @@ breadcrumb.
 | field | notes |
 | --- | --- |
 | `ts` | RFC 3339, UTC |
-| `actor` | `--actor` → `ARCA_ACTOR` → `$USER`/`$LOGNAME` → `anon`. Self-claimed — attribution, not identity |
+| `actor` | `--actor` → `CUORA_ACTOR` → `$USER`/`$LOGNAME` → `anon`. Self-claimed — attribution, not identity |
 | `op` | the verb: `init put get list rm rotate run env check deploy ui serve manifest schema` |
 | `rref` | the resolved ref path, env pin stripped — same on `denied`/`error` when the arg parses, else the raw arg verbatim. **Absent** on op-scoped events |
 | `env` | the env the op ran under |
@@ -1099,11 +1099,11 @@ Two deliberate silences:
 * `manifest`, `schema`, `gen-cli-docs` run before config load —
   pure introspection, no event.
 * A `run` child's non-zero exit is the *child's* outcome — no
-  `error` event for it. arca's own exit code is the child's.
+  `error` event for it. cuora's own exit code is the child's.
 
 ## `serve` and the `policy` field
 
-`arca serve` emits the same events — `get`/`put`/`rm`/`rotate`
+`cuora serve` emits the same events — `get`/`put`/`rm`/`rotate`
 requests audit exactly like the CLI verbs, under the request's
 claimed `actor` when it carries one. The PDP consult covers the
 ops that can materialize — `get`/`put`/`rm`/`rotate` *and*
@@ -1120,7 +1120,7 @@ See [the serve protocol](serve-protocol.md).
 
 ## `ui` and the TUI
 
-`arca ui` emits one op-scoped `ok` when the browser exits cleanly.
+`cuora ui` emits one op-scoped `ok` when the browser exits cleanly.
 Inside it, browsing is silent — listing refs and metadata is not
 a materialization, and **live stderr audit is muted for the whole
 session** so events can't splatter over the alternate screen;
@@ -1133,21 +1133,21 @@ held like the rest, replayed on exit.
 
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. `http://localhost:4318`)
 and every audit event is additionally buffered as an
-`arca.<op>` span — `ExportTraceServiceRequest` JSON posted to
+`cuora.<op>` span — `ExportTraceServiceRequest` JSON posted to
 `<endpoint>/v1/traces` on flush. Span attributes mirror the
-ndjson fields: `arca.op`, `arca.rref` (when present), `arca.env`,
-`arca.actor`, `arca.outcome`, and `arca.policy.*` on serve-path
+ndjson fields: `cuora.op`, `cuora.rref` (when present), `cuora.env`,
+`cuora.actor`, `cuora.outcome`, and `cuora.policy.*` on serve-path
 events; `Outcome::Error` marks the span `STATUS_CODE_ERROR`.
-`service.name` comes from `OTEL_SERVICE_NAME` (default `arca`).
+`service.name` comes from `OTEL_SERVICE_NAME` (default `cuora`).
 
-Flush timing: CLI verbs export once at exit; `arca serve` flushes
+Flush timing: CLI verbs export once at exit; `cuora serve` flushes
 per request (it's long-running); the TUI flushes at exit like
 any verb.
 
 Related env vars: `OTEL_EXPORTER_OTLP_HEADERS` (`k=v` pairs,
 percent-decoded), `OTEL_EXPORTER_OTLP_TIMEOUT` (ms, default
 10000\), `OTEL_SDK_DISABLED=true` turns export off entirely, and
-`ARCA_AUDIT_STDERR=0` silences the stderr wire (OTLP-only mode).
+`CUORA_AUDIT_STDERR=0` silences the stderr wire (OTLP-only mode).
 
 ## Failure posture
 
@@ -1156,24 +1156,44 @@ Audit emission is best-effort on both wires: a closed stderr
 swallowed by design — and a failed OTLP export warns once on
 stderr, never fails the op.
 
+Note: stderr can also carry non-ndjson `cuora:` *notice* lines
+(permission warnings, keyring fallback notes) — UX chatter, not
+audit wire. Consumers parsing stderr as pure ndjson should
+tolerate lines that don't start with `{`. During `cuora ui` both
+audit events and notices are held and replayed after the
+terminal is restored.
+
+## Granularity
+
+Per-ref events fire when a value crosses the store boundary
+toward a caller: `get`, `put`, `rotate`, `rm`, `deploy`, `run`,
+`env`, and serve `get`/`put`/`rotate`/`rm`. Bulk reads — `list`,
+`check`, the TUI reload, serve `list` — emit **op-scoped** events
+only: they decrypt records internally to verify or enumerate, but
+no value is returned to the caller, so there is no per-ref
+materialization to attribute. If your threat model counts
+"decrypted in-process" as materialization, treat bulk ops as
+single events covering N refs — the op name tells you which verb
+ran, not which refs it touched.
+
 ---
 
 ---
-url: /arca/reference/serve-protocol.md
+url: /cuora/reference/serve-protocol.md
 ---
-# The `arca serve` protocol
+# The `cuora serve` protocol
 
-`arca serve` is the Vault port over newline-delimited JSON — the
+`cuora serve` is the Vault port over newline-delimited JSON — the
 surface orchestrators (peregrin) embed. One JSON request per
 **stdin** line, one JSON response per **stdout** line, and the
 [audit wire](audit-events.md) stays on **stderr**, unchanged —
 three separate fds, so a reply never rides the event stream and
 an event never answers a request. Protocol version:
-`arca-serve/1` — send `{"op":"manifest"}` on the wire for the
+`cuora-serve/1` — send `{"op":"manifest"}` on the wire for the
 machine-readable self-description.
 
-Serve is a thin front over the same `arca-ops` plumbing the CLI
-uses: `[envs]` routing, `arca://<env>/…` pins, and audit events
+Serve is a thin front over the same `cuora-ops` plumbing the CLI
+uses: `[envs]` routing, `cuora://<env>/…` pins, and audit events
 are identical. `run`/`env`/`deploy`/`init`/`ui`/`migrate`/`schema`
 stay single-shot CLI verbs — serve covers what an embedder needs
 in-process.
@@ -1181,7 +1201,7 @@ in-process.
 ## Requests
 
 ```json
-{"id": 1, "op": "get", "ref": "arca://billing/stripe",
+{"id": 1, "op": "get", "ref": "cuora://billing/stripe",
  "env": "prod", "actor": "agent:peregrin", "attestation": "…"}
 ```
 
@@ -1189,11 +1209,11 @@ in-process.
 | --- | --- |
 | `id` | any JSON value — echoed verbatim (absent → `null`), ≤ 4 KiB serialized |
 | `op` | `get` | `put` | `rm` | `rotate` | `list` | `check` | `manifest` | `shutdown` |
-| `ref` | `arca://ns/name` ≤ 1 KiB — required by the four vault ops; an `arca://<env>/…` pin overrides `env` |
-| `env` | per-request env override — else the loaded context (`--env`/`ARCA_ENV`) |
-| `value` | plaintext ≤ 64 KiB — required by `put`/`rotate`. Values cross this wire deliberately: the parent owns the channel exactly like it owns `arca get`'s stdout |
+| `ref` | `cuora://ns/name` ≤ 1 KiB — required by the four vault ops; an `cuora://<env>/…` pin overrides `env` |
+| `env` | per-request env override — else the loaded context (`--env`/`CUORA_ENV`) |
+| `value` | plaintext ≤ 64 KiB — required by `put`/`rotate`. Values cross this wire deliberately: the parent owns the channel exactly like it owns `cuora get`'s stdout |
 | `actor` | claimed actor id ≤ 256 B — advisory attribution recorded on audit events; validated, never verified |
-| `attestation` | opaque identity claim ≤ 64 KiB — passed to the PDP verbatim, never interpreted by arca |
+| `attestation` | opaque identity claim ≤ 64 KiB — passed to the PDP verbatim, never interpreted by cuora |
 
 Hard bounds on the wire: a request line may be at most **4 MiB**
 — an oversized line answers `bad_request` and the reader resyncs
@@ -1205,7 +1225,7 @@ a crash.
 ## Responses
 
 ```json
-{"id": 1, "ok": true, "result": {"ref": "arca://billing/stripe", "env": "prod",
+{"id": 1, "ok": true, "result": {"ref": "cuora://billing/stripe", "env": "prod",
  "value": "…", "version": 3, "created_at": "…", "rotated_at": "…"},
  "policy": {"allow": true, "reason": "…", "obligations": ["…"]}}
 ```
@@ -1252,15 +1272,15 @@ timeout_ms = 5000                 # default: 5s per consult
 ```
 
 A `[serve.pdp] exec` line is **trust-root config**: it
-authorizes shell execution. When `arca serve` loads it from an
-*implicit* `./arca.toml` (the search path, not a pinned
-`--config`/`$ARCA_CONFIG` or `~/.config/arca/`), it warns on
+authorizes shell execution. When `cuora serve` loads it from an
+*implicit* `./cuora.toml` (the search path, not a pinned
+`--config`/`$CUORA_CONFIG` or `~/.config/cuora/`), it warns on
 stderr — the working directory decides what code runs.
 
 The `exec` command runs once per decision — request JSON on
 stdin, verdict JSON on stdout, stderr discarded. The child
-inherits only the `arca-shell` env allowlist (same scrub
-`arca run` applies): `ARCA_CF_TOKEN`, `CLOUDFLARE_API_TOKEN`,
+inherits only the `cuora-shell` env allowlist (same scrub
+`cuora run` applies): `CUORA_CF_TOKEN`, `CLOUDFLARE_API_TOKEN`,
 and every other parent credential stay out of the decider.
 
 ```json
@@ -1276,7 +1296,7 @@ and every other parent credential stay out of the decider.
 ```
 
 `allow` is required; `reason` and `obligations` are free-form
-context the PDP wants on record (allow-with-conditions — arca
+context the PDP wants on record (allow-with-conditions — cuora
 records them; enforcing them is the requester's job). A deny is
 a `denied` response plus a `denied` audit event — no vault
 access.
@@ -1303,7 +1323,7 @@ every vault — batch reads rather than looping `list`.
 
 ## Actor claims are advisory
 
-`actor` and `attestation` are *claims*, not proof — arca
+`actor` and `attestation` are *claims*, not proof — cuora
 validates the actor string's shape and passes both through to
 audit and the PDP. Signed, short-lived attestation is the PDP's
 side (peregrin's design, a later decision); ADR-0003 only fixes
@@ -1312,86 +1332,86 @@ the pass-through seam.
 ---
 
 ---
-url: /arca/reference/env-vars.md
+url: /cuora/reference/env-vars.md
 ---
 # Environment variables
 
-Process env vars arca itself reads. (The vars in `[secrets]` are
-yours — this is arca's own surface; `arca manifest` reports the
+Process env vars cuora itself reads. (The vars in `[secrets]` are
+yours — this is cuora's own surface; `cuora manifest` reports the
 same table.)
 
 | var | default | used for |
 | --- | --- | --- |
-| `ARCA_CONFIG` | — | config file override, between `--config` and `./arca.toml` in the search order |
-| `ARCA_ENV` | `dev` | env context — resolution + routing (`--env` wins) |
-| `ARCA_ACTOR` | `$USER` → `anon` | audit attribution (`--actor` wins). Self-claimed |
-| `ARCA_IDENTITY_FILE` | `~/.config/arca/identity.txt` | age identity keyfile for every vault impl — pins file mode outright |
-| `ARCA_IDENTITY_BACKEND` | `keyring` | `keyring` (default — fail closed, no file fallback) | `auto` (keyring → keyfile fallback, for headless) | `file` (never probe the keyring); wins over `[identity] backend` |
-| `ARCA_CF_TOKEN` | — | bearer token for `kind = "cf"` vaults — *default* name; `[vaults.*].token_env` picks another |
+| `CUORA_CONFIG` | — | config file override, between `--config` and `./cuora.toml` in the search order |
+| `CUORA_ENV` | `dev` | env context — resolution + routing (`--env` wins) |
+| `CUORA_ACTOR` | `$USER` → `anon` | audit attribution (`--actor` wins). Self-claimed |
+| `CUORA_IDENTITY_FILE` | `~/.config/cuora/identity.txt` | age identity keyfile for every vault impl — pins file mode outright |
+| `CUORA_IDENTITY_BACKEND` | `keyring` | `keyring` (default — fail closed, no file fallback) | `auto` (keyring → keyfile fallback, for headless) | `file` (never probe the keyring); wins over `[identity] backend` |
+| `CUORA_CF_TOKEN` | — | bearer token for `kind = "cf"` vaults — *default* name; `[vaults.*].token_env` picks another |
 | `CLOUDFLARE_API_TOKEN` | — | API token for `cf-secrets-store` deploy sinks — *default* name; `[deploy.*].token_env` picks another |
-| `ARCA_AUDIT_STDERR` | on | `0`/`false`/`off`/`no` silences the stderr ndjson audit wire — OTLP-only mode |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OTLP/HTTP collector base — audit events export as `arca.<op>` spans to `<endpoint>/v1/traces` |
+| `CUORA_AUDIT_STDERR` | on | `0`/`false`/`off`/`no` silences the stderr ndjson audit wire — OTLP-only mode |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OTLP/HTTP collector base — audit events export as `cuora.<op>` spans to `<endpoint>/v1/traces`; `http://` is accepted only for loopback collectors (`localhost`, `127.0.0.1`, `::1`) — same policy as cf vault URLs |
 | `OTEL_EXPORTER_OTLP_HEADERS` | — | `k=v,k2=v2` auth headers for the OTLP endpoint (values percent-decoded) |
 | `OTEL_EXPORTER_OTLP_TIMEOUT` | `10000` | export timeout in ms |
-| `OTEL_SERVICE_NAME` | `arca` | `service.name` resource attribute on exported spans |
+| `OTEL_SERVICE_NAME` | `cuora` | `service.name` resource attribute on exported spans |
 | `OTEL_SDK_DISABLED` | — | `true`/`1` disables OTLP export entirely |
 
 Honored XDG paths (when the matching override is unset):
 
 | var | falls back to |
 | --- | --- |
-| `XDG_CONFIG_HOME` | `~/.config` — identity + user-level `arca.toml` |
+| `XDG_CONFIG_HOME` | `~/.config` — identity + user-level `cuora.toml` |
 | `XDG_DATA_HOME` | `~/.local/share` — the default `vault.age` |
 
 Two rules of thumb:
 
 * `token_env` config fields name env vars — the token *value*
   only ever lives in the process env.
-* `ARCA_ACTOR` is a self-claimed string for the audit trail, not
+* `CUORA_ACTOR` is a self-claimed string for the audit trail, not
   authentication; see the [threat model](../explanation/threat-model.md).
 
 ---
 
 ---
-url: /arca/reference/crate-api.md
+url: /cuora/reference/crate-api.md
 ---
 # Crate API
 
 Rustdoc for every workspace crate — public APIs are
 documented at source (doc comments).
 
-* [arca-core](/arca/api/arca_core/index.html) — domain
-* [arca-config](/arca/api/arca_config/index.html) — port
-* [arca-deploy](/arca/api/arca_deploy/index.html) — port
-* [arca-vault](/arca/api/arca_vault/index.html) — port
-* [arca-ops](/arca/api/arca_ops/index.html) — ops
-* [arca-config-toml](/arca/api/arca_config_toml/index.html) — adapter
-* [arca-deploy-cf](/arca/api/arca_deploy_cf/index.html) — adapter
-* [arca-identity](/arca/api/arca_identity/index.html) — adapter
-* [arca-identity-file](/arca/api/arca_identity_file/index.html) — adapter
-* [arca-identity-keyring](/arca/api/arca_identity_keyring/index.html) — adapter
-* [arca-notice](/arca/api/arca_notice/index.html) — adapter
-* [arca-serve](/arca/api/arca_serve/index.html) — adapter
-* [arca-shell](/arca/api/arca_shell/index.html) — adapter
-* [arca-testkit](/arca/api/arca_testkit/index.html) — adapter
-* [arca-tui](/arca/api/arca_tui/index.html) — adapter
-* [arca-vault-age](/arca/api/arca_vault_age/index.html) — adapter
-* [arca-vault-cached](/arca/api/arca_vault_cached/index.html) — adapter
-* [arca-vault-cf](/arca/api/arca_vault_cf/index.html) — adapter
-* [arca](/arca/api/arca/index.html) — binary
+* [cuora-core](/cuora/api/cuora_core/index.html) — domain
+* [cuora-config](/cuora/api/cuora_config/index.html) — port
+* [cuora-deploy](/cuora/api/cuora_deploy/index.html) — port
+* [cuora-vault](/cuora/api/cuora_vault/index.html) — port
+* [cuora-ops](/cuora/api/cuora_ops/index.html) — ops
+* [cuora-config-toml](/cuora/api/cuora_config_toml/index.html) — adapter
+* [cuora-deploy-cf](/cuora/api/cuora_deploy_cf/index.html) — adapter
+* [cuora-identity](/cuora/api/cuora_identity/index.html) — adapter
+* [cuora-identity-file](/cuora/api/cuora_identity_file/index.html) — adapter
+* [cuora-identity-keyring](/cuora/api/cuora_identity_keyring/index.html) — adapter
+* [cuora-notice](/cuora/api/cuora_notice/index.html) — adapter
+* [cuora-serve](/cuora/api/cuora_serve/index.html) — adapter
+* [cuora-shell](/cuora/api/cuora_shell/index.html) — adapter
+* [cuora-testkit](/cuora/api/cuora_testkit/index.html) — adapter
+* [cuora-tui](/cuora/api/cuora_tui/index.html) — adapter
+* [cuora-vault-age](/cuora/api/cuora_vault_age/index.html) — adapter
+* [cuora-vault-cached](/cuora/api/cuora_vault_cached/index.html) — adapter
+* [cuora-vault-cf](/cuora/api/cuora_vault_cf/index.html) — adapter
+* [cuora](/cuora/api/cuora/index.html) — binary
 
 ---
 
 ---
-url: /arca/explanation/architecture.md
+url: /cuora/explanation/architecture.md
 ---
 # Architecture
 
-Ports-and-adapters over a flat `crates/` workspace. `arca-core`
-is pure domain — `arca://` refs, the redacting `Secret` newtype,
+Ports-and-adapters over a flat `crates/` workspace. `cuora-core`
+is pure domain — `cuora://` refs, the redacting `Secret` newtype,
 the env axis, actor attribution — with no I/O. Ports are traits
-(`arca-config`, `arca-vault`, `arca-deploy`); impls live in
-separate crates; `crates/arca-cli` (package `arca`) is the
+(`cuora-config`, `cuora-vault`, `cuora-deploy`); impls live in
+separate crates; `crates/cuora-cli` (package `cuora`) is the
 composition root that wires impls to verbs.
 
 Design rules:
@@ -1401,76 +1421,76 @@ Design rules:
   client (`ureq`), so no runtime embeds anywhere.
 * **`Secret` never exposes plaintext** — no `Display`/`Debug` of
   the value; `.expose()` is the only way out, called at edges
-  only (child env injection, `arca env` exports, `get`).
+  only (child env injection, `cuora env` exports, `get`).
 * **Stores hold ciphertext only** — every vault impl encrypts
   client-side with age (ADR-0001); a remote vault is ciphertext
   over the wire *and* at rest, never a plaintext service.
-* **Ports are conformance-tested** — `arca-testkit` runs the same
-  contract suite against every vault impl (`arca-vault-age`,
-  `arca-vault-cf`): upsert/rotate/list/env-isolation semantics
+* **Ports are conformance-tested** — `cuora-testkit` runs the same
+  contract suite against every vault impl (`cuora-vault-age`,
+  `cuora-vault-cf`): upsert/rotate/list/env-isolation semantics
   can't drift per backend.
-* **One ops shell** — `arca-ops` owns config load, env→vault
+* **One ops shell** — `cuora-ops` owns config load, env→vault
   routing, the env-pin rule, and audit emission; the CLI and the
   TUI are both thin front-ends over it and cannot diverge.
 
 | crate | layer | purpose |
 |---|---|---|
-| `arca-core` | domain | arca domain core: arca:// refs, redacting Secret, env axis, actor, config model — pure, no I/O |
-| `arca-config` | port | Config port: where arca.toml-shaped config comes from |
-| `arca-deploy` | port | Deploy port: write-only push targets (sinks) for secret values — never a source |
-| `arca-vault` | port | Vault port: readable secret stores — get/put/rm/list/rotate, per-env; every impl stores opaque ciphertext |
-| `arca-ops` | ops | arca ops I/O: config load, env/ref resolution, vault open, verb plumbing, audit emission |
-| `arca-config-toml` | adapter | Config impl: arca.toml file (explicit path, env, ./, ~/.config) |
-| `arca-deploy-cf` | adapter | Deploy impl: push secret values to a Cloudflare account Secrets Store (write-only sink) via the CF API v4 |
-| `arca-identity` | adapter | Identity port: where the age identity (master key) comes from — file, keyring, later sealed variants |
-| `arca-identity-file` | adapter | Identity impl: the ~/.config/arca/identity.txt age keyfile (0600) — the headless/CI default |
-| `arca-identity-keyring` | adapter | Identity impl: the platform session secret store (secret-service / Keychain / Credential Manager) via keyring-core |
-| `arca-notice` | adapter | Process-wide UX notices — muted/replayed stderr notes that must not corrupt the arca ui alternate screen |
-| `arca-serve` | adapter | arca serve — the ndjson request/response IPC surface orchestrators embed, with the external policy-decision consult (P-005) |
-| `arca-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
-| `arca-testkit` | adapter | Vault conformance suite — every arca-vault impl passes the same contract tests (fake values only) |
-| `arca-tui` | adapter | arca — interactive vault TUI; a thin front-end over arca-ops (phase 5 polish) |
-| `arca-vault-age` | adapter | Local vault impl: one age-x25519-encrypted JSON doc — the v1 default backend |
-| `arca-vault-cached` | adapter | Composite vault impl: read-through age-encrypted local cache in front of any backend (P-007) |
-| `arca-vault-cf` | adapter | Remote vault impl: self-hosted Cloudflare Worker + D1 holding per-secret age ciphertext — the Worker never sees plaintext |
-| `arca` | binary | arca — secrets broker for agents: reference URIs, redaction, env-injection CLI |
+| `cuora-core` | domain | cuora domain core: cuora:// refs, redacting Secret, env axis, actor, config model — pure, no I/O |
+| `cuora-config` | port | Config port: where cuora.toml-shaped config comes from |
+| `cuora-deploy` | port | Deploy port: write-only push targets (sinks) for secret values — never a source |
+| `cuora-vault` | port | Vault port: readable secret stores — get/put/rm/list/rotate, per-env; every impl stores opaque ciphertext |
+| `cuora-ops` | ops | cuora ops I/O: config load, env/ref resolution, vault open, verb plumbing, audit emission |
+| `cuora-config-toml` | adapter | Config impl: cuora.toml file (explicit path, env, ./, ~/.config) |
+| `cuora-deploy-cf` | adapter | Deploy impl: push secret values to a Cloudflare account Secrets Store (write-only sink) via the CF API v4 |
+| `cuora-identity` | adapter | Identity port: where the age identity (master key) comes from — file, keyring, later sealed variants |
+| `cuora-identity-file` | adapter | Identity impl: the ~/.config/cuora/identity.txt age keyfile (0600) — the headless/CI default |
+| `cuora-identity-keyring` | adapter | Identity impl: the platform session secret store (secret-service / Keychain / Credential Manager) via keyring-core |
+| `cuora-notice` | adapter | Process-wide UX notices — muted/replayed stderr notes that must not corrupt the cuora ui alternate screen |
+| `cuora-serve` | adapter | cuora serve — the ndjson request/response IPC surface orchestrators embed, with the external policy-decision consult (P-005) |
+| `cuora-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
+| `cuora-testkit` | adapter | Vault conformance suite — every cuora-vault impl passes the same contract tests (fake values only) |
+| `cuora-tui` | adapter | cuora — interactive vault TUI; a thin front-end over cuora-ops (phase 5 polish) |
+| `cuora-vault-age` | adapter | Local vault impl: one age-x25519-encrypted JSON doc — the v1 default backend |
+| `cuora-vault-cached` | adapter | Composite vault impl: read-through age-encrypted local cache in front of any backend (P-007) |
+| `cuora-vault-cf` | adapter | Remote vault impl: self-hosted Cloudflare Worker + D1 holding per-secret age ciphertext — the Worker never sees plaintext |
+| `cuora` | binary | cuora — secrets broker for agents: reference URIs, redaction, env-injection CLI |
 
 ## Front-ends
 
-* **`arca` (CLI)** — clap verbs + `--json`/`manifest`/`schema` for
+* **`cuora` (CLI)** — clap verbs + `--json`/`manifest`/`schema` for
   machines; the agent interface.
-* **`arca ui` (TUI)** — a read-only ratatui browser over the same
+* **`cuora ui` (TUI)** — a read-only ratatui browser over the same
   ops; feature-gated (`--no-default-features` for a lean binary).
-* **`arca serve`** — ndjson IPC over the Vault port with an
+* **`cuora serve`** — ndjson IPC over the Vault port with an
   exec-driven `[serve.pdp]` policy-decision hook (ADR-0003);
   peregrin's embedding point.
 
 ## Boundary — secret materialization only
 
-arca owns refs, vaults, env injection, redaction, and the audit
+cuora owns refs, vaults, env injection, redaction, and the audit
 wire. Neighbors own theirs — see
 [boundaries](boundaries.md) for the full map.
 
 ---
 
 ---
-url: /arca/explanation/threat-model.md
+url: /cuora/explanation/threat-model.md
 ---
 # Threat model
 
-What arca protects against, honestly — and what it explicitly
+What cuora protects against, honestly — and what it explicitly
 does not.
 
 ## Protects against
 
-* **Plaintext in the repo** — code and config carry `arca://`
+* **Plaintext in the repo** — code and config carry `cuora://`
   refs, never values. There is nothing to leak in a commit, a
   diff, a paste, or a prompt context.
 * **Plaintext in shell history / process listings** — values
   never enter via CLI arguments (args land in `~/.bash_history`
   and `/proc/*/cmdline`). `put`/`rotate` read stdin or a hidden
   `/dev/tty` prompt.
-* **Plaintext in agent context** — `arca run` injects values into
+* **Plaintext in agent context** — `cuora run` injects values into
   the child's environment; the agent that spawned it sees the
   child's *output*, never the variable. `[secrets]` bounds the
   injectable surface so a `run` can't dump the whole vault.
@@ -1486,9 +1506,9 @@ does not.
   secrets exist: storage keys are HMAC-derived hex and the real
   ref travels in an age-encrypted `name` blob.
 * **Token leakage on the cf wire** — scoped tokens
-  (`ARCA_VAULT_TOKENS`) bound a leaked credential to its
+  (`CUORA_VAULT_TOKENS`) bound a leaked credential to its
   `{env, read, write}` scope instead of every env forever, and
-  ArcaHmac request signing means the token never travels at all
+  CuoraHmac request signing means the token never travels at all
   (a ±60s window bounds replay). All auth compares are
   constant-time.
 * **Silent misuse** — every materialization, denial, and error
@@ -1498,78 +1518,82 @@ does not.
 
 ## Does NOT protect against
 
-* **A determined local actor** — `ARCA_ACTOR` is self-claimed
+* **A determined local actor** — `CUORA_ACTOR` is self-claimed
   (attribution, not identity) and `[guardrails]` are advisory:
-  anyone who can edit `arca.toml` or run the binary can bypass
+  anyone who can edit `cuora.toml` or run the binary can bypass
   them. They prevent *accidents*, not adversaries. Real
   multi-actor policy and enforcement belong to **peregrin**.
 * **The identity's host protection** — the master key lives in
-  the session keyring when one exists (ADR-0002), which protects
-  it about as well as your login session. On headless/CI it is
-  still `identity.txt` (0600), raw key material — protect it like
-  a private SSH key. Either way, UID-level compromise reaches it:
-  the keyring raises the bar, it is not a TPM.
+  the session keyring by default (ADR-0002), which protects it
+  about as well as your login session — and the default backend
+  fails closed rather than silently downgrading. The `0600`
+  keyfile (`identity.txt`, raw key material like an unencrypted
+  SSH key) is reached only via explicit opt-in: `backend =
+  "auto"`/`"file"`, `CUORA_IDENTITY_FILE`, or `[vaults.*].identity`
+  — the headless/CI path, where no session store exists anyway.
+  Either way, UID-level compromise reaches it: the keyring
+  raises the bar, it is not a TPM.
 * **The child process** — once `run` injects env vars, the child
   owns them (`/proc/<pid>/environ`, core dumps, the child logging
-  its own env). arca's guarantee ends at `exec`.
-* **Deploy sinks** — `arca deploy` pushes plaintext into the sink
+  its own env). cuora's guarantee ends at `exec`.
+* **Deploy sinks** — `cuora deploy` pushes plaintext into the sink
   by design (CF Secrets Store is write-only); a sink compromise
-  is outside arca's boundary — it crosses exactly once, at push.
+  is outside cuora's boundary — it crosses exactly once, at push.
 * **Access patterns** — `private_refs` hides *which* secrets
   exist, not *when* they're touched: request timing and row
   counts are still observable to the store. Oblivious access is
   out of scope.
 * **Host compromise in general** — an attacker who can read your
   memory, ptrace the broker, or impersonate your UID already won;
-  arca raises the bar for *accidental* and *casual* leaks, not
+  cuora raises the bar for *accidental* and *casual* leaks, not
   root.
 
 ## In one line
 
-arca makes the *default* posture "values never appear in repos,
+cuora makes the *default* posture "values never appear in repos,
 prompts, args, logs, or agent context" — and records every time
 one still crosses.
 
 ---
 
 ---
-url: /arca/explanation/boundaries.md
+url: /cuora/explanation/boundaries.md
 ---
 # Boundaries
 
-arca is one organism in a stack — it owns **secret
+cuora is one organism in a stack — it owns **secret
 materialization** and nothing else. If a feature needs another
 kind of memory or authority, it belongs to a neighbor.
 
-| neighbor | owns | how it meets arca |
+| neighbor | owns | how it meets cuora |
 | --- | --- | --- |
-| **myco** | work memory — tasks, issues, proposals, plans, ADRs, handoffs | this repo's `project/` ledger is myco's; arca has no PM surface |
-| **sturn** | ephemeral coordination — live claims/ops/topics | not secrets: sturn state is transient, arca state is sealed |
-| **kuda** | code memory — symbol/index knowledge | arca refs name *secrets*, not code entities |
-| **peregrin** | orchestration — campaigns, multi-actor arbitration, policy | campaigns consume secrets via `arca run`; audit aggregation + real policy are peregrin's (`ARCA_ACTOR` is self-claimed inside arca); `arca serve` — the ndjson IPC wire + `[serve.pdp]` exec consult (ADR-0003) — is its embedding point |
-| **bupha** | CI gate | asserts no plaintext secrets land in pipelines; `arca check` in pipeline steps |
-| **mimus** | critic | secrets resolve env → arca → legacy (keyring, `~/.config/mimus/env`) via `mimus-arca` shelling `arca`; vaults are canonical, writes land in them |
-| **sepia** | session lifecycle | session wrappers can capture arca's stderr audit stream |
+| **myco** | work memory — tasks, issues, proposals, plans, ADRs, handoffs | this repo's `project/` ledger is myco's; cuora has no PM surface |
+| **sturn** | ephemeral coordination — live claims/ops/topics | not secrets: sturn state is transient, cuora state is sealed |
+| **kuda** | code memory — symbol/index knowledge | cuora refs name *secrets*, not code entities |
+| **peregrin** | orchestration — campaigns, multi-actor arbitration, policy | campaigns consume secrets via `cuora run`; audit aggregation + real policy are peregrin's (`CUORA_ACTOR` is self-claimed inside cuora); `cuora serve` — the ndjson IPC wire + `[serve.pdp]` exec consult (ADR-0003) — is its embedding point |
+| **bupha** | CI gate | asserts no plaintext secrets land in pipelines; `cuora check` in pipeline steps |
+| **mimus** | critic | secrets resolve env → cuora → legacy (keyring, `~/.config/mimus/env`) via `mimus-cuora` shelling `cuora`; vaults are canonical, writes land in them |
+| **sepia** | session lifecycle | session wrappers can capture cuora's stderr audit stream |
 
 ## What that means in practice
 
-* **A hosted vault service is in scope** — `arca-vault-cf` is a
+* **A hosted vault service is in scope** — `cuora-vault-cf` is a
   store impl behind the same port, ciphertext-only, self-hosted.
 * **A daemon is out of scope** — persistent coordination,
   multi-machine views, arbitration between actors → peregrin.
-  arca stays a sync, embeddable binary: env vars are the
+  cuora stays a sync, embeddable binary: env vars are the
   interface, no SDK.
 * **Policy is out of scope** — `[guardrails]` are advisory
   accident prevention. Enforcement, identity, and unforgeable
   attribution are orchestration concerns.
-* **The audit wire stops at stderr** — emitting ndjson is arca's;
+* **The audit wire stops at stderr** — emitting ndjson is cuora's;
   collecting, storing, and alerting on it is peregrin's
   (ADR-0001 deliberately removed the local `audit.jsonl`).
 
 ---
 
 ---
-url: /arca/explanation/crypto-model.md
+url: /cuora/explanation/crypto-model.md
 ---
 # Crypto model
 
@@ -1579,20 +1603,20 @@ unlocks the local file vault and the remote `cf` vault alike.
 
 ## The pieces
 
-* **Identity** — one X25519 keypair, held by an `arca-identity`
+* **Identity** — one X25519 keypair, held by an `cuora-identity`
   impl (ADR-0002): the **session keyring** (secret-service,
   macOS Keychain, Credential Manager) by default — fail closed —
-  or the `~/.config/arca/identity.txt` keyfile (mode `0600`)
+  or the `~/.config/cuora/identity.txt` keyfile (mode `0600`)
   under `auto`/`file` modes or an explicit pin. An explicit
-  file — `ARCA_IDENTITY_FILE` or `[vaults.*].identity` — pins the
+  file — `CUORA_IDENTITY_FILE` or `[vaults.*].identity` — pins the
   keyfile outright; that is the headless/CI path. `[identity]
-  backend` (or `ARCA_IDENTITY_BACKEND`) selects the mode:
+  backend` (or `CUORA_IDENTITY_BACKEND`) selects the mode:
   `keyring` (default) fails closed — no reachable store or
   stored identity is an error, the keyfile is never read;
   `auto` is the fallback described above — convenient on
   headless/CI, but a *silent* downgrade if a desktop session
   loses its store, so it's opt-in; `file` skips the store
-  probe entirely. `arca init`
+  probe entirely. `cuora init`
   bootstraps whichever backend applies and prints the public
   `age1…` recipient. On a reachable-but-empty Secret Service (fresh
   daemon, no collections yet) the keyring impl claims the `default`
@@ -1606,7 +1630,7 @@ unlocks the local file vault and the remote `cf` vault alike.
   per-secret age ciphertext in D1. Neither store — local disk,
   remote worker — holds plaintext or key material.
 * **Seal/open at the edge** — values are plaintext only inside
-  the arca process, and only for as long as the op needs them.
+  the cuora process, and only for as long as the op needs them.
   `Secret` is a `Zeroizing` newtype: memory is scrubbed on drop,
   and nothing but `.expose()` reads it.
 * **HMAC alongside age** — the `cf` wire uses HMAC-SHA256 twice
@@ -1629,21 +1653,21 @@ unlocks the local file vault and the remote `cf` vault alike.
   `rage`/`age` tooling, so a human is never locked into the CLI
   for disaster recovery.
 
-## The cf wire (`arca-vault-cf/2`)
+## The cf wire (`cuora-vault-cf/2`)
 
-* **Request signing** — `Authorization: ArcaHmac &lt;token_id&gt;, &lt;ts&gt;,
+* **Request signing** — `Authorization: CuoraHmac &lt;token_id&gt;, &lt;ts&gt;,
   &lt;sig&gt;` with `sig = hex HMAC-SHA256(token, method+path+ts+
   sha256hex(body))`. The token is the HMAC key and never crosses
   the wire; a ±60s timestamp window bounds replay. Worker-side,
-  `ARCA_VAULT_TOKENS` maps `token_id → {env → {read, write}}`
+  `CUORA_VAULT_TOKENS` maps `token_id → {env → {read, write}}`
   scopes — per-env credentials instead of one static bearer
   (which stays accepted during migration).
 * **Private refs** — with `[vaults.*] private_refs = true`, the
   storage key is `ref_key = hex HMAC-SHA256(k, env + "/" + ref)`
-  where `k = HMAC-SHA256(identity, "arca-cf/private-refs/v1")`.
+  where `k = HMAC-SHA256(identity, "cuora-cf/private-refs/v1")`.
   Derivation is deterministic (lookup is a plain keyed read) and
   identity-bound (rotating the identity re-keys everything, via
-  `arca migrate --private-refs`). The real ref travels inside a
+  `cuora migrate --private-refs`). The real ref travels inside a
   `name` blob — age ciphertext — so `list` maps keys back while
   the store sees only hex.
 * **Constant-time compares** — every token/signature comparison
@@ -1653,7 +1677,7 @@ unlocks the local file vault and the remote `cf` vault alike.
 ## What is deliberately not here
 
 * **No KMS port yet** — managed-key backends (AWS KMS/Secrets
-  Manager) were explored in the `arca-vault-aws` spike to prove
+  Manager) were explored in the `cuora-vault-aws` spike to prove
   the `Vault` port generalizes to non-age stores; a KMS-backed
   *crypto* port is a later ADR, not v1.
 * **No passphrase-wrapped identity file** — when the keyring is
@@ -1667,7 +1691,7 @@ unlocks the local file vault and the remote `cf` vault alike.
 ---
 
 ---
-url: /arca/explanation/worktree-model.md
+url: /cuora/explanation/worktree-model.md
 ---
 # The worktree model
 
@@ -1677,7 +1701,7 @@ branches inside this repo — and what that buys.
 ## The shape
 
 ```text
-arca/
+cuora/
 ├── crates/ …           ← code branch (main)
 ├── project/            ← worktree of the orphan `project` branch
 │   ├── TODO.md  BACKLOG.md  index.md  meta.toml
@@ -1708,7 +1732,7 @@ Worktrees keep all three branches checked out at once.
 
 ## `project/` — the PM ledger
 
-Owned by **myco**, not arca: this repo dogfoods the stack's PM
+Owned by **myco**, not cuora: this repo dogfoods the stack's PM
 tool. The `project` branch history is the audit trail — every
 mutating `myco` verb is one atomic commit. `myco init` created
 the branch and worktree; agents go through `myco` verbs rather
@@ -1719,9 +1743,9 @@ than hand-editing when a verb exists.
 The `docs` branch holds the VitePress + Diátaxis sources;
 generated pages (`reference/cli.md`, `reference/config.md`, the
 crate map in `architecture.md`, `reference/crate-api.md`) are
-rebuilt by `docs/gen-*.py` and `arca gen-cli-docs` — never
+rebuilt by `docs/gen-*.py` and `cuora gen-cli-docs` — never
 hand-edited. `cargo xtask site` builds the site; pushes deploy to
-GitHub Pages at `9aia.com/arca` via `scripts/deploy-docs.sh`.
+GitHub Pages at `9aia.com/cuora` via `scripts/deploy-docs.sh`.
 
 See [architecture](architecture.md) for the crates the code side
 is made of.
@@ -1729,51 +1753,58 @@ is made of.
 ---
 
 ---
-url: /arca/getting-started.md
+url: /cuora/getting-started.md
 ---
 # Getting started
 
-Install the `arca` CLI, seal your first secret in the local
+Install the `cuora` CLI, seal your first secret in the local
 age-encrypted vault, and run a command that uses it — without the
 value ever touching your terminal, a file, or an agent's context.
 
 ## Install
 
-The crates.io name `arca` belongs to an unrelated project —
+The crates.io name `cuora` belongs to an unrelated project —
 install from the repo:
 
 ```sh
-cargo install --git https://github.com/9aia/arca arca
+cargo install --git https://github.com/9aia/cuora cuora
 ```
 
 From a checkout of this repo: `cargo xtask install` builds and
-installs the release binary to `~/.cargo/bin/arca`. For a lean
+installs the release binary to `~/.cargo/bin/cuora`. For a lean
 binary without the TUI:
-`cargo install --git https://github.com/9aia/arca arca --no-default-features`.
+`cargo install --git https://github.com/9aia/cuora cuora --no-default-features`.
 
 ## Bootstrap
 
 ```sh
-arca init
+cuora init
 ```
 
 `init` stores your age identity where it's safest available and
-verifies the vault at `~/.local/share/arca/vault.age` opens. It's
+verifies the vault at `~/.local/share/cuora/vault.age` opens. It's
 idempotent — run it any time.
 
 On a desktop session (GNOME Keyring, KeePassXC, KDE Wallet, macOS
 Keychain, Windows Credential Manager) the identity lands in the
-session keyring — it unlocks with login, no prompt. On headless
-boxes with no session store, `init` falls back to the
-`~/.config/arca/identity.txt` keyfile (mode `0600`) with a note
-saying so. `arca init --with-file` forces the keyfile; pinning
-`ARCA_IDENTITY_FILE` or `[vaults.*].identity` in config does the
-same — that's the headless/CI path.
+session keyring — it unlocks with login, no prompt. The default
+backend is `keyring`: **fail closed** — if no session store is
+reachable, `init` (and every other verb) errors rather than
+silently downgrading to a file. Headless boxes (servers, CI,
+containers, plain SSH) have no session bus, so there you opt out
+explicitly — `[identity] backend = "auto"` in `cuora.toml` (probe
+the keyring, fall back to the keyfile with a note), `"file"`
+(never probe), or the `CUORA_IDENTITY_BACKEND` env var. The
+fallback writes `~/.config/cuora/identity.txt` (mode `0600`) —
+raw age key material, protect it like a private SSH key.
+`cuora init --with-file` forces the keyfile; pinning
+`CUORA_IDENTITY_FILE` or `[vaults.*].identity` in config does the
+same — that's the deliberate headless/CI path.
 
-Already have an `identity.txt`? `arca init` imports it into the
+Already have an `identity.txt`? `cuora init` imports it into the
 keyring rather than orphaning it, and leaves the file as a backup
 you can delete when ready. (On a brand-new keyring with no
-collections yet, arca claims the `default` collection alias
+collections yet, cuora claims the `default` collection alias
 automatically — no manual step.)
 
 ## Seal a secret
@@ -1782,7 +1813,7 @@ Values never enter via CLI arguments — they would land in shell
 history and `/proc`. Pipe them instead:
 
 ```sh
-printf '%s' "$STRIPE_KEY" | arca put arca://billing/stripe
+printf '%s' "$STRIPE_KEY" | cuora put cuora://billing/stripe
 ```
 
 Interactive humans get a hidden `/dev/tty` prompt instead of
@@ -1791,22 +1822,22 @@ the `dev` env (the default context).
 
 ## Declare the surface
 
-`[secrets]` in `arca.toml` bounds what `run`/`env` may inject —
+`[secrets]` in `cuora.toml` bounds what `run`/`env` may inject —
 least privilege, no ambient vault dump:
 
 ```toml
 [secrets]
-STRIPE_KEY = "arca://billing/stripe"
+STRIPE_KEY = "cuora://billing/stripe"
 ```
 
-Config search: `./arca.toml` → `~/.config/arca/arca.toml`
-(`--config`/`$ARCA_CONFIG` override). No file at all is fine —
+Config search: `./cuora.toml` → `~/.config/cuora/cuora.toml`
+(`--config`/`$CUORA_CONFIG` override). No file at all is fine —
 defaults are the local vault and the `dev` env.
 
 ## Run with secrets
 
 ```sh
-arca run -- 'curl -H "Authorization: Bearer $STRIPE_KEY" \
+cuora run -- 'curl -H "Authorization: Bearer $STRIPE_KEY" \
     https://api.stripe.com/v1/charges'
 ```
 
@@ -1819,7 +1850,7 @@ that process — agents never see it.
 ## Check the setup
 
 ```sh
-arca check
+cuora check
 ```
 
 Validates the config, that the routed vaults decrypt, and that
@@ -1828,14 +1859,14 @@ every `[secrets]` ref resolves — exit `1` on findings.
 ## Agent self-discovery
 
 ```sh
-arca manifest          # verbs, JSON shapes, env vars, audit contract (JSON)
-arca schema            # JSON Schema for arca.toml
-arca <verb> --help     # every verb, self-documenting
+cuora manifest          # verbs, JSON shapes, env vars, audit contract (JSON)
+cuora schema            # JSON Schema for cuora.toml
+cuora <verb> --help     # every verb, self-documenting
 ```
 
 `--json` is honored on every verb; errors are `{"error": "…"}`
 on stderr with a non-zero exit. The
-[arca skill](https://github.com/9aia/arca/tree/main/.agents/skills/arca)
+[cuora skill](https://github.com/9aia/cuora/tree/main/.agents/skills/cuora)
 teaches agents the verbs.
 
 ## Where next
@@ -1843,15 +1874,15 @@ teaches agents the verbs.
 * [Your first secret](tutorials/first-secret.md) — a guided
   end-to-end in a throwaway HOME.
 * [Inject into a process](how-to/inject-into-a-process.md) — run
-  modes, ad-hoc `-s` pairs, the `eval "$(arca env)"` human path.
-* [The threat model](explanation/threat-model.md) — what arca
+  modes, ad-hoc `-s` pairs, the `eval "$(cuora env)"` human path.
+* [The threat model](explanation/threat-model.md) — what cuora
   does and does not protect against.
 * [CLI reference](reference/cli.md) — the full verb surface.
 
 ---
 
 ---
-url: /arca/public/api/static.files/SourceSerif4-LICENSE-a2cfd9d5.md
+url: /cuora/public/api/static.files/SourceSerif4-LICENSE-a2cfd9d5.md
 ---
 Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
 Copyright 2014 - 2023 Adobe (http://www.adobe.com/), with Reserved Font Name ‘Source’. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.

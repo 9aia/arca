@@ -1,5 +1,5 @@
 ---
-url: /arca/how-to/guardrails-for-agents.md
+url: /cuora/how-to/guardrails-for-agents.md
 ---
 # Guardrails for agents
 
@@ -20,7 +20,7 @@ allow = ["run", "list", "check", "manifest", "schema"]
 
 * `deny` wins over `allow`; `default` covers the rest
   (default `"allow"`).
-* Op names match `arca manifest`'s `ops` list:
+* Op names match `cuora manifest`'s `ops` list:
   `init, put, get, list, rm, rotate, run, env, check, deploy,
   ui, serve, manifest, schema`.
 * `manifest`/`schema`/`gen-cli-docs` run before config load —
@@ -29,7 +29,7 @@ allow = ["run", "list", "check", "manifest", "schema"]
 ## What a denial looks like
 
 ```text
-arca: op 'get' denied by guardrails in ./arca.toml
+cuora: op 'get' denied by guardrails in ./cuora.toml
        (advisory — remove/relax the rule to allow)
 ```
 
@@ -40,11 +40,11 @@ ref. Exit is non-zero; `--json` emits `{"error": "…"}`.
 
 Guardrails are accident prevention, not enforcement:
 
-* `ARCA_ACTOR` (and `--actor`) is self-claimed — attribution, not
+* `CUORA_ACTOR` (and `--actor`) is self-claimed — attribution, not
   identity.
-* Nothing stops a determined process from editing `arca.toml` or
+* Nothing stops a determined process from editing `cuora.toml` or
   running the binary differently. Real policy enforcement is
-  peregrin's job (arca's orchestrator neighbor); arca's contract
+  peregrin's job (cuora's orchestrator neighbor); cuora's contract
   is to *honor* the declared rules and *record* every refusal.
 
 If a guardrail denies your op as an agent: don't work around it.
@@ -62,6 +62,6 @@ default = "deny"
 allow = ["run", "list", "check", "ui"]
 ```
 
-The agent can `arca run` (values materialize inside the child,
+The agent can `cuora run` (values materialize inside the child,
 never in its context) and can list refs — but `get`/`env`, the
 plaintext printers, are off.

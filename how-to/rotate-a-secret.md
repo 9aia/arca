@@ -1,5 +1,5 @@
 ---
-url: /arca/how-to/rotate-a-secret.md
+url: /cuora/how-to/rotate-a-secret.md
 ---
 # Rotate a secret
 
@@ -7,8 +7,8 @@ Replace a stored value deliberately — version bump plus a
 `rotated_at` timestamp, and an audit event.
 
 ```sh
-printf '%s' "$NEW_VALUE" | arca rotate arca://billing/stripe
-# rotated arca://billing/stripe (v3)
+printf '%s' "$NEW_VALUE" | cuora rotate cuora://billing/stripe
+# rotated cuora://billing/stripe (v3)
 ```
 
 Like `put`, the value arrives on stdin (or a hidden `/dev/tty`
@@ -28,20 +28,20 @@ typo'd ref or wrong env that `put` would silently create.
 ## Rotate in a specific env
 
 ```sh
-printf '%s' "$PROD_VALUE" | arca rotate arca://prod/billing/stripe
+printf '%s' "$PROD_VALUE" | cuora rotate cuora://prod/billing/stripe
 # or: --env prod
 ```
 
 ## Verify
 
 ```sh
-arca list --json --env prod
+cuora list --json --env prod
 # … "version": 3, "rotated_at": "2026-…"
 ```
 
 Downstream consumers pick the new value up on their next
-`arca run` — resolution happens at exec time, nothing caches it.
+`cuora run` — resolution happens at exec time, nothing caches it.
 
 If the value was pushed to a deploy sink, re-push it:
-[`arca deploy arca://billing/stripe`](deploy-to-a-sink.md) — the
+[`cuora deploy cuora://billing/stripe`](deploy-to-a-sink.md) — the
 sink is write-only and doesn't follow the vault on its own.

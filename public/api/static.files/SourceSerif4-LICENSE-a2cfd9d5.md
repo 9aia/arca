@@ -1,5 +1,5 @@
 ---
-url: /arca/public/api/static.files/SourceSerif4-LICENSE-a2cfd9d5.md
+url: /cuora/public/api/static.files/SourceSerif4-LICENSE-a2cfd9d5.md
 ---
 Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
 Copyright 2014 - 2023 Adobe (http://www.adobe.com/), with Reserved Font Name ‘Source’. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.

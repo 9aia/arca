@@ -1,19 +1,19 @@
 ---
-url: /arca/reference/serve-protocol.md
+url: /cuora/reference/serve-protocol.md
 ---
-# The `arca serve` protocol
+# The `cuora serve` protocol
 
-`arca serve` is the Vault port over newline-delimited JSON — the
+`cuora serve` is the Vault port over newline-delimited JSON — the
 surface orchestrators (peregrin) embed. One JSON request per
 **stdin** line, one JSON response per **stdout** line, and the
 [audit wire](audit-events.md) stays on **stderr**, unchanged —
 three separate fds, so a reply never rides the event stream and
 an event never answers a request. Protocol version:
-`arca-serve/1` — send `{"op":"manifest"}` on the wire for the
+`cuora-serve/1` — send `{"op":"manifest"}` on the wire for the
 machine-readable self-description.
 
-Serve is a thin front over the same `arca-ops` plumbing the CLI
-uses: `[envs]` routing, `arca://<env>/…` pins, and audit events
+Serve is a thin front over the same `cuora-ops` plumbing the CLI
+uses: `[envs]` routing, `cuora://<env>/…` pins, and audit events
 are identical. `run`/`env`/`deploy`/`init`/`ui`/`migrate`/`schema`
 stay single-shot CLI verbs — serve covers what an embedder needs
 in-process.
@@ -21,7 +21,7 @@ in-process.
 ## Requests
 
 ```json
-{"id": 1, "op": "get", "ref": "arca://billing/stripe",
+{"id": 1, "op": "get", "ref": "cuora://billing/stripe",
  "env": "prod", "actor": "agent:peregrin", "attestation": "…"}
 ```
 
@@ -29,11 +29,11 @@ in-process.
 | --- | --- |
 | `id` | any JSON value — echoed verbatim (absent → `null`), ≤ 4 KiB serialized |
 | `op` | `get` | `put` | `rm` | `rotate` | `list` | `check` | `manifest` | `shutdown` |
-| `ref` | `arca://ns/name` ≤ 1 KiB — required by the four vault ops; an `arca://<env>/…` pin overrides `env` |
-| `env` | per-request env override — else the loaded context (`--env`/`ARCA_ENV`) |
-| `value` | plaintext ≤ 64 KiB — required by `put`/`rotate`. Values cross this wire deliberately: the parent owns the channel exactly like it owns `arca get`'s stdout |
+| `ref` | `cuora://ns/name` ≤ 1 KiB — required by the four vault ops; an `cuora://<env>/…` pin overrides `env` |
+| `env` | per-request env override — else the loaded context (`--env`/`CUORA_ENV`) |
+| `value` | plaintext ≤ 64 KiB — required by `put`/`rotate`. Values cross this wire deliberately: the parent owns the channel exactly like it owns `cuora get`'s stdout |
 | `actor` | claimed actor id ≤ 256 B — advisory attribution recorded on audit events; validated, never verified |
-| `attestation` | opaque identity claim ≤ 64 KiB — passed to the PDP verbatim, never interpreted by arca |
+| `attestation` | opaque identity claim ≤ 64 KiB — passed to the PDP verbatim, never interpreted by cuora |
 
 Hard bounds on the wire: a request line may be at most **4 MiB**
 — an oversized line answers `bad_request` and the reader resyncs
@@ -45,7 +45,7 @@ a crash.
 ## Responses
 
 ```json
-{"id": 1, "ok": true, "result": {"ref": "arca://billing/stripe", "env": "prod",
+{"id": 1, "ok": true, "result": {"ref": "cuora://billing/stripe", "env": "prod",
  "value": "…", "version": 3, "created_at": "…", "rotated_at": "…"},
  "policy": {"allow": true, "reason": "…", "obligations": ["…"]}}
 ```
@@ -92,15 +92,15 @@ timeout_ms = 5000                 # default: 5s per consult
 ```
 
 A `[serve.pdp] exec` line is **trust-root config**: it
-authorizes shell execution. When `arca serve` loads it from an
-*implicit* `./arca.toml` (the search path, not a pinned
-`--config`/`$ARCA_CONFIG` or `~/.config/arca/`), it warns on
+authorizes shell execution. When `cuora serve` loads it from an
+*implicit* `./cuora.toml` (the search path, not a pinned
+`--config`/`$CUORA_CONFIG` or `~/.config/cuora/`), it warns on
 stderr — the working directory decides what code runs.
 
 The `exec` command runs once per decision — request JSON on
 stdin, verdict JSON on stdout, stderr discarded. The child
-inherits only the `arca-shell` env allowlist (same scrub
-`arca run` applies): `ARCA_CF_TOKEN`, `CLOUDFLARE_API_TOKEN`,
+inherits only the `cuora-shell` env allowlist (same scrub
+`cuora run` applies): `CUORA_CF_TOKEN`, `CLOUDFLARE_API_TOKEN`,
 and every other parent credential stay out of the decider.
 
 ```json
@@ -116,7 +116,7 @@ and every other parent credential stay out of the decider.
 ```
 
 `allow` is required; `reason` and `obligations` are free-form
-context the PDP wants on record (allow-with-conditions — arca
+context the PDP wants on record (allow-with-conditions — cuora
 records them; enforcing them is the requester's job). A deny is
 a `denied` response plus a `denied` audit event — no vault
 access.
@@ -143,7 +143,7 @@ every vault — batch reads rather than looping `list`.
 
 ## Actor claims are advisory
 
-`actor` and `attestation` are *claims*, not proof — arca
+`actor` and `attestation` are *claims*, not proof — cuora
 validates the actor string's shape and passes both through to
 audit and the PDP. Signed, short-lived attestation is the PDP's
 side (peregrin's design, a later decision); ADR-0003 only fixes
