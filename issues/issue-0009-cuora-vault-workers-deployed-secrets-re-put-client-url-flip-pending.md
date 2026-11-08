@@ -1,7 +1,7 @@
 +++
 id = "I-009"
 title = "cuora vault workers deployed — secrets re-put + client URL flip pending"
-status = "open"
+status = "done"
 created = "2026-11-08"
 priority = "medium"
 +++
@@ -19,6 +19,8 @@ What is wrong and steps to reproduce.
 - [ ] Action item
 
 ## Resolution
+
+All three CF vault workers migrated to 'cuora' name+domains with secrets rebuilt from local vault refs; old arca workers deleted; clients verified via cuora check.
 
 ## Comments
 
