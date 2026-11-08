@@ -105,9 +105,39 @@ impl IdentitySource for KeyringIdentity {
     not(coverage)
 ))]
 fn platform_store() -> Result<Arc<CredentialStore>, IdentityError> {
-    dbus_secret_service_keyring_store::Store::new()
-        .map(|s| s as Arc<CredentialStore>)
-        .map_err(|e| IdentityError::Unavailable(format!("secret-service: {e}")))
+    let store = dbus_secret_service_keyring_store::Store::new()
+        .map_err(|e| IdentityError::Unavailable(format!("secret-service: {e}")))?;
+    ensure_default_collection();
+    Ok(store as Arc<CredentialStore>)
+}
+
+/// Claim the `default` collection alias when the service has none.
+///
+/// `dbus-secret-service-keyring-store`'s create-item path resolves
+/// the literal `default` alias; on a fresh Secret Service (daemon
+/// just spawned, no keyring unlocked yet) `ReadAlias` returns `/`
+/// → `NoResult`, surfaced as `NoStorageAccess` — the first
+/// `set_password` fails even though the service is reachable.
+/// gnome-keyring only honors the `default` alias (others are
+/// `NotSupported`), so creating a collection *with* that alias is
+/// the bootstrap. Best-effort: any failure here surfaces later as
+/// the store's own error — this never makes things worse.
+#[cfg(all(
+    unix,
+    not(any(target_os = "macos", target_os = "ios", target_os = "android")),
+    not(coverage)
+))]
+fn ensure_default_collection() {
+    use dbus_secret_service::{EncryptionType, SecretService};
+    // Prompt timeout 0 — a create that would block on a GUI
+    // prompter cancels instead; ops stay non-interactive.
+    let Ok(ss) = SecretService::connect_with_max_prompt_timeout(EncryptionType::Plain, 0) else {
+        return;
+    };
+    if ss.get_default_collection().is_ok() {
+        return;
+    }
+    let _ = ss.create_collection("arca", "default");
 }
 
 /// The coverage build's probe — coverage/CI envs are headless, so
