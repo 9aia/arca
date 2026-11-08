@@ -27,3 +27,7 @@ Constraints: sync only, no unsafe; fix may need `[patch]`/vendoring if the bug i
 ## Resolution
 
 fixed in 1d8ece8 — ensure_default_collection claims the default alias on fresh Secret Services
+
+## Comments
+
+- 2026-11-08 Root cause: get_collection("default") → ReadAlias returns '/' on a service with no collections → dbus-secret-service maps to NoResult → keyring-store decode_error → NoStorageAccess; the Err(NoEntry)→create_collection arm never fires, and util::create_collection("default") re-reads the same alias so the crate can't self-bootstrap. gnome-keyring only honors the 'default' alias (verified: other aliases → NotSupported). Fixed in 1d8ece8: platform_store() calls ensure_default_collection() — claims the default alias via create_collection("arca","default") when missing; best-effort, prompt-timeout 0. Caveat: exact fresh-service repro needs a wiped keyring so wasn't re-run e2e; residual edge — collections existing without a default alias can't be re-aliased via the public API.
