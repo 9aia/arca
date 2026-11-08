@@ -1,7 +1,7 @@
 +++
 id = "I-006"
 title = "keyring store fails on empty store — 'Secret Service: no result found' (create-item path)"
-status = "in-progress"
+status = "done"
 created = "2026-11-08"
 owner = "devin"
 priority = "high"
@@ -23,3 +23,7 @@ Suspect: `dbus-secret-service-keyring-store` `set_secret` → no unique item →
 Impact: first-time `arca init` on a fresh machine can't bootstrap into the keyring; users must hand-write the item with `secret-tool` (what was done as workaround: `secret-tool store --label=… service arca username age-identity`).
 
 Constraints: sync only, no unsafe; fix may need `[patch]`/vendoring if the bug is in `dbus-secret-service(-keyring-store)` rather than arca — evaluate whether an arca-side workaround (pre-create collection, different attr path) is cleaner.
+
+## Resolution
+
+fixed in 1d8ece8 — ensure_default_collection claims the default alias on fresh Secret Services
