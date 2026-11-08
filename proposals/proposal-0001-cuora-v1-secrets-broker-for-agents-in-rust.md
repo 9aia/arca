@@ -1,6 +1,6 @@
 +++
 id = "P-001"
-title = "arca v1 — secrets broker for agents, in Rust"
+title = "cuora v1 — secrets broker for agents, in Rust"
 status = "open"
 created = "2026-10-31"
 owner = "human:luis"

@@ -1,6 +1,6 @@
 +++
 id = "PL-001"
-title = "arca v1 roadmap — scaffold → domain → verbs → cloud → ship"
+title = "cuora v1 roadmap — scaffold → domain → verbs → cloud → ship"
 status = "open"
 created = "2026-10-31"
 priority = "high"
