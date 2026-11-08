@@ -528,7 +528,7 @@
 <a href=#528 id=528 data-nosnippet>528</a>/// vault failure.
 <a href=#529 id=529 data-nosnippet>529</a></span><span class="kw">fn </span>warn_perms(path: <span class="kw-2">&amp;</span>Path, is_dir: bool) {
 <a href=#530 id=530 data-nosnippet>530</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(note) = perm_note(path, is_dir) {
-<a href=#531 id=531 data-nosnippet>531</a>        <span class="macro">eprintln!</span>(<span class="string">"arca: {note}"</span>);
+<a href=#531 id=531 data-nosnippet>531</a>        arca_notice::note(<span class="kw-2">&amp;</span>note);
 <a href=#532 id=532 data-nosnippet>532</a>    }
 <a href=#533 id=533 data-nosnippet>533</a>}
 <a href=#534 id=534 data-nosnippet>534</a>

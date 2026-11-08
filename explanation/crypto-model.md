@@ -10,13 +10,24 @@ unlocks the local file vault and the remote `cf` vault alike.
 ## The pieces
 
 * **Identity** — one X25519 keypair, held by an `arca-identity`
-  impl (ADR-0002): the **session keyring** when one is reachable
-  (secret-service, macOS Keychain, Credential Manager), else the
-  `~/.config/arca/identity.txt` keyfile (mode `0600`). An explicit
+  impl (ADR-0002): the **session keyring** (secret-service,
+  macOS Keychain, Credential Manager) by default — fail closed —
+  or the `~/.config/arca/identity.txt` keyfile (mode `0600`)
+  under `auto`/`file` modes or an explicit pin. An explicit
   file — `ARCA_IDENTITY_FILE` or `[vaults.*].identity` — pins the
-  keyfile outright; that is the headless/CI path. `arca init`
+  keyfile outright; that is the headless/CI path. `[identity]
+  backend` (or `ARCA_IDENTITY_BACKEND`) selects the mode:
+  `keyring` (default) fails closed — no reachable store or
+  stored identity is an error, the keyfile is never read;
+  `auto` is the fallback described above — convenient on
+  headless/CI, but a *silent* downgrade if a desktop session
+  loses its store, so it's opt-in; `file` skips the store
+  probe entirely. `arca init`
   bootstraps whichever backend applies and prints the public
-  `age1…` recipient.
+  `age1…` recipient. On a reachable-but-empty Secret Service (fresh
+  daemon, no collections yet) the keyring impl claims the `default`
+  collection alias on first use — `dbus-secret-service-keyring-store`'s
+  create path can't bootstrap one itself (I-006).
 * **Recipients** — `[vaults.*].recipients` encrypts to extra
   public keys beyond the identity's own — a team recipient list
   without sharing the private key.

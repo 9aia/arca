@@ -2,7 +2,7 @@
 <p>One <code>AGE-SECRET-KEY-…</code> line in a plain file (<code>#</code> comments
 allowed), mode <code>0600</code>, at <code>~/.config/arca/identity.txt</code> —
 exactly the behavior <code>arca</code> shipped at v1, extracted behind the
-[<code>IdentitySource</code>] port. It stays the default for headless and
+<a href="../arca_identity/trait.IdentitySource.html" title="trait arca_identity::IdentitySource"><code>IdentitySource</code></a> port. It stays the default for headless and
 CI: <code>ARCA_IDENTITY_FILE</code> (or <code>[vaults.*].identity</code> in config)
 pins an explicit path and skips the keyring entirely.</p>
 <p>The keyfile is raw key material — protect it like a private

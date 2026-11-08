@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Outcome"],"fn":["emit","emit_to"],"struct":["AuditEvent","PolicyVerdict"]};
+window.SIDEBAR_ITEMS = {"enum":["Outcome"],"fn":["emit","emit_to","flush","mute_stderr","unmute_stderr"],"struct":["AuditEvent","PolicyVerdict"]};

@@ -3,10 +3,12 @@ url: /arca/reference/audit-events.md
 ---
 # Audit events
 
-The audit wire: one ndjson line on **stderr** per op outcome.
-arca keeps no local ledger (ADR-0001 — aggregation is peregrin's);
-the stderr stream *is* the contract, so a wrapper — peregrin,
-sepia, your own harness — can capture it, and a human sees a
+The audit wire: one ndjson line on **stderr** per op outcome,
+plus an OTLP span per event when `OTEL_EXPORTER_OTLP_ENDPOINT`
+is set. arca keeps no local ledger (ADR-0001 — aggregation is
+peregrin's); the stderr stream *is* the human contract and the
+OTLP stream the machine one, so a wrapper — peregrin, sepia,
+your own harness — can capture either, and a human sees a
 breadcrumb.
 
 ## Shape
@@ -62,12 +64,36 @@ See [the serve protocol](serve-protocol.md).
 
 `arca ui` emits one op-scoped `ok` when the browser exits cleanly.
 Inside it, browsing is silent — listing refs and metadata is not
-a materialization. The `r`→`r` reveal goes through the audited
-`get` path: a real `{"op":"get","rref":…,"outcome":"ok"}` event
-per value shown.
+a materialization, and **live stderr audit is muted for the whole
+session** so events can't splatter over the alternate screen;
+everything held replays to stderr after the terminal is restored.
+The `r`→`r` reveal goes through the audited `get` path: a real
+`{"op":"get","rref":…,"outcome":"ok"}` event per value shown —
+held like the rest, replayed on exit.
+
+## OTLP export
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. `http://localhost:4318`)
+and every audit event is additionally buffered as an
+`arca.<op>` span — `ExportTraceServiceRequest` JSON posted to
+`<endpoint>/v1/traces` on flush. Span attributes mirror the
+ndjson fields: `arca.op`, `arca.rref` (when present), `arca.env`,
+`arca.actor`, `arca.outcome`, and `arca.policy.*` on serve-path
+events; `Outcome::Error` marks the span `STATUS_CODE_ERROR`.
+`service.name` comes from `OTEL_SERVICE_NAME` (default `arca`).
+
+Flush timing: CLI verbs export once at exit; `arca serve` flushes
+per request (it's long-running); the TUI flushes at exit like
+any verb.
+
+Related env vars: `OTEL_EXPORTER_OTLP_HEADERS` (`k=v` pairs,
+percent-decoded), `OTEL_EXPORTER_OTLP_TIMEOUT` (ms, default
+10000\), `OTEL_SDK_DISABLED=true` turns export off entirely, and
+`ARCA_AUDIT_STDERR=0` silences the stderr wire (OTLP-only mode).
 
 ## Failure posture
 
-Audit emission is best-effort: a closed stderr (broken pipe)
-never takes the broker down — the write error is swallowed by
-design.
+Audit emission is best-effort on both wires: a closed stderr
+(broken pipe) never takes the broker down — the write error is
+swallowed by design — and a failed OTLP export warns once on
+stderr, never fails the op.

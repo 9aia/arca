@@ -976,6 +976,7 @@ url: /arca/reference/config.md
 | `deploy` | `{name: target}` | optional | Named deploy targets — write-only sinks (`arca deploy` pushes a stored value in; nothing ever reads one back). |
 | `guardrails` | `table` | optional | Advisory op guardrails — accident prevention for standalone use, honestly *not* a policy boundary (a locally claimed actor is spoofable by construction). |
 | `serve` | `table` | optional | The `arca serve` surface — ndjson request/response on stdio plus the optional policy decision point. Absent, serve runs with no PDP — same advisory posture as the single-shot CLI. |
+| `identity` | `IdentityConfig` | optional | Which backend holds the age identity — `[identity]`. Absent → `keyring` (fail closed; `auto`/`file` opt out). |
 
 ## `[vaults.NAME]` — a named vault backend
 
@@ -1060,10 +1061,12 @@ url: /arca/reference/audit-events.md
 ---
 # Audit events
 
-The audit wire: one ndjson line on **stderr** per op outcome.
-arca keeps no local ledger (ADR-0001 — aggregation is peregrin's);
-the stderr stream *is* the contract, so a wrapper — peregrin,
-sepia, your own harness — can capture it, and a human sees a
+The audit wire: one ndjson line on **stderr** per op outcome,
+plus an OTLP span per event when `OTEL_EXPORTER_OTLP_ENDPOINT`
+is set. arca keeps no local ledger (ADR-0001 — aggregation is
+peregrin's); the stderr stream *is* the human contract and the
+OTLP stream the machine one, so a wrapper — peregrin, sepia,
+your own harness — can capture either, and a human sees a
 breadcrumb.
 
 ## Shape
@@ -1119,15 +1122,39 @@ See [the serve protocol](serve-protocol.md).
 
 `arca ui` emits one op-scoped `ok` when the browser exits cleanly.
 Inside it, browsing is silent — listing refs and metadata is not
-a materialization. The `r`→`r` reveal goes through the audited
-`get` path: a real `{"op":"get","rref":…,"outcome":"ok"}` event
-per value shown.
+a materialization, and **live stderr audit is muted for the whole
+session** so events can't splatter over the alternate screen;
+everything held replays to stderr after the terminal is restored.
+The `r`→`r` reveal goes through the audited `get` path: a real
+`{"op":"get","rref":…,"outcome":"ok"}` event per value shown —
+held like the rest, replayed on exit.
+
+## OTLP export
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. `http://localhost:4318`)
+and every audit event is additionally buffered as an
+`arca.<op>` span — `ExportTraceServiceRequest` JSON posted to
+`<endpoint>/v1/traces` on flush. Span attributes mirror the
+ndjson fields: `arca.op`, `arca.rref` (when present), `arca.env`,
+`arca.actor`, `arca.outcome`, and `arca.policy.*` on serve-path
+events; `Outcome::Error` marks the span `STATUS_CODE_ERROR`.
+`service.name` comes from `OTEL_SERVICE_NAME` (default `arca`).
+
+Flush timing: CLI verbs export once at exit; `arca serve` flushes
+per request (it's long-running); the TUI flushes at exit like
+any verb.
+
+Related env vars: `OTEL_EXPORTER_OTLP_HEADERS` (`k=v` pairs,
+percent-decoded), `OTEL_EXPORTER_OTLP_TIMEOUT` (ms, default
+10000\), `OTEL_SDK_DISABLED=true` turns export off entirely, and
+`ARCA_AUDIT_STDERR=0` silences the stderr wire (OTLP-only mode).
 
 ## Failure posture
 
-Audit emission is best-effort: a closed stderr (broken pipe)
-never takes the broker down — the write error is swallowed by
-design.
+Audit emission is best-effort on both wires: a closed stderr
+(broken pipe) never takes the broker down — the write error is
+swallowed by design — and a failed OTLP export warns once on
+stderr, never fails the op.
 
 ---
 
@@ -1298,9 +1325,16 @@ same table.)
 | `ARCA_CONFIG` | — | config file override, between `--config` and `./arca.toml` in the search order |
 | `ARCA_ENV` | `dev` | env context — resolution + routing (`--env` wins) |
 | `ARCA_ACTOR` | `$USER` → `anon` | audit attribution (`--actor` wins). Self-claimed |
-| `ARCA_IDENTITY_FILE` | `~/.config/arca/identity.txt` | age identity keyfile for every vault impl |
+| `ARCA_IDENTITY_FILE` | `~/.config/arca/identity.txt` | age identity keyfile for every vault impl — pins file mode outright |
+| `ARCA_IDENTITY_BACKEND` | `keyring` | `keyring` (default — fail closed, no file fallback) | `auto` (keyring → keyfile fallback, for headless) | `file` (never probe the keyring); wins over `[identity] backend` |
 | `ARCA_CF_TOKEN` | — | bearer token for `kind = "cf"` vaults — *default* name; `[vaults.*].token_env` picks another |
 | `CLOUDFLARE_API_TOKEN` | — | API token for `cf-secrets-store` deploy sinks — *default* name; `[deploy.*].token_env` picks another |
+| `ARCA_AUDIT_STDERR` | on | `0`/`false`/`off`/`no` silences the stderr ndjson audit wire — OTLP-only mode |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OTLP/HTTP collector base — audit events export as `arca.<op>` spans to `<endpoint>/v1/traces` |
+| `OTEL_EXPORTER_OTLP_HEADERS` | — | `k=v,k2=v2` auth headers for the OTLP endpoint (values percent-decoded) |
+| `OTEL_EXPORTER_OTLP_TIMEOUT` | `10000` | export timeout in ms |
+| `OTEL_SERVICE_NAME` | `arca` | `service.name` resource attribute on exported spans |
+| `OTEL_SDK_DISABLED` | — | `true`/`1` disables OTLP export entirely |
 
 Honored XDG paths (when the matching override is unset):
 
@@ -1336,6 +1370,7 @@ documented at source (doc comments).
 * [arca-identity](/arca/api/arca_identity/index.html) — adapter
 * [arca-identity-file](/arca/api/arca_identity_file/index.html) — adapter
 * [arca-identity-keyring](/arca/api/arca_identity_keyring/index.html) — adapter
+* [arca-notice](/arca/api/arca_notice/index.html) — adapter
 * [arca-serve](/arca/api/arca_serve/index.html) — adapter
 * [arca-shell](/arca/api/arca_shell/index.html) — adapter
 * [arca-testkit](/arca/api/arca_testkit/index.html) — adapter
@@ -1390,6 +1425,7 @@ Design rules:
 | `arca-identity` | adapter | Identity port: where the age identity (master key) comes from — file, keyring, later sealed variants |
 | `arca-identity-file` | adapter | Identity impl: the ~/.config/arca/identity.txt age keyfile (0600) — the headless/CI default |
 | `arca-identity-keyring` | adapter | Identity impl: the platform session secret store (secret-service / Keychain / Credential Manager) via keyring-core |
+| `arca-notice` | adapter | Process-wide UX notices — muted/replayed stderr notes that must not corrupt the arca ui alternate screen |
 | `arca-serve` | adapter | arca serve — the ndjson request/response IPC surface orchestrators embed, with the external policy-decision consult (P-005) |
 | `arca-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
 | `arca-testkit` | adapter | Vault conformance suite — every arca-vault impl passes the same contract tests (fake values only) |
@@ -1544,13 +1580,24 @@ unlocks the local file vault and the remote `cf` vault alike.
 ## The pieces
 
 * **Identity** — one X25519 keypair, held by an `arca-identity`
-  impl (ADR-0002): the **session keyring** when one is reachable
-  (secret-service, macOS Keychain, Credential Manager), else the
-  `~/.config/arca/identity.txt` keyfile (mode `0600`). An explicit
+  impl (ADR-0002): the **session keyring** (secret-service,
+  macOS Keychain, Credential Manager) by default — fail closed —
+  or the `~/.config/arca/identity.txt` keyfile (mode `0600`)
+  under `auto`/`file` modes or an explicit pin. An explicit
   file — `ARCA_IDENTITY_FILE` or `[vaults.*].identity` — pins the
-  keyfile outright; that is the headless/CI path. `arca init`
+  keyfile outright; that is the headless/CI path. `[identity]
+  backend` (or `ARCA_IDENTITY_BACKEND`) selects the mode:
+  `keyring` (default) fails closed — no reachable store or
+  stored identity is an error, the keyfile is never read;
+  `auto` is the fallback described above — convenient on
+  headless/CI, but a *silent* downgrade if a desktop session
+  loses its store, so it's opt-in; `file` skips the store
+  probe entirely. `arca init`
   bootstraps whichever backend applies and prints the public
-  `age1…` recipient.
+  `age1…` recipient. On a reachable-but-empty Secret Service (fresh
+  daemon, no collections yet) the keyring impl claims the `default`
+  collection alias on first use — `dbus-secret-service-keyring-store`'s
+  create path can't bootstrap one itself (I-006).
 * **Recipients** — `[vaults.*].recipients` encrypts to extra
   public keys beyond the identity's own — a team recipient list
   without sharing the private key.
@@ -1725,7 +1772,9 @@ same — that's the headless/CI path.
 
 Already have an `identity.txt`? `arca init` imports it into the
 keyring rather than orphaning it, and leaves the file as a backup
-you can delete when ready.
+you can delete when ready. (On a brand-new keyring with no
+collections yet, arca claims the `default` collection alias
+automatically — no manual step.)
 
 ## Seal a secret
 

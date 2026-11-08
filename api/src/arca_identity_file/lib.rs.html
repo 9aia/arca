@@ -176,7 +176,7 @@
 <a href=#176 id=176 data-nosnippet>176</a><span class="doccomment">/// F3 stderr note — a loose keyfile permission warns, never fails.
 <a href=#177 id=177 data-nosnippet>177</a></span><span class="kw">fn </span>warn_perms(path: <span class="kw-2">&amp;</span>Path) {
 <a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(note) = perm_note(path) {
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="macro">eprintln!</span>(<span class="string">"arca: {note}"</span>);
+<a href=#179 id=179 data-nosnippet>179</a>        arca_notice::note(<span class="kw-2">&amp;</span>note);
 <a href=#180 id=180 data-nosnippet>180</a>    }
 <a href=#181 id=181 data-nosnippet>181</a>}
 <a href=#182 id=182 data-nosnippet>182</a>
