@@ -11,7 +11,13 @@ unlocks the local file vault and the remote `cf` vault alike.
   (secret-service, macOS Keychain, Credential Manager), else the
   `~/.config/arca/identity.txt` keyfile (mode `0600`). An explicit
   file — `ARCA_IDENTITY_FILE` or `[vaults.*].identity` — pins the
-  keyfile outright; that is the headless/CI path. `arca init`
+  keyfile outright; that is the headless/CI path. `[identity]
+  backend` (or `ARCA_IDENTITY_BACKEND`) selects the mode: `auto`
+  (default) is the fallback described above — convenient, but a
+  *silent* downgrade if a desktop session loses its store;
+  `keyring` fails closed instead (no reachable store or stored
+  identity is an error, the keyfile is never read); `file` skips
+  the store probe entirely. `arca init`
   bootstraps whichever backend applies and prints the public
   `age1…` recipient. On a reachable-but-empty Secret Service (fresh
   daemon, no collections yet) the keyring impl claims the `default`
