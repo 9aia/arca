@@ -1,7 +1,7 @@
 +++
 id = "I-005"
 title = "Audit should be OTel-based; stderr ndjson corrupts arca ui"
-status = "open"
+status = "in-progress"
 created = "2026-11-08"
 owner = "devin"
 priority = "high"
