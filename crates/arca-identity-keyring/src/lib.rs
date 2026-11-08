@@ -119,9 +119,11 @@ fn platform_store() -> Result<Arc<CredentialStore>, IdentityError> {
 /// → `NoResult`, surfaced as `NoStorageAccess` — the first
 /// `set_password` fails even though the service is reachable.
 /// gnome-keyring only honors the `default` alias (others are
-/// `NotSupported`), so creating a collection *with* that alias is
-/// the bootstrap. Best-effort: any failure here surfaces later as
-/// the store's own error — this never makes things worse.
+/// `NotSupported`), so the fix is always claiming *that* alias:
+/// re-alias an existing collection (the login keyring keeps the
+/// secret inside the user's real keyring) or create one when the
+/// service is empty. Best-effort: any failure here surfaces later
+/// as the store's own error — this never makes things worse.
 #[cfg(all(
     unix,
     not(any(target_os = "macos", target_os = "ios", target_os = "android")),
@@ -137,7 +139,59 @@ fn ensure_default_collection() {
     if ss.get_default_collection().is_ok() {
         return;
     }
-    let _ = ss.create_collection("arca", "default");
+    // Collections exist but none owns `default` — claim the alias
+    // for the login keyring (else the first) via SetAlias, which
+    // dbus-secret-service doesn't expose publicly.
+    if let Ok(cols) = ss.get_all_collections() {
+        let pick = cols
+            .iter()
+            .find(|c| c.get_label().ok().as_deref() == Some("login"))
+            .or_else(|| cols.first());
+        if let Some(col) = pick {
+            if set_default_alias(&col.path) && ss.get_default_collection().is_ok() {
+                return;
+            }
+        }
+    }
+    // No usable collection — create one, then claim `default`
+    // explicitly: CreateCollection's alias arg is only a hint.
+    if ss.create_collection("arca", "default").is_ok() {
+        if let Ok(cols) = ss.get_all_collections() {
+            if let Some(col) = cols
+                .iter()
+                .find(|c| c.get_label().ok().as_deref() == Some("arca"))
+            {
+                set_default_alias(&col.path);
+            }
+        }
+    }
+}
+
+/// `org.freedesktop.Secret.Service.SetAlias` — gnome-keyring
+/// implements it but dbus-secret-service keeps the proxy private,
+/// so this is one raw call on a short timeout. `true` = the method
+/// returned without a dbus error.
+#[cfg(all(
+    unix,
+    not(any(target_os = "macos", target_os = "ios", target_os = "android")),
+    not(coverage)
+))]
+fn set_default_alias(collection: &dbus_secret_service::Path) -> bool {
+    let Ok(conn) = dbus::blocking::Connection::new_session() else {
+        return false;
+    };
+    let proxy = conn.with_proxy(
+        "org.freedesktop.secrets",
+        "/org/freedesktop/secrets",
+        std::time::Duration::from_secs(5),
+    );
+    proxy
+        .method_call::<(), _, _, _>(
+            "org.freedesktop.Secret.Service",
+            "SetAlias",
+            ("default", collection.clone()),
+        )
+        .is_ok()
 }
 
 /// The coverage build's probe — coverage/CI envs are headless, so

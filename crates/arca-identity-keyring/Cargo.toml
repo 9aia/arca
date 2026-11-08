@@ -22,6 +22,8 @@ dbus-secret-service-keyring-store.workspace = true
 # Direct dep for the default-collection ensure in platform_store —
 # already in the tree transitively via the store above.
 dbus-secret-service.workspace = true
+# Raw SetAlias call — dbus-secret-service keeps its proxy private.
+dbus.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store.workspace = true
