@@ -10,7 +10,7 @@ same table.)
 | `ARCA_ENV` | `dev` | env context — resolution + routing (`--env` wins) |
 | `ARCA_ACTOR` | `$USER` → `anon` | audit attribution (`--actor` wins). Self-claimed |
 | `ARCA_IDENTITY_FILE` | `~/.config/arca/identity.txt` | age identity keyfile for every vault impl — pins file mode outright |
-| `ARCA_IDENTITY_BACKEND` | `auto` | `auto` \| `keyring` (fail closed — no keyring, no file fallback) \| `file` (never probe the keyring); wins over `[identity] backend` |
+| `ARCA_IDENTITY_BACKEND` | `keyring` | `keyring` (default — fail closed, no file fallback) \| `auto` (keyring → keyfile fallback, for headless) \| `file` (never probe the keyring); wins over `[identity] backend` |
 | `ARCA_CF_TOKEN` | — | bearer token for `kind = "cf"` vaults — *default* name; `[vaults.*].token_env` picks another |
 | `CLOUDFLARE_API_TOKEN` | — | API token for `cf-secrets-store` deploy sinks — *default* name; `[deploy.*].token_env` picks another |
 | `ARCA_AUDIT_STDERR` | on | `0`/`false`/`off`/`no` silences the stderr ndjson audit wire — OTLP-only mode |

@@ -12,7 +12,7 @@
 | `deploy` | `{name: target}` | optional | Named deploy targets — write-only sinks (`arca deploy` pushes a stored value in; nothing ever reads one back). |
 | `guardrails` | `table` | optional | Advisory op guardrails — accident prevention for standalone use, honestly *not* a policy boundary (a locally claimed actor is spoofable by construction). |
 | `serve` | `table` | optional | The `arca serve` surface — ndjson request/response on stdio plus the optional policy decision point. Absent, serve runs with no PDP — same advisory posture as the single-shot CLI. |
-| `identity` | `IdentityConfig` | optional | Which backend holds the age identity — `[identity]`. Absent → `auto` (keyring when reachable, keyfile else). |
+| `identity` | `IdentityConfig` | optional | Which backend holds the age identity — `[identity]`. Absent → `keyring` (fail closed; `auto`/`file` opt out). |
 
 ## `[vaults.NAME]` — a named vault backend
 
