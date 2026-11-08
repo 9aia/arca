@@ -2,7 +2,7 @@ name = "cuora"
 
 [next]
 t = 15
-i = 10
+i = 11
 p = 8
 adr = 5
 pl = 2
