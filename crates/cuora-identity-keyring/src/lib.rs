@@ -30,6 +30,9 @@ use keyring_core::{CredentialStore, Entry};
 pub const SERVICE: &str = "cuora";
 /// The entry/user name the age identity is stored under.
 pub const USER: &str = "age-identity";
+/// Pre-rename service name — `load` falls back to it so identities
+/// stored by `arca` keep resolving; `store` always writes `cuora`.
+const LEGACY_SERVICE: &str = "arca";
 
 /// An age identity held in a `keyring-core` credential store.
 pub struct KeyringIdentity {
@@ -55,8 +58,12 @@ impl KeyringIdentity {
 
     /// The `cuora`/`age-identity` entry in this store.
     fn entry(&self) -> Result<Entry, IdentityError> {
+        self.entry_as(SERVICE)
+    }
+
+    fn entry_as(&self, service: &str) -> Result<Entry, IdentityError> {
         self.store
-            .build(SERVICE, USER, None)
+            .build(service, USER, None)
             .map_err(|e| IdentityError::Store(format!("keyring entry: {e}")))
     }
 }
@@ -66,16 +73,23 @@ impl IdentitySource for KeyringIdentity {
     /// store failures and unparseable material are `Err`.
     fn load(&self) -> Result<Option<x25519::Identity>, IdentityError> {
         let entry = self.entry()?;
-        match entry.get_password() {
-            Ok(text) => {
-                let line = text.trim();
-                x25519::Identity::from_str(line).map(Some).map_err(|e| {
-                    IdentityError::Parse(format!("keyring identity {SERVICE}/{USER}: {e}"))
-                })
+        let text = match entry.get_password() {
+            Ok(t) => t,
+            Err(keyring_core::Error::NoEntry) => {
+                // Pre-rename `arca/age-identity` entries still
+                // resolve — the identity itself is unchanged.
+                match self.entry_as(LEGACY_SERVICE)?.get_password() {
+                    Ok(t) => t,
+                    Err(keyring_core::Error::NoEntry) => return Ok(None),
+                    Err(e) => return Err(IdentityError::Store(format!("keyring get: {e}"))),
+                }
             }
-            Err(keyring_core::Error::NoEntry) => Ok(None),
-            Err(e) => Err(IdentityError::Store(format!("keyring get: {e}"))),
-        }
+            Err(e) => return Err(IdentityError::Store(format!("keyring get: {e}"))),
+        };
+        let line = text.trim();
+        x25519::Identity::from_str(line)
+            .map(Some)
+            .map_err(|e| IdentityError::Parse(format!("keyring identity {SERVICE}/{USER}: {e}")))
     }
 
     /// Write the identity into the store (upsert — the platform

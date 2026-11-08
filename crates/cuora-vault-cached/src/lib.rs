@@ -359,12 +359,20 @@ impl Vault for CachedVault {
     }
 }
 
-/// `$XDG_CACHE_HOME/cuora` or `~/.cache/cuora`.
+/// `$XDG_CACHE_HOME/cuora` or `~/.cache/cuora`. A pre-rename
+/// `…/arca` cache dir that still exists is reused so warm caches
+/// survive the rename.
 fn cache_dir() -> PathBuf {
-    std::env::var("XDG_CACHE_HOME")
+    let base = std::env::var("XDG_CACHE_HOME")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| home().join(".cache"))
-        .join("cuora")
+        .unwrap_or_else(|_| home().join(".cache"));
+    let cuora = base.join("cuora");
+    let legacy = base.join("arca");
+    if cuora.exists() || !legacy.exists() {
+        cuora
+    } else {
+        legacy
+    }
 }
 
 /// `~` for path defaults.

@@ -176,9 +176,17 @@ pub struct AgeVault {
 
 impl AgeVault {
     /// The default vault file — `$XDG_DATA_HOME/cuora/vault.age`,
-    /// else `~/.local/share/cuora/vault.age`.
+    /// else `~/.local/share/cuora/vault.age`. A pre-rename
+    /// `…/arca/vault.age` that still exists wins over the fresh
+    /// cuora path so existing vaults keep resolving.
     pub fn default_vault_path() -> PathBuf {
-        data_home().join("cuora/vault.age")
+        let cuora = data_home().join("cuora/vault.age");
+        let legacy = data_home().join("arca/vault.age");
+        if cuora.exists() || !legacy.exists() {
+            cuora
+        } else {
+            legacy
+        }
     }
 
     /// Open the vault with an already-resolved identity — where the
