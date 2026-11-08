@@ -39,6 +39,7 @@ Design rules:
 | `arca-identity` | adapter | Identity port: where the age identity (master key) comes from — file, keyring, later sealed variants |
 | `arca-identity-file` | adapter | Identity impl: the ~/.config/arca/identity.txt age keyfile (0600) — the headless/CI default |
 | `arca-identity-keyring` | adapter | Identity impl: the platform session secret store (secret-service / Keychain / Credential Manager) via keyring-core |
+| `arca-notice` | adapter | Process-wide UX notices — muted/replayed stderr notes that must not corrupt the arca ui alternate screen |
 | `arca-serve` | adapter | arca serve — the ndjson request/response IPC surface orchestrators embed, with the external policy-decision consult (P-005) |
 | `arca-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
 | `arca-testkit` | adapter | Vault conformance suite — every arca-vault impl passes the same contract tests (fake values only) |
