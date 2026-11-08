@@ -275,6 +275,7 @@ version = "0.1.0"
 dependencies = [
  "age",
  "arca-identity",
+ "arca-notice",
  "temp-env",
  "tempfile",
  "time",
@@ -295,6 +296,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "arca-notice"
+version = "0.1.0"
+
+[[package]]
 name = "arca-ops"
 version = "0.1.0"
 dependencies = [
@@ -307,6 +312,7 @@ dependencies = [
  "arca-identity",
  "arca-identity-file",
  "arca-identity-keyring",
+ "arca-notice",
  "arca-testkit",
  "arca-vault",
  "arca-vault-age",
@@ -365,6 +371,7 @@ dependencies = [
  "arca-core",
  "arca-identity",
  "arca-identity-file",
+ "arca-notice",
  "arca-ops",
  "arca-testkit",
  "arca-vault",
@@ -393,6 +400,7 @@ dependencies = [
  "arca-core",
  "arca-identity",
  "arca-identity-file",
+ "arca-notice",
  "arca-testkit",
  "arca-vault",
  "serde",

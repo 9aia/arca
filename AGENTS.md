@@ -72,6 +72,7 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/arca-deploy-cf` | Deploy impl — CF account Secrets Store via API v4 |
 | `crates/arca-shell` | `bash -c <cmd>` + env injection — the `arca run` path |
 | `crates/arca-ops` | Ops I/O — vault open/save, ref resolution, audit events, verb plumbing |
+| `crates/arca-notice` | Process-wide `arca:` stderr notices — muted/replayed so `arca ui`'s alt screen stays clean |
 | `crates/arca-testkit` | Vault conformance suite — every impl passes the same contract tests |
 | `crates/arca-tui` | Interactive vault TUI (ratatui) — thin front-end over arca-ops; `arca ui`, feature-gated |
 | `crates/arca-serve` | ndjson IPC surface — thin front-end over arca-ops; `arca serve`, the `[serve.pdp]` exec consult (ADR-0003) |

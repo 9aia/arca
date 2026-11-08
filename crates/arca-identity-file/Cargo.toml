@@ -11,6 +11,7 @@ categories = ["development-tools"]
 [dependencies]
 age.workspace = true
 arca-identity.workspace = true
+arca-notice.workspace = true
 time.workspace = true
 
 [dev-dependencies]

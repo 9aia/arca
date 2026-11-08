@@ -10,6 +10,7 @@ members = [
     "crates/arca-identity",
     "crates/arca-identity-file",
     "crates/arca-identity-keyring",
+    "crates/arca-notice",
     "crates/arca-ops",
     "crates/arca-serve",
     "crates/arca-shell",
@@ -44,6 +45,7 @@ arca-deploy-cf = { path = "crates/arca-deploy-cf", version = "0.1.0" }
 arca-identity = { path = "crates/arca-identity", version = "0.1.0" }
 arca-identity-file = { path = "crates/arca-identity-file", version = "0.1.0" }
 arca-identity-keyring = { path = "crates/arca-identity-keyring", version = "0.1.0" }
+arca-notice = { path = "crates/arca-notice", version = "0.1.0" }
 arca-ops = { path = "crates/arca-ops", version = "0.1.0" }
 arca-serve = { path = "crates/arca-serve", version = "0.1.0" }
 arca-shell = { path = "crates/arca-shell", version = "0.1.0" }

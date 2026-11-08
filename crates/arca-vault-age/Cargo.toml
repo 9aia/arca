@@ -12,6 +12,7 @@ categories = ["development-tools"]
 age.workspace = true
 arca-core.workspace = true
 arca-identity.workspace = true
+arca-notice.workspace = true
 arca-vault.workspace = true
 serde.workspace = true
 serde_json.workspace = true

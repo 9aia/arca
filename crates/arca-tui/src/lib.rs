@@ -37,6 +37,7 @@ impl Drop for Guard {
         let _ = disable_raw_mode();
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
         arca_ops::audit::unmute_stderr();
+        arca_notice::unmute();
     }
 }
 
@@ -61,15 +62,18 @@ pub fn run(ops: &arca_ops::Ops) -> io::Result<()> {
             "arca ui needs a terminal — stdout is not a tty",
         ));
     }
-    let mut model = app::Model::open(ops);
-    // The audit wire is stderr ndjson — live writes would splatter
-    // over the alt screen. Mute before the first fallible step so
-    // Guard's drop replays them after the terminal is restored.
+    // Mute before Model::open — vault/identity open is where the
+    // `arca:` notices (permission warnings, fallback notes) fire,
+    // and they would splatter over the alt screen just the same.
+    // Guard's drop replays everything after the terminal is
+    // restored; arca_notice covers the non-audit notes.
     arca_ops::audit::mute_stderr();
+    arca_notice::mute();
     // Guard first — raw mode is on from here, so every fallible
     // step below must restore on `?`.
     let _guard = Guard;
     install_panic_hook();
+    let mut model = app::Model::open(ops);
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;

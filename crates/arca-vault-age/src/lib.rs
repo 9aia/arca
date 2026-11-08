@@ -528,7 +528,7 @@ fn perm_note(_path: &Path, _is_dir: bool) -> Option<String> {
 /// vault failure.
 fn warn_perms(path: &Path, is_dir: bool) {
     if let Some(note) = perm_note(path, is_dir) {
-        eprintln!("arca: {note}");
+        arca_notice::note(&note);
     }
 }
 

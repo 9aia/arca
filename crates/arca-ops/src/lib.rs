@@ -1178,7 +1178,7 @@ fn keyring_required(src: &dyn IdentitySource) -> Result<x25519::Identity, OpsErr
 fn fallback_note(msg: &str) {
     static EMITTED: AtomicBool = AtomicBool::new(false);
     if !EMITTED.swap(true, Ordering::Relaxed) {
-        eprintln!("arca: {msg}");
+        arca_notice::note(msg);
     }
 }
 

@@ -176,7 +176,7 @@ fn perm_note(_path: &Path) -> Option<String> {
 /// F3 stderr note — a loose keyfile permission warns, never fails.
 fn warn_perms(path: &Path) {
     if let Some(note) = perm_note(path) {
-        eprintln!("arca: {note}");
+        arca_notice::note(&note);
     }
 }
 

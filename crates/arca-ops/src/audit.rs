@@ -234,7 +234,7 @@ pub fn flush() {
     }
     if let Err(e) = crate::otel::export(&events) {
         if !EXPORT_WARNED.swap(true, Ordering::Relaxed) {
-            eprintln!("arca: otel audit export failed: {e}");
+            arca_notice::note(&format!("otel audit export failed: {e}"));
         }
     }
 }

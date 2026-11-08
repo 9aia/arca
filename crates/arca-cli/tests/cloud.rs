@@ -329,7 +329,10 @@ fn cf_resolution_without_an_explicit_file_notes_the_missing_keyring() {
     // "unreachable" holds on keyring-equipped dev boxes too.
     let mut cmd = arca(home, &["--config", cfg.to_str().unwrap(), "list"]);
     cmd.env_remove("ARCA_IDENTITY_FILE")
-        .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/tmp/arca-no-such-bus")
+        .env(
+            "DBUS_SESSION_BUS_ADDRESS",
+            "unix:path=/tmp/arca-no-such-bus",
+        )
         .env("XDG_RUNTIME_DIR", "/tmp/arca-no-such-run");
     let o = cmd.output().unwrap();
     assert!(
