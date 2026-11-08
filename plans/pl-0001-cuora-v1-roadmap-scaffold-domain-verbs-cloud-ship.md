@@ -1,7 +1,7 @@
 +++
 id = "PL-001"
 title = "cuora v1 roadmap — scaffold → domain → verbs → cloud → ship"
-status = "open"
+status = "in-progress"
 created = "2026-10-31"
 priority = "high"
 +++
