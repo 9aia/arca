@@ -1,11 +1,12 @@
 +++
 id = "ADR-0002"
 title = "identity storage — the arca-identity port (keyring-preferred, file fallback)"
-status = "open"
+status = "done"
 created = "2026-11-02"
 owner = "devin"
 priority = "high"
 labels = ["identity", "security"]
+superseded_by = "ADR-0004"
 +++
 
 ## Context

@@ -6,6 +6,7 @@ created = "2026-11-08"
 owner = "devin"
 priority = "high"
 labels = ["identity", "security"]
+supersedes = "ADR-0002"
 +++
 
 ## Context
