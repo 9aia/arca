@@ -19,3 +19,7 @@ What is wrong and steps to reproduce.
 - [ ] Action item
 
 ## Resolution
+
+## Comments
+
+- 2026-11-08 Final pre-release audit done (subagent): verdict tag-ready, no critical/high. Fixed 3 lows pre-tag: empty CUORA_* shadowing, trust-root warning path, manifest legacy aliases; env_var empty=unset semantics unified + tests. 329 tests + 9 worker green. Tagged v0.1.0, pushed; cargo install --git --tag v0.1.0 verified.
