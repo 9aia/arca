@@ -19,3 +19,5 @@ Also worth deciding: should \`arca init\`/first-run print which backend won more
 ## Comments
 
 - 2026-11-08 Implemented in 918f9b9 (main) + dea1b1e (docs). [identity] backend in arca.toml and ARCA_IDENTITY_BACKEND env: auto (default — unchanged keyring→file fallback), keyring (fail closed: strict_keyring probe + keyring_required load; unreachable store or absent identity is an error, keyfile never read), file (skips the store probe). Explicit ARCA_IDENTITY_FILE / [vaults.*].identity pins still win. Manifest + env-vars/config/crypto-model docs updated; schema picks it up via schemars. 310 tests + worker green; also hardened keyring-assuming tests against real session stores (dead DBus socket, ARCA_IDENTITY_BACKEND=file in the TUI seeded-keyfile test).
+
+- 2026-11-08 Follow-up in 389586a: fail-closed flipped to the DEFAULT — absent [identity] backend / ARCA_IDENTITY_BACKEND now means keyring; auto (old fallback) and file are explicit opt-outs. Headless/CI must set backend=auto or file. Also fixed a latent pdp flake (SIGPIPE vs exceeds ordering).
