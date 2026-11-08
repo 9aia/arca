@@ -34,6 +34,7 @@ arca-testkit.workspace = true
 keyring-core.workspace = true
 tempfile.workspace = true
 temp-env.workspace = true
+proptest.workspace = true
 
 [lints]
 workspace = true

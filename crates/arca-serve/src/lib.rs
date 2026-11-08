@@ -184,8 +184,9 @@ fn discard_to_newline(reader: &mut impl BufRead) -> io::Result<()> {
 }
 
 /// One incoming line, validated loosely — field-level errors are
-/// `bad_request`s at dispatch, not parse failures here.
-#[derive(Debug, Deserialize)]
+/// `bad_request`s at dispatch, not parse failures here. No `Debug`
+/// derive: `value` is plaintext on the wire and must never print.
+#[derive(Deserialize)]
 struct Request {
     /// Echo handle — any JSON value, echoed verbatim.
     #[serde(default)]

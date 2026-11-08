@@ -19,6 +19,7 @@
 //! (default `CLOUDFLARE_API_TOKEN`) — never inline in config.
 //! Blocking `ureq`, no async runtime (AGENTS.md).
 
+use std::fmt;
 use std::time::Duration;
 
 use arca_core::{Env, Ref, Secret};
@@ -36,7 +37,6 @@ pub const DEFAULT_TOKEN_ENV: &str = "CLOUDFLARE_API_TOKEN";
 const MAX_RESPONSE_BODY: u64 = 4 * 1024 * 1024;
 
 /// A [`Deploy`] target backed by a CF account Secrets Store.
-#[derive(Debug)]
 pub struct CfSecretsStore {
     name: String,
     agent: Agent,
@@ -44,6 +44,20 @@ pub struct CfSecretsStore {
     auth: String,
     account_id: String,
     store_id: String,
+}
+
+/// `Debug` is hand-rolled and redacts — a derived impl would print
+/// the bearer token in `auth`.
+impl fmt::Debug for CfSecretsStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CfSecretsStore")
+            .field("name", &self.name)
+            .field("base", &self.base)
+            .field("auth", &"<redacted>")
+            .field("account_id", &self.account_id)
+            .field("store_id", &self.store_id)
+            .finish_non_exhaustive()
+    }
 }
 
 impl CfSecretsStore {

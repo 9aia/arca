@@ -650,14 +650,21 @@ impl Ops {
                     IdentityBackend::Auto => auto_keyring_probe(),
                 }
             };
-        self.init_in(opts, keyring.as_deref())
+        self.init_in(
+            opts,
+            keyring.as_deref(),
+            self.identity_backend() == IdentityBackend::Keyring,
+        )
     }
 
     /// [`Self::init`] with the keyring injected — the testable core.
+    /// `strict_keyring` marks a `backend=keyring` store: a load
+    /// error there is fail-closed, never a file fallback.
     fn init_in(
         &self,
         opts: &InitOpts,
         keyring: Option<&dyn IdentitySource>,
+        strict_keyring: bool,
     ) -> Result<InitInfo, OpsError> {
         let (vault_path, _cfg_identity, recipients) = self.vault_paths(&self.env)?;
         let name = self.config.vault_for(&self.env);
@@ -700,9 +707,16 @@ impl Ops {
                             }
                         }
                     }
-                    // Store reachable but the read failed — degraded
-                    // session, not a crash: bootstrap on the file.
+                    // Store reachable but the read failed. Under
+                    // `backend=keyring` that's still fail-closed —
+                    // falling back could mint a divergent file
+                    // identity the keyring can't decrypt. `auto`
+                    // treats it as a degraded session: bootstrap on
+                    // the file.
                     Err(e) => {
+                        if strict_keyring {
+                            return Err(OpsError::Identity(e));
+                        }
                         fallback_note(&format!(
                             "keyring identity unreadable ({e}) — using the identity file"
                         ));
@@ -2115,7 +2129,9 @@ mod tests {
         isolate_home(&home, || {
             let ops = mk_ops(Config::default());
             temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
-                let info = ops.init_in(&InitOpts::default(), Some(&keyring)).unwrap();
+                let info = ops
+                    .init_in(&InitOpts::default(), Some(&keyring), false)
+                    .unwrap();
                 assert_eq!(info.identity, keyring.describe());
                 assert!(!info.migrated);
             });
@@ -2357,7 +2373,9 @@ mod tests {
             temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
                 let ops = mk_ops(Config::default());
                 let keyring = StubSource::empty();
-                let info = ops.init_in(&InitOpts::default(), Some(&keyring)).unwrap();
+                let info = ops
+                    .init_in(&InitOpts::default(), Some(&keyring), false)
+                    .unwrap();
                 assert_eq!(info.identity_backend, "keyring");
                 assert!(info.identity_created);
                 assert!(!info.migrated);
@@ -2378,7 +2396,9 @@ mod tests {
                 let file_id = FileIdentity::default().load().unwrap().unwrap();
                 let ops = mk_ops(Config::default());
                 let keyring = StubSource::empty();
-                let info = ops.init_in(&InitOpts::default(), Some(&keyring)).unwrap();
+                let info = ops
+                    .init_in(&InitOpts::default(), Some(&keyring), false)
+                    .unwrap();
                 assert_eq!(info.identity_backend, "keyring");
                 assert!(!info.identity_created);
                 assert!(info.migrated);
@@ -2396,7 +2416,7 @@ mod tests {
         isolate_home(&home, || {
             temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
                 let ops = mk_ops(Config::default());
-                let info = ops.init_in(&InitOpts::default(), None).unwrap();
+                let info = ops.init_in(&InitOpts::default(), None, false).unwrap();
                 assert_eq!(info.identity_backend, "file");
                 assert!(info.identity_created);
                 assert!(PathBuf::from(&info.identity).exists());
@@ -2408,7 +2428,9 @@ mod tests {
             temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
                 let ops = mk_ops(Config::default());
                 let keyring = StubSource::failing(IdentityError::Store("dbus gone".into()));
-                let info = ops.init_in(&InitOpts::default(), Some(&keyring)).unwrap();
+                let info = ops
+                    .init_in(&InitOpts::default(), Some(&keyring), false)
+                    .unwrap();
                 assert_eq!(info.identity_backend, "file");
                 assert!(info.identity_created);
             });
@@ -2421,10 +2443,29 @@ mod tests {
                 let ops = mk_ops(Config::default());
                 let keyring = StubSource::holding(x25519::Identity::generate());
                 let info = ops
-                    .init_in(&InitOpts { with_file: true }, Some(&keyring))
+                    .init_in(&InitOpts { with_file: true }, Some(&keyring), false)
                     .unwrap();
                 assert_eq!(info.identity_backend, "file");
                 assert!(!info.migrated);
+            });
+        });
+    }
+
+    #[test]
+    fn init_strict_keyring_never_falls_back_on_load_error() {
+        // backend=keyring + reachable-but-broken store → hard
+        // error, and crucially no divergent keyfile is minted.
+        let home = tempfile::tempdir().unwrap();
+        isolate_home(&home, || {
+            temp_env::with_var_unset("ARCA_IDENTITY_FILE", || {
+                let ops = mk_ops(Config::default());
+                let keyring = StubSource::failing(IdentityError::Store("dbus gone".into()));
+                let err = ops
+                    .init_in(&InitOpts::default(), Some(&keyring), true)
+                    .unwrap_err();
+                assert!(matches!(err, OpsError::Identity(_)), "{err:?}");
+                // the fail-closed guarantee: no keyfile was written
+                assert!(!FileIdentity::default().path().exists());
             });
         });
     }
