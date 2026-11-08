@@ -41,7 +41,7 @@ pub struct CfSecretsStore {
     name: String,
     agent: Agent,
     base: String,
-    auth: String,
+    auth: zeroize::Zeroizing<String>,
     account_id: String,
     store_id: String,
 }
@@ -112,7 +112,7 @@ impl CfSecretsStore {
                 .unwrap_or(DEFAULT_BASE)
                 .trim_end_matches('/')
                 .to_string(),
-            auth: format!("Bearer {token}"),
+            auth: zeroize::Zeroizing::new(format!("Bearer {token}")),
             account_id: account_id.to_string(),
             store_id: store_id.to_string(),
         })
@@ -157,7 +157,10 @@ impl CfSecretsStore {
         let has_body = body.is_some();
         let mut res = match (method, body) {
             ("GET", None) => {
-                let rb = self.agent.get(url).header("Authorization", &self.auth);
+                let rb = self
+                    .agent
+                    .get(url)
+                    .header("Authorization", self.auth.as_str());
                 let rb = match query {
                     Some((k, v)) => rb.query(k, v),
                     None => rb,
@@ -171,7 +174,7 @@ impl CfSecretsStore {
             ("DELETE", None) => self
                 .agent
                 .delete(url)
-                .header("Authorization", &self.auth)
+                .header("Authorization", self.auth.as_str())
                 .config()
                 .http_status_as_error(false)
                 .build()
@@ -180,7 +183,7 @@ impl CfSecretsStore {
             ("POST", Some(b)) => self
                 .agent
                 .post(url)
-                .header("Authorization", &self.auth)
+                .header("Authorization", self.auth.as_str())
                 .config()
                 .http_status_as_error(false)
                 .build()
@@ -190,7 +193,7 @@ impl CfSecretsStore {
             ("PATCH", Some(b)) => self
                 .agent
                 .patch(url)
-                .header("Authorization", &self.auth)
+                .header("Authorization", self.auth.as_str())
                 .config()
                 .http_status_as_error(false)
                 .build()

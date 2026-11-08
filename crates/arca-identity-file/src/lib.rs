@@ -119,9 +119,25 @@ impl IdentitySource for FileIdentity {
             use std::os::unix::fs::OpenOptionsExt;
             opts.mode(0o600);
         }
+        // Never write through a planted symlink — the keyfile path
+        // must be a regular file. Checked before open; the window
+        // between check and open is same-uid attacker territory,
+        // which the 0600 mode already assumes away.
+        if let Ok(md) = std::fs::symlink_metadata(&self.path) {
+            if md.file_type().is_symlink() {
+                return Err(IdentityError::Io(format!(
+                    "{} is a symlink — refusing to write the identity through it",
+                    self.path.display()
+                )));
+            }
+        }
         use std::io::Write;
-        opts.open(&self.path)
-            .and_then(|mut f| f.write_all(body.as_bytes()))?;
+        opts.open(&self.path).and_then(|mut f| {
+            f.write_all(body.as_bytes())?;
+            // fsync before the chmod — a crash mid-write must not
+            // leave a truncated keyfile looking stored.
+            f.sync_all()
+        })?;
         // chmod'ing a file this process just created and owns
         // cannot realistically fail — an expect is honest here
         // where a `?` would imply a reachable error arm.

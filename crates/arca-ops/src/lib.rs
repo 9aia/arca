@@ -425,7 +425,7 @@ impl Ops {
                 env.as_str().to_string(),
                 CfAuth::Hmac {
                     id: bare.path(),
-                    secret: rec.value.expose().to_string(),
+                    secret: rec.value.expose().to_string().into(),
                 },
             );
         }
@@ -902,6 +902,24 @@ impl Ops {
             }
             wanted.insert(var.clone(), raw.parse::<Ref>()?);
         }
+        // Loader-hook names execute code inside the child that also
+        // holds every other injected secret — legitimate secrets can
+        // carry them (PYTHONPATH et al), so warn rather than reject.
+        // One note listing them all; `arca_notice::note` directly —
+        // `fallback_note`'s once-per-process slot may already be
+        // spent on an unrelated notice.
+        let hooks: Vec<String> = wanted
+            .keys()
+            .filter(|v| loader_hook_name(v))
+            .map(|v| format!("{v:?}"))
+            .collect();
+        if !hooks.is_empty() {
+            arca_notice::note(&format!(
+                "env var(s) {} are loader-hook names — they can run \
+                 code in the injected child",
+                hooks.join(", ")
+            ));
+        }
         let mut vaults: BTreeMap<String, Box<dyn Vault>> = BTreeMap::new();
         let mut out = BTreeMap::new();
         for (var, rref) in wanted {
@@ -1191,6 +1209,31 @@ fn keyring_required(src: &dyn IdentitySource) -> Result<x25519::Identity, OpsErr
         ))),
         Err(e) => Err(OpsError::Identity(e)),
     }
+}
+
+/// Loader-hook env names — a secret injected under one of these
+/// runs code inside the child that also holds every other injected
+/// secret. Warned on, never rejected: `PYTHONPATH`-style names are
+/// legitimate things to store.
+fn loader_hook_name(name: &str) -> bool {
+    const EXACT: &[&str] = &[
+        "BASH_ENV",
+        "ENV",
+        "NODE_OPTIONS",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "PYTHONINSPECT",
+        "PERL5LIB",
+        "PERL5OPT",
+        "RUBYLIB",
+        "RUBYOPT",
+        "GIT_SSH_COMMAND",
+        "GIT_SSH",
+        "GLIBC_TUNABLES",
+    ];
+    const PREFIX: &[&str] = &["LD_", "DYLD_", "PYTHON", "NODE_", "PERL5"];
+    EXACT.contains(&name) || PREFIX.iter().any(|p| name.starts_with(p))
 }
 
 /// A user-visible fallback notice on stderr — at most once per
@@ -1688,18 +1731,23 @@ mod tests {
             assert!(PathBuf::from(&info.identity).exists());
             assert!(info.vault_path.ends_with("vault.age"));
         });
-        // cf-routed env → init refuses (remote vaults can't init locally)
+        // cf-routed env → init refuses (remote vaults can't init
+        // locally). Pin backend=file so the identity probe can't
+        // race sibling tests' env mutations — the refusal must not
+        // depend on which backend is configured.
         let mut config = Config::default();
         config
             .vaults
             .insert("cloud".into(), vault_cfg("cf", Some("http://x")));
         config.envs.insert(Env::dev(), "cloud".into());
         let ops = mk_ops(config);
-        assert!(ops
-            .init(&InitOpts::default())
-            .unwrap_err()
-            .to_string()
-            .contains("cf"));
+        temp_env::with_var("ARCA_IDENTITY_BACKEND", Some("file"), || {
+            assert!(ops
+                .init(&InitOpts::default())
+                .unwrap_err()
+                .to_string()
+                .contains("cf"));
+        });
         // identity path whose parent can't be created → ensure fails
         let home = tempfile::tempdir().unwrap();
         let blocker = home.path().join("blocker");

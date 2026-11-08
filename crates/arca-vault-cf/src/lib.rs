@@ -130,7 +130,7 @@ struct ErrorBody {
 #[derive(Clone)]
 pub enum Auth {
     /// `Bearer <token>` — legacy; the token travels on each request.
-    Bearer(String),
+    Bearer(zeroize::Zeroizing<String>),
     /// `ArcaHmac <id>, <ts>, <nonce>, <sig>` — the token signs,
     /// never travels (P-003 phase 2). `id` is the wire `token_id` —
     /// the key under which the Worker's `ARCA_VAULT_TOKENS` map
@@ -139,7 +139,7 @@ pub enum Auth {
         /// The wire `token_id` (the scoped ref's path, by convention).
         id: String,
         /// The token secret — the HMAC key. Never on the wire.
-        secret: String,
+        secret: zeroize::Zeroizing<String>,
     },
 }
 
@@ -238,7 +238,7 @@ impl CfVault {
                     )));
                 }
                 Ok(t) => {
-                    auth.insert("*".into(), Auth::Bearer(t));
+                    auth.insert("*".into(), Auth::Bearer(zeroize::Zeroizing::new(t)));
                 }
                 Err(_) if auth.is_empty() => {
                     return Err(VaultError::Config(format!(
@@ -272,7 +272,10 @@ impl CfVault {
     ) -> Result<Self, VaultError> {
         Self::with_auth(
             url,
-            BTreeMap::from([("*".to_string(), Auth::Bearer(token.to_string()))]),
+            BTreeMap::from([(
+                "*".to_string(),
+                Auth::Bearer(zeroize::Zeroizing::new(token.to_string())),
+            )]),
             identity,
             extra_recipients,
             false,
@@ -351,7 +354,7 @@ impl CfVault {
         body: &[u8],
     ) -> Result<String, VaultError> {
         match self.cred_for(env)? {
-            Auth::Bearer(t) => Ok(format!("Bearer {t}")),
+            Auth::Bearer(t) => Ok(format!("Bearer {}", t.as_str())),
             Auth::Hmac { id, secret } => {
                 let ts = unix_ts();
                 let nonce = request_nonce();
@@ -881,13 +884,15 @@ mod tests {
         let mut cfg = test_config("https://x.invalid");
         // canary credential values — a Debug dump must never carry
         // them, in any auth shape (HIGH-1)
-        cfg.scoped
-            .insert("dev".into(), Auth::Bearer("fake-bearer-canary".into()));
+        cfg.scoped.insert(
+            "dev".into(),
+            Auth::Bearer(zeroize::Zeroizing::new("fake-bearer-canary".into())),
+        );
         cfg.scoped.insert(
             "prod".into(),
             Auth::Hmac {
                 id: "ops/tok".into(),
-                secret: "fake-hmac-canary".into(),
+                secret: zeroize::Zeroizing::new("fake-hmac-canary".into()),
             },
         );
         let s = format!("{cfg:?}");
@@ -902,7 +907,12 @@ mod tests {
     #[test]
     fn base_url_must_be_https_or_loopback_http() {
         let id = x25519::Identity::generate();
-        let auth = || BTreeMap::from([("*".to_string(), Auth::Bearer("t".into()))]);
+        let auth = || {
+            BTreeMap::from([(
+                "*".to_string(),
+                Auth::Bearer(zeroize::Zeroizing::new("t".into())),
+            )])
+        };
         // https anywhere is fine
         assert!(
             CfVault::with_auth("https://vault.example", auth(), id.clone(), &[], false).is_ok()
@@ -944,7 +954,10 @@ mod tests {
         // "*" fallback is a clean Config error, not a request.
         let id = x25519::Identity::generate();
         let mut auth = BTreeMap::new();
-        auth.insert("dev".to_string(), Auth::Bearer("fake".to_string()));
+        auth.insert(
+            "dev".to_string(),
+            Auth::Bearer(zeroize::Zeroizing::new("fake".to_string())),
+        );
         let v = CfVault::with_auth("http://127.0.0.1:1", auth, id, &[], false).unwrap();
         let prod = Env::new("prod").unwrap();
         let e = v.request(&prod, "GET", "http://x", None).unwrap_err();
@@ -1033,7 +1046,7 @@ mod tests {
                 "dev".into(),
                 Auth::Hmac {
                     id: "ops/tok".into(),
-                    secret: "fake".into(),
+                    secret: zeroize::Zeroizing::new("fake".into()),
                 },
             );
             let e = CfVault::new(&cfg).err().unwrap();
@@ -1042,7 +1055,10 @@ mod tests {
         // unset but scoped creds exist → the fallback is optional
         temp_env::with_var_unset("ARCA_CF_TOKEN_TEST", || {
             let mut cfg = test_config("https://x.invalid");
-            cfg.scoped.insert("dev".into(), Auth::Bearer("fake".into()));
+            cfg.scoped.insert(
+                "dev".into(),
+                Auth::Bearer(zeroize::Zeroizing::new("fake".into())),
+            );
             assert!(CfVault::new(&cfg).is_ok());
         });
     }
@@ -1078,7 +1094,7 @@ mod tests {
                 "dev".to_string(),
                 Auth::Hmac {
                     id: "ops/tok".into(),
-                    secret: "fake-secret".into(),
+                    secret: zeroize::Zeroizing::new("fake-secret".into()),
                 },
             )]),
             id,
@@ -1139,7 +1155,10 @@ mod tests {
         let mk = |private: bool| {
             CfVault::with_auth(
                 "https://h.invalid",
-                BTreeMap::from([("*".to_string(), Auth::Bearer("t".into()))]),
+                BTreeMap::from([(
+                    "*".to_string(),
+                    Auth::Bearer(zeroize::Zeroizing::new("t".into())),
+                )]),
                 id.clone(),
                 &[],
                 private,
@@ -1157,7 +1176,10 @@ mod tests {
         // another identity → different key for the same ref
         let other = CfVault::with_auth(
             "https://h.invalid",
-            BTreeMap::from([("*".to_string(), Auth::Bearer("t".into()))]),
+            BTreeMap::from([(
+                "*".to_string(),
+                Auth::Bearer(zeroize::Zeroizing::new("t".into())),
+            )]),
             x25519::Identity::generate(),
             &[],
             true,
@@ -1187,7 +1209,10 @@ mod tests {
         let id = x25519::Identity::generate();
         let v = CfVault::with_auth(
             "https://x.invalid",
-            BTreeMap::from([("*".to_string(), Auth::Bearer("t".into()))]),
+            BTreeMap::from([(
+                "*".to_string(),
+                Auth::Bearer(zeroize::Zeroizing::new("t".into())),
+            )]),
             id.clone(),
             &[],
             true,

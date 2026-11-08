@@ -77,6 +77,15 @@ fn otel_from(
     if endpoint.is_empty() {
         return None;
     }
+    // Same policy as cf vault base URLs: `http://` only to a
+    // loopback collector — these spans carry secret *names*.
+    if !endpoint_allowed(&endpoint) {
+        arca_notice::note(
+            "OTEL_EXPORTER_OTLP_ENDPOINT uses http:// to a non-loopback \
+             host — export disabled (use https:// or a loopback collector)",
+        );
+        return None;
+    }
     Some(Otel {
         endpoint,
         headers: parse_headers(headers.unwrap_or("")),
@@ -86,6 +95,22 @@ fn otel_from(
             .map(Duration::from_millis)
             .unwrap_or(Duration::from_secs(10)),
     })
+}
+
+/// `https://` anywhere, `http://` only to loopback — mirrors the
+/// base-URL rule enforced for cf vaults and deploy sinks.
+fn endpoint_allowed(endpoint: &str) -> bool {
+    let Some(rest) = endpoint.strip_prefix("http://") else {
+        return true; // https:// or a scheme we don't police
+    };
+    let authority = rest.split('/').next().unwrap_or("");
+    let hostport = authority.rsplit('@').next().unwrap_or(authority);
+    let host = if let Some(b) = hostport.strip_prefix('[') {
+        b.split(']').next().unwrap_or("")
+    } else {
+        hostport.split(':').next().unwrap_or("")
+    };
+    matches!(host, "localhost" | "127.0.0.1" | "::1")
 }
 
 /// `k=v,k2=v2` — spec says values may be percent-encoded; decode
@@ -276,7 +301,27 @@ mod tests {
         assert!(otel_from(Some(""), None, None, None, None).is_none());
         assert!(otel_from(Some("http://x:4318"), None, None, None, Some("true")).is_none());
         assert!(otel_from(Some("http://x:4318"), None, None, None, Some("1")).is_none());
-        assert!(otel_from(Some("http://x:4318"), None, None, None, Some("false")).is_some());
+        assert!(otel_from(Some("https://x:4318"), None, None, None, Some("false")).is_some());
+    }
+
+    #[test]
+    fn http_endpoints_must_be_loopback() {
+        // secret names ride these spans — plaintext http off-box
+        // is refused, same policy as cf vault base URLs.
+        assert!(otel_from(Some("http://collector:4318"), None, None, None, None).is_none());
+        assert!(otel_from(Some("http://evil.example.com"), None, None, None, None).is_none());
+        assert!(otel_from(Some("http://user@collector:4318"), None, None, None, None).is_none());
+        for ok in [
+            "http://localhost:4318",
+            "http://127.0.0.1:4318",
+            "http://[::1]:4318",
+            "https://collector.example.com",
+        ] {
+            assert!(
+                otel_from(Some(ok), None, None, None, None).is_some(),
+                "{ok}"
+            );
+        }
     }
 
     #[test]
@@ -308,7 +353,7 @@ mod tests {
     #[test]
     fn payload_is_otlp_json_with_arca_attrs() {
         let cfg = otel_from(
-            Some("http://otel:4318"),
+            Some("https://otel:4318"),
             Some("k=v"),
             Some("arca-test"),
             Some("2500"),

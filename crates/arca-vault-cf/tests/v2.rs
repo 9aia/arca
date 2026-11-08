@@ -22,7 +22,10 @@ fn rref(s: &str) -> Ref {
 }
 
 fn bearer_auth_map() -> BTreeMap<String, Auth> {
-    BTreeMap::from([("*".to_string(), Auth::Bearer(TOKEN.to_string()))])
+    BTreeMap::from([(
+        "*".to_string(),
+        Auth::Bearer(zeroize::Zeroizing::new(TOKEN.to_string())),
+    )])
 }
 
 /// A private-refs vault over `mock` — bearer auth, `private_refs`
@@ -53,14 +56,14 @@ fn scoped_tokens_sign_and_scope_per_env() {
                 "dev".to_string(),
                 Auth::Hmac {
                     id: "ops/cf-token-dev".into(),
-                    secret: "fake-dev-token".into(),
+                    secret: zeroize::Zeroizing::new("fake-dev-token".to_string()),
                 },
             ),
             (
                 "prod".to_string(),
                 Auth::Hmac {
                     id: "ops/cf-token-prod".into(),
-                    secret: "fake-prod-token".into(),
+                    secret: zeroize::Zeroizing::new("fake-prod-token".to_string()),
                 },
             ),
         ]),
@@ -116,7 +119,10 @@ fn bearer_is_still_accepted_during_migration() {
     let mock = mocks::vault_wire_v2(tokens, None);
     let v = CfVault::with_auth(
         mock.url(),
-        BTreeMap::from([("*".to_string(), Auth::Bearer("fake-scoped-secret".into()))]),
+        BTreeMap::from([(
+            "*".to_string(),
+            Auth::Bearer(zeroize::Zeroizing::new("fake-scoped-secret".to_string())),
+        )]),
         x25519::Identity::generate(),
         &[],
         false,

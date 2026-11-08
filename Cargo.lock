@@ -260,6 +260,7 @@ dependencies = [
  "serde_json",
  "temp-env",
  "ureq",
+ "zeroize",
 ]
 
 [[package]]
