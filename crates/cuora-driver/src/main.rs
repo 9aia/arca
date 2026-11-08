@@ -51,6 +51,9 @@ fn dispatch(req: Request) -> Response {
             Ok(result) => Response::ok_typed(&result),
             Err(e) => Response::err(e),
         },
+        Request::Render { kind, .. } => Response::err(format!(
+            "tamias-driver-cuora claims no renderers (kind '{kind}')"
+        )),
         Request::Query { query, params } => {
             // Unknown names fail the op; everything else answers
             // `ok:true` — degraded reads travel as `{"error": …}`
