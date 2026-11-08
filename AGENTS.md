@@ -1,7 +1,7 @@
 # Cuora
 
-Secrets broker for agents — sealed, not spilled. Named for *Cuora
-noae* (the ark clam) and Latin *cuora*, the strongbox. Code and
+Secrets broker for agents — sealed, not spilled. Named for the box
+turtle *Cuora* — it seals itself with a hinged shell. Code and
 config carry `cuora://` references, never values; the `cuora` CLI
 materializes secrets as env vars at run time; every
 materialization emits an audit event — ndjson on stderr, plus

@@ -2,8 +2,8 @@
 
 *Secrets broker for agents — sealed, not spilled.*
 
-Named for *Cuora noae* — the ark clam — and Latin *cuora*, the
-strongbox. Agents need API keys, but every plaintext handoff is a
+Named for the box turtle *Cuora* — it seals itself with a hinged
+shell, and so does this. Agents need API keys, but every plaintext handoff is a
 leak surface: prompts, tool output, logs, `.env` pasted into
 configs. cuora removes the handoff — code carries `cuora://`
 references, never values; the CLI materializes secrets as env vars
