@@ -159,8 +159,6 @@ enum Cmd {
     /// decision point is consulted before every vault-touching
     /// op. `{"op":"manifest"}` on the wire describes the protocol.
     Serve,
-    /// Interactive vault browser (requires the `tui` feature).
-    Ui,
     /// Capabilities, JSON shapes, env vars, audit contract — agent
     /// self-discovery (always JSON).
     Manifest,
@@ -248,7 +246,6 @@ fn cmd_op(cmd: &Cmd) -> Op {
         Cmd::Check => Op::Check,
         Cmd::Migrate { .. } => Op::Migrate,
         Cmd::Deploy { .. } => Op::Deploy,
-        Cmd::Ui => Op::Ui,
         Cmd::Serve => Op::Serve,
         Cmd::Manifest => Op::Manifest,
         Cmd::Schema => Op::Schema,
@@ -673,21 +670,11 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
             ops.emit(Op::Serve, None, Outcome::Ok);
             Ok(ExitCode::SUCCESS)
         }
-        // Manifest/Schema/GenCliDocs are handled before ops load —
-        // by dispatch only Ui reaches this arm, so the introspection
-        // variants share it rather than own a provably-dead region.
-        Cmd::Ui | Cmd::Manifest | Cmd::Schema | Cmd::GenCliDocs => {
-            #[cfg(feature = "tui")]
-            {
-                cuora_tui::run(ops)?;
-                ops.emit(Op::Ui, None, Outcome::Ok);
-                Ok(ExitCode::SUCCESS)
-            }
-            #[cfg(not(feature = "tui"))]
-            {
-                eprintln!("`cuora ui` requires the `tui` feature (on by default)");
-                Ok(ExitCode::FAILURE)
-            }
+        // Introspection verbs are handled before ops load — this
+        // arm exists only for exhaustiveness and must never run.
+        Cmd::Manifest | Cmd::Schema | Cmd::GenCliDocs => {
+            eprintln!("internal error: introspection verb reached run_cmd");
+            Ok(ExitCode::FAILURE)
         }
     }
 }
@@ -778,7 +765,6 @@ fn manifest() -> serde_json::Value {
             "migrate": "rewrite stored records for a wire upgrade — `--private-refs` re-keys cf rows under derived keys",
             "deploy": "push a stored value to a write-only [deploy.NAME] target (sink, never a source)",
             "serve": "ndjson IPC mode for orchestrators — get/put/rm/rotate/list/check/manifest/shutdown on stdin→stdout, audit on stderr, optional [serve.pdp] policy consult",
-            "ui": "interactive vault browser (tui feature)",
             "manifest": "this document (always JSON; before config load, no audit event)",
             "schema": "JSON Schema for cuora.toml (before config load)",
             "gen-cli-docs": "hidden — the CLI reference as markdown (docs pipeline)",
@@ -852,11 +838,8 @@ fn manifest() -> serde_json::Value {
         "audit": {
             "wire": "ndjson lines on stderr (default; CUORA_AUDIT_STDERR=0 silences) + OTLP/HTTP JSON spans to $OTEL_EXPORTER_OTLP_ENDPOINT/v1/traces when set — span per event named cuora.<op>, attributes cuora.op/cuora.rref/cuora.env/cuora.actor/cuora.outcome (+cuora.policy.* on serve)",
             "event": {"ts": "rfc3339", "actor": "…", "op": "…", "rref": "…|absent when op-scoped", "env": "…", "outcome": "ok|denied|error", "policy?": "{allow, reason?, obligations?} — serve-path PDP verdicts only"},
-            "shape": "per-ref event per materialized/mutated ref (put/get/rotate/rm/deploy, run/env); op-scoped event for init/list/check/ui; denied on guardrail refusal; error on op failure; manifest/schema emit none; a run child's exit code is not an cuora failure",
-            "surfaces": "ui mutes live stderr for the session and replays held events on exit (alt-screen safety); serve flushes OTLP per request; CLI verbs flush once at exit; export failures warn once, never fail the op",
-        },
-        "features": {
-            "tui": cfg!(feature = "tui"),
+            "shape": "per-ref event per materialized/mutated ref (put/get/rotate/rm/deploy, run/env); op-scoped event for init/list/check; denied on guardrail refusal; error on op failure; manifest/schema emit none; a run child's exit code is not an cuora failure",
+            "surfaces": "serve flushes OTLP per request; CLI verbs flush once at exit; export failures warn once, never fail the op",
         },
         "notes": [
             "values never enter via CLI args — put/rotate read stdin or a hidden /dev/tty prompt",
@@ -958,7 +941,6 @@ mod tests {
                 },
                 Op::Deploy,
             ),
-            (Cmd::Ui, Op::Ui),
             (Cmd::Serve, Op::Serve),
             (Cmd::Manifest, Op::Manifest),
             (Cmd::Schema, Op::Schema),
@@ -970,11 +952,11 @@ mod tests {
     }
 
     #[test]
-    fn run_cmd_folded_arm_takes_the_ui_path() {
+    fn run_cmd_folded_arm_covers_introspection_verbs() {
         // The folded arm documents the dispatch invariant — an
-        // introspection verb reaching run_cmd shares Ui's arm rather
+        // introspection verb reaching run_cmd shares one arm rather
         // than owning a dead region. Whatever it returns, the arm is
-        // exercised; a non-tty env must never panic.
+        // exercised; it must never panic.
         let cli = Cli {
             json: false,
             env: None,

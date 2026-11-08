@@ -6,8 +6,9 @@
 //! [`cuora_vault::Vault`]), the env-pin override on refs, the verb
 //! operations the CLI calls, and the audit emission — ndjson on
 //! stderr plus OTLP span export when `OTEL_EXPORTER_OTLP_ENDPOINT`
-//! is set. `cuora` (CLI) is a thin clap shell over this; `cuora-tui`
-//! calls the same functions.
+//! is set. `cuora` (CLI) is a thin clap shell over this; front-ends
+//! like `cuora-driver` (pavo) and `cuora-serve` call the same
+//! functions.
 
 pub mod audit;
 mod error;

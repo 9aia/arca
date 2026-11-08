@@ -20,19 +20,12 @@ cuora-ops.workspace = true
 cuora-serve.workspace = true
 cuora-shell.workspace = true
 cuora-vault.workspace = true
-cuora-tui = { workspace = true, optional = true }
 clap.workspace = true
 clap-markdown.workspace = true
 serde_json.workspace = true
 schemars.workspace = true
 sigpipe.workspace = true
 rpassword.workspace = true
-
-[features]
-default = ["tui"]
-## `cuora ui` — interactive vault TUI.
-## `--no-default-features` keeps the lean agent binary.
-tui = ["dep:cuora-tui"]
 
 [dev-dependencies]
 cuora-testkit.workspace = true

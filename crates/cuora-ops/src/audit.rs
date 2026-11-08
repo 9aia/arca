@@ -9,9 +9,9 @@
 //!
 //! stderr stays the default human wire; `CUORA_AUDIT_STDERR=0`
 //! silences it (the OTLP-only mode). [`mute_stderr`] suspends
-//! live stderr writes for surfaces that own the terminal — the
-//! TUI — and [`unmute_stderr`] replays the held events afterward,
-//! so nothing is lost, just deferred past the alt-screen.
+//! live stderr writes for surfaces that own the terminal, and
+//! [`unmute_stderr`] replays the held events afterward, so
+//! nothing is lost, just deferred.
 //!
 //! Keep the struct small and serializable: it's the wire
 //! contract on both sinks.
@@ -21,7 +21,7 @@
 //! - **ok** — one event per ref materialized or mutated
 //!   (`put`/`get`/`rotate`/`rm`, and per-ref inside `run`/`env`),
 //!   or one op-scoped event for ref-less verbs
-//!   (`init`/`list`/`check`/`ui`).
+//!   (`init`/`list`/`check`).
 //! - **denied** — the op was refused by `[guardrails]` (advisory).
 //! - **error** — the op ran but failed (missing secret, vault
 //!   error, bad ref).
@@ -40,15 +40,16 @@ use time::OffsetDateTime;
 use cuora_core::Op;
 
 /// Process-wide audit sink — the OTLP buffer plus the stderr
-/// mute the TUI engages. A poisoned lock is recovered rather than
+/// mute a terminal-owning surface can engage. A poisoned lock is
+/// recovered rather than
 /// panicking: audit must never take the broker down.
 struct Sink {
     /// Events held for the next [`flush`] — only populated when
     /// `OTEL_EXPORTER_OTLP_ENDPOINT` is configured.
     otel: Vec<AuditEvent>,
-    /// TUI mode — live stderr writes suspended; events collect in
-    /// `held` for [`unmute_stderr`] to replay once the terminal is
-    /// restored.
+    /// Muted mode — live stderr writes suspended; events collect
+    /// in `held` for [`unmute_stderr`] to replay once the surface
+    /// releases the terminal.
     muted: bool,
     held: Vec<AuditEvent>,
 }
@@ -195,8 +196,9 @@ pub fn emit(event: &AuditEvent) {
 }
 
 /// Suspend live stderr audit writes — for surfaces that own the
-/// terminal (the TUI's alternate screen). Events keep buffering
-/// for OTLP and collect in `held` for [`unmute_stderr`].
+/// terminal (an alt-screen UI, for instance). Events keep
+/// buffering for OTLP and collect in `held` for
+/// [`unmute_stderr`].
 pub fn mute_stderr() {
     sink().muted = true;
 }

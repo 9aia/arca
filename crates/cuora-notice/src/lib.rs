@@ -1,12 +1,12 @@
 //! Process-wide UX notices — the `cuora: …` stderr notes that
 //! are not audit events (loose-permission warnings, keyring
-//! fallback notes, exporter warnings) but still must not
-//! splatter over the `cuora ui` alternate screen.
+//! fallback notes, exporter warnings).
 //!
 //! Same contract as the audit wire's mute: [`mute`] holds
 //! notices instead of writing; [`unmute`] replays them in order
-//! once the terminal is restored. Notices are UX, not wire —
-//! they never fail an operation and never carry secret material.
+//! once the holding surface releases the terminal. Notices are
+//! UX, not wire — they never fail an operation and never carry
+//! secret material.
 
 use std::sync::Mutex;
 
@@ -37,8 +37,8 @@ pub fn note(body: &str) {
     eprintln!("cuora: {body}");
 }
 
-/// Hold notices — `cuora ui` calls this before the alt screen so
-/// nothing writes to the tty mid-frame.
+/// Hold notices — a terminal-owning surface calls this before it
+/// takes over the tty so nothing writes mid-frame.
 pub fn mute() {
     lock().muted = true;
 }

@@ -17,11 +17,6 @@ api:
   file: crates/cuora-shell/src/lib.rs
   line: 72
   module: cuora-shell
-- name: cuora-shell
-  kind: module
-  file: crates/cuora-shell/Cargo.toml
-  line: 1
-  module: cuora-shell
 - name: captures_output
   kind: function
   file: crates/cuora-shell/src/lib.rs
@@ -31,6 +26,11 @@ api:
   kind: function
   file: crates/cuora-shell/src/lib.rs
   line: 195
+  module: cuora-shell
+- name: cuora-shell
+  kind: module
+  file: crates/cuora-shell/Cargo.toml
+  line: 1
   module: cuora-shell
 - name: exec_argv_needs_no_shell
   kind: function
@@ -98,8 +98,8 @@ provenance:
   - crates/cuora-shell/Cargo.toml
   - crates/cuora-shell/src/lib.rs
   hashes:
-  - d1e286873314306b3ec3e30cd61cc9db964378d0
-  - b823147ec8a0a66ccbef71caac6009c9fefd7a0b
-  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
-  generated_at: '1793684916'
+  - 85700da84b4e3dbeef45489b31a713b1cd9a2271
+  - 1768ca4758ea4fea6907ac86adb767a7dfa99620
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
   generator: kuda-template/0.1.2

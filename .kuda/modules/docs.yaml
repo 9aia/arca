@@ -1,0 +1,81 @@
+name: docs
+path: docs/package.json
+purpose: documentation corpus — pages as records, backticked refs as edges
+api: []
+deps: []
+notes: ''
+verify:
+- docs/package.json
+- docs/README.md
+- docs/explanation/architecture.md
+- docs/explanation/boundaries.md
+- docs/explanation/crypto-model.md
+- docs/explanation/threat-model.md
+- docs/explanation/worktree-model.md
+- docs/gen-api-index.py
+- docs/gen-api.py
+- docs/gen-config-docs.py
+provenance:
+  files:
+  - docs/README.md
+  - docs/explanation/architecture.md
+  - docs/explanation/boundaries.md
+  - docs/explanation/crypto-model.md
+  - docs/explanation/threat-model.md
+  - docs/explanation/worktree-model.md
+  - docs/gen-api-index.py
+  - docs/gen-api.py
+  - docs/gen-config-docs.py
+  - docs/gen-crate-map.py
+  - docs/getting-started.md
+  - docs/how-to/add-a-secret.md
+  - docs/how-to/cached-vaults.md
+  - docs/how-to/cloudflare-worker-setup.md
+  - docs/how-to/deploy-to-a-sink.md
+  - docs/how-to/guardrails-for-agents.md
+  - docs/how-to/inject-into-a-process.md
+  - docs/how-to/rotate-a-secret.md
+  - docs/how-to/route-envs-to-vaults.md
+  - docs/index.md
+  - docs/package.json
+  - docs/public/api/static.files/SourceSerif4-LICENSE-a2cfd9d5.md
+  - docs/reference/audit-events.md
+  - docs/reference/cli.md
+  - docs/reference/config.md
+  - docs/reference/crate-api.md
+  - docs/reference/env-vars.md
+  - docs/reference/serve-protocol.md
+  - docs/tutorials/first-secret.md
+  hashes:
+  - 62216d36f5bc6f21293ee6cea680d60ceb3c4b77
+  - a8bb4a905bd4d0abb59cb0b327c4bb5291190baf
+  - 296b2a55cb879997313029a6fb28386b2e4eb94a
+  - 25e3590e47b333471fd4c59b4de377f2f865185f
+  - 87c1c7fb41acce82b0fa29e0ae8dab75b73f6d21
+  - dc21de1f8acfcb179081ea3c188adf7d0ce0d80d
+  - f54808e08ec28d73f117e5763421765d064099db
+  - c61b3a9ae5bf6b6027e30e2ff6026044d75f413c
+  - d600009dc4e13e952ea3c05b9ff7c348758d6476
+  - 50910ee3fd3149eb7c7c5adcd01ba0318d7da7aa
+  - 353529994b27a9e1a4327b9bbb8d1ce5450fb576
+  - e041a2233afe66d20531af9c4a093d9c6d032bf8
+  - 5eb7f27d9f4b6be7b3393863df2e42479c62626a
+  - 2e5d178c70b7cebd3a3262263acd076a01243c36
+  - a857eb7b23cde7b85b70a41ac9bb7ee5afa77bec
+  - 595a6da8f924b7f342a4ce54a879b6b0d9531e91
+  - e5a9cce080703ddbc30a25c13de47d95a91756de
+  - 670cb0090984c21c3431482011958034474e2621
+  - 378a3b81a727e8633afc94b495a2cec78754aec6
+  - 0dd953ee7ef517251f9e046f4d1ecc0fe4bafcb9
+  - e7893f760cb8d6e28600ac0d8d23d2f7bf02cefc
+  - 175fa4f47aecdc02e902d243a1c29914eb2ee258
+  - f361d2c175262178dfb3223a31ef77903fcff0ed
+  - c3d3d6fe8e30908986f4ce9ae3a2eacdd92709fb
+  - 51f4818d00a9c2de1052661aca268fd1bebd49a5
+  - cfba0a35c36b2bb043fc3807beaf80477ec0df3f
+  - 7732226fa9f5893e4e87f8da152eefc89269cca7
+  - 535a7ef729c81faed96315470851d121f55a8212
+  - d0d60cbb2e865649470ebe51e7d4b5b2fb857e31
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
+  generator: kuda-template/0.1.2

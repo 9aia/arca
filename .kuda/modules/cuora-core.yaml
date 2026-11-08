@@ -5,22 +5,27 @@ api:
 - name: ALL
   kind: const
   file: crates/cuora-core/src/op.rs
-  line: 49
+  line: 47
   module: cuora-core
 - name: Actor
   kind: type
   file: crates/cuora-core/src/actor.rs
   line: 12
   module: cuora-core
+- name: CacheScope
+  kind: type
+  file: crates/cuora-core/src/config.rs
+  line: 173
+  module: cuora-core
 - name: Config
   kind: type
   file: crates/cuora-core/src/config.rs
-  line: 43
+  line: 49
   module: cuora-core
 - name: DeployConfig
   kind: type
   file: crates/cuora-core/src/config.rs
-  line: 156
+  line: 230
   module: cuora-core
 - name: Env
   kind: type
@@ -30,12 +35,12 @@ api:
 - name: EnvRoute
   kind: type
   file: crates/cuora-core/src/config.rs
-  line: 184
+  line: 258
   module: cuora-core
 - name: EnvRouteTable
   kind: type
   file: crates/cuora-core/src/config.rs
-  line: 195
+  line: 269
   module: cuora-core
 - name: Err
   kind: type
@@ -50,12 +55,12 @@ api:
 - name: Err
   kind: type
   file: crates/cuora-core/src/op.rs
-  line: 97
+  line: 93
   module: cuora-core
 - name: Err
   kind: type
   file: crates/cuora-core/src/refs.rs
-  line: 98
+  line: 105
   module: cuora-core
 - name: Error
   kind: type
@@ -65,17 +70,32 @@ api:
 - name: GuardDefault
   kind: type
   file: crates/cuora-core/src/config.rs
-  line: 226
+  line: 300
   module: cuora-core
 - name: Guardrails
   kind: type
   file: crates/cuora-core/src/config.rs
-  line: 243
+  line: 317
+  module: cuora-core
+- name: IdentityBackend
+  kind: type
+  file: crates/cuora-core/src/config.rs
+  line: 423
+  module: cuora-core
+- name: IdentityConfig
+  kind: type
+  file: crates/cuora-core/src/config.rs
+  line: 413
+  module: cuora-core
+- name: LEGACY_SCHEME
+  kind: const
+  file: crates/cuora-core/src/refs.rs
+  line: 24
   module: cuora-core
 - name: LOCAL_VAULT
   kind: const
   file: crates/cuora-core/src/config.rs
-  line: 37
+  line: 43
   module: cuora-core
 - name: Op
   kind: type
@@ -95,22 +115,22 @@ api:
 - name: ParseOpError
   kind: type
   file: crates/cuora-core/src/op.rs
-  line: 71
+  line: 68
   module: cuora-core
 - name: ParseRefError
   kind: type
   file: crates/cuora-core/src/refs.rs
-  line: 95
+  line: 102
   module: cuora-core
 - name: PdpConfig
   kind: type
   file: crates/cuora-core/src/config.rs
-  line: 300
+  line: 374
   module: cuora-core
 - name: Ref
   kind: type
   file: crates/cuora-core/src/refs.rs
-  line: 23
+  line: 28
   module: cuora-core
 - name: SCHEME
   kind: const
@@ -125,12 +145,12 @@ api:
 - name: ServeConfig
   kind: type
   file: crates/cuora-core/src/config.rs
-  line: 280
+  line: 354
   module: cuora-core
 - name: VaultConfig
   kind: type
   file: crates/cuora-core/src/config.rs
-  line: 104
+  line: 114
   module: cuora-core
 - name: WELL_KNOWN
   kind: const
@@ -145,17 +165,17 @@ api:
 - name: all_covers_schema
   kind: function
   file: crates/cuora-core/src/op.rs
-  line: 136
+  line: 132
   module: cuora-core
 - name: allows
   kind: function
   file: crates/cuora-core/src/config.rs
-  line: 265
+  line: 339
   module: cuora-core
-- name: cuora-core
-  kind: module
-  file: crates/cuora-core/Cargo.toml
-  line: 1
+- name: arb_segment
+  kind: function
+  file: crates/cuora-core/tests/props.rs
+  line: 15
   module: cuora-core
 - name: as_str
   kind: function
@@ -170,44 +190,25 @@ api:
 - name: as_str
   kind: function
   file: crates/cuora-core/src/op.rs
-  line: 75
+  line: 72
   module: cuora-core
-- name: cf_tokens_and_private_refs_parse
+- name: cache_scope_parses_all_forms
   kind: function
   file: crates/cuora-core/src/config.rs
-  line: 385
+  line: 539
   module: cuora-core
-- name: config
-  kind: module
-  file: crates/cuora-core/src/lib.rs
-  line: 8
-  module: cuora-core
-- name: conversions_and_display
-  kind: function
-  file: crates/cuora-core/src/actor.rs
-  line: 136
-  module: cuora-core
-- name: default_deploy_kind
+- name: caches
   kind: function
   file: crates/cuora-core/src/config.rs
-  line: 175
+  line: 195
   module: cuora-core
-- name: default_kind
-  kind: function
-  file: crates/cuora-core/src/config.rs
-  line: 143
-  module: cuora-core
-- name: deploy_config
-  kind: function
-  file: crates/cuora-core/src/config.rs
-  line: 95
-  module: cuora-core
-api_omitted: 86
+api_omitted: 97
 deps:
 - schemars
 - serde
 - thiserror
 - zeroize
+- proptest
 - serde_json
 - toml
 - zeroize
@@ -228,6 +229,7 @@ verify:
 - crates/cuora-core/src/op.rs
 - crates/cuora-core/src/refs.rs
 - crates/cuora-core/src/secret.rs
+- crates/cuora-core/tests/props.rs
 provenance:
   files:
   - crates/cuora-core/Cargo.toml
@@ -238,15 +240,17 @@ provenance:
   - crates/cuora-core/src/op.rs
   - crates/cuora-core/src/refs.rs
   - crates/cuora-core/src/secret.rs
+  - crates/cuora-core/tests/props.rs
   hashes:
-  - 6dcc3b1198677927e82d542e41e26fab610796b1
-  - 969e8e3eff5b1be6a77238a69761993de6b31ea2
-  - 1ff04e1b411a491e41cf6b13f940525d7c8525d6
-  - e9ff49af7daccbb09ceb392ed413fdef16bd7b8b
-  - d5e558a9cf69e895f27042fcc542fdfce73a1cd0
-  - 55d8238f2ce4c4d16649d30958e24e4c4578d2d0
-  - 6b9cf52a6e8575ab8bdbd2a18219f4d41a4d0830
+  - 84f4d48465d7a00aa61152d1261563f5e806c35b
+  - 10a8c37eb30e1b554fb21b71bc4529d32895fa5f
+  - 1b71f484768d2e7bfe74ea6892ee8d1e44b17156
+  - e128b0752926f092b4d586ec8c6b5fd64701ec38
+  - 9521aa11dffb522190d8373f57a97727d70cfa47
+  - 83cfa5821b8573a85ece839b54b0c0f0530607a1
+  - 503a1aeebd4fe9d3be7bf459680f721a63375006
   - 508fc79aa21a29585701837e6e0377f6775cf153
-  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
-  generated_at: '1793684916'
+  - 295a21de8fe551c31d810f5b88c1af4c396f61bb
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
   generator: kuda-template/0.1.2

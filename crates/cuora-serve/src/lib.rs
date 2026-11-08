@@ -6,7 +6,7 @@
 //! span export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set) — three
 //! separate fds, so a reply never rides the event stream
 //! and an event never answers a request. A thin front over
-//! `cuora-ops` like `cuora-tui` — every vault access goes through
+//! `cuora-ops` — every vault access goes through
 //! [`Ops`], so env-pin resolution, `[envs]` routing, and the
 //! audit events are the same ones the CLI emits.
 //!
@@ -26,7 +26,7 @@
 //! metadata and `check` probes vaults including scoped-token
 //! gets, so they are materializations too), `manifest` (this
 //! protocol's self-description), and `shutdown` (clean exit).
-//! `run`/`env`/`deploy`/`init`/`ui` stay single-shot CLI verbs —
+//! `run`/`env`/`deploy`/`init` stay single-shot CLI verbs —
 //! serve covers the port peregrin needs in-process.
 //!
 //! Hard bounds on the wire: a request line over
@@ -814,7 +814,7 @@ fn manifest() -> serde_json::Value {
             "guardrails still apply (advisory); cuora://<env>/… pins still resolve",
             "manifest/shutdown are protocol meta-ops — no guardrail or PDP consult; gating session lifecycle is the embedder's spawn decision",
             "every consult spawns a fresh exec; list decrypts each record and check probes every vault — batch reads rather than looping list",
-            "run/env/deploy/init/ui stay single-shot CLI verbs — serve covers the Vault port peregrin embeds",
+            "run/env/deploy/init stay single-shot CLI verbs — serve covers the Vault port peregrin embeds",
         ],
     })
 }

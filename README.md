@@ -54,7 +54,6 @@ values never enter agent context.
 | `cuora serve` | ndjson IPC mode for orchestrators — the Vault port over stdin/stdout, optional `[serve.pdp]` policy consult |
 | `cuora deploy <ref>` | Push a secret to a write-only sink (e.g. CF Secrets Store) |
 | `cuora migrate` | Vault migrations — e.g. `--private-refs` re-keys cf rows to HMAC storage keys |
-| `cuora ui` | Interactive vault browser (TUI) |
 | `cuora manifest` / `cuora schema` | Machine-readable capabilities / `cuora.toml` JSON Schema |
 
 `--json` works on every verb (stable shapes in `cuora manifest`);
@@ -62,6 +61,12 @@ values never enter agent context.
 on stderr: `{ts, actor, op, rref?, env, outcome}` — one per
 materialization, `denied` on guardrail refusal, `error` on
 failure.
+
+Interactive browsing lives in pavo, not a cuora TUI:
+`tamias-driver-cuora` (built from `crates/cuora-driver`) answers
+pavo's `manifest`/`views`/`view`/`query` wire with vault
+*metadata* views — vaults, envs, refs, per-ref detail, `check` —
+and never renders secret values (see the crate README).
 
 ## Config — `cuora.toml`
 
@@ -125,8 +130,8 @@ ref, different backend per env.
   and an `cuora.<op>` OTLP span when `OTEL_EXPORTER_OTLP_ENDPOINT`
   is set: actor, ref, env, outcome, timestamp
 - **surfaces for every actor** — `.agents/skills/` teaches agents
-  the verbs, `--json`/`manifest`/`schema` for machines, ratatui
-  `cuora ui` for humans
+  the verbs, `--json`/`manifest`/`schema` for machines, pavo's
+  `tamias-driver-cuora` views for humans
 
 ## Position in the stack
 

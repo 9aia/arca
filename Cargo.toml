@@ -5,6 +5,7 @@ members = [
     "crates/cuora-config",
     "crates/cuora-config-toml",
     "crates/cuora-core",
+    "crates/cuora-driver",
     "crates/cuora-deploy",
     "crates/cuora-deploy-cf",
     "crates/cuora-identity",
@@ -15,7 +16,6 @@ members = [
     "crates/cuora-serve",
     "crates/cuora-shell",
     "crates/cuora-testkit",
-    "crates/cuora-tui",
     "crates/cuora-vault",
     "crates/cuora-vault-age",
     "crates/cuora-vault-cached",
@@ -42,6 +42,7 @@ cuora-config-toml = { path = "crates/cuora-config-toml", version = "0.1.0" }
 cuora-core = { path = "crates/cuora-core", version = "0.1.0" }
 cuora-deploy = { path = "crates/cuora-deploy", version = "0.1.0" }
 cuora-deploy-cf = { path = "crates/cuora-deploy-cf", version = "0.1.0" }
+cuora-driver = { path = "crates/cuora-driver", version = "0.1.0" }
 cuora-identity = { path = "crates/cuora-identity", version = "0.1.0" }
 cuora-identity-file = { path = "crates/cuora-identity-file", version = "0.1.0" }
 cuora-identity-keyring = { path = "crates/cuora-identity-keyring", version = "0.1.0" }
@@ -50,7 +51,6 @@ cuora-ops = { path = "crates/cuora-ops", version = "0.1.0" }
 cuora-serve = { path = "crates/cuora-serve", version = "0.1.0" }
 cuora-shell = { path = "crates/cuora-shell", version = "0.1.0" }
 cuora-testkit = { path = "crates/cuora-testkit", version = "0.1.0" }
-cuora-tui = { path = "crates/cuora-tui", version = "0.1.0" }
 cuora-vault = { path = "crates/cuora-vault", version = "0.1.0" }
 cuora-vault-age = { path = "crates/cuora-vault-age", version = "0.1.0" }
 cuora-vault-cached = { path = "crates/cuora-vault-cached", version = "0.1.0" }
@@ -89,8 +89,6 @@ apple-native-keyring-store = { version = "1", features = ["keychain"] }
 windows-native-keyring-store = "1"
 hmac = "0.12"
 sha2 = "0.10"
-ratatui = "0.30"
-crossterm = "0.29"
 clap-markdown = "0.1.5"
 
 [workspace.lints.rust]

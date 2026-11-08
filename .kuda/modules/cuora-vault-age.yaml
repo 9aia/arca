@@ -40,57 +40,67 @@ api:
 - name: a_held_lock_fails_the_write_and_a_stale_one_is_reclaimed
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 746
+  line: 840
   module: cuora-vault-age
 - name: a_mutate_reread_surfaces_a_broken_on_disk_vault
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 768
+  line: 862
   module: cuora-vault-age
 - name: a_parentless_vault_path_skips_dir_setup
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 702
+  line: 796
+  module: cuora-vault-age
+- name: a_tmp_symlink_is_refused_and_stale_tmp_is_reclaimed
+  kind: function
+  file: crates/cuora-vault-age/src/lib.rs
+  line: 882
   module: cuora-vault-age
 - name: acquire
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
   line: 95
   module: cuora-vault-age
+- name: ciphertext_hides_values
+  kind: function
+  file: crates/cuora-vault-age/src/lib.rs
+  line: 563
+  module: cuora-vault-age
+- name: contains_subslice
+  kind: function
+  file: crates/cuora-vault-age/tests/props.rs
+  line: 141
+  module: cuora-vault-age
 - name: cuora-vault-age
   kind: module
   file: crates/cuora-vault-age/Cargo.toml
   line: 1
   module: cuora-vault-age
-- name: ciphertext_hides_values
-  kind: function
-  file: crates/cuora-vault-age/src/lib.rs
-  line: 469
-  module: cuora-vault-age
 - name: data_home
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 443
+  line: 502
   module: cuora-vault-age
 - name: decrypt
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 232
+  line: 247
   module: cuora-vault-age
 - name: decrypt_reports_every_failure_mode
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 589
+  line: 683
   module: cuora-vault-age
 - name: default_vault_path
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 180
+  line: 182
   module: cuora-vault-age
 - name: default_vault_path_follows_xdg_then_home
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 508
+  line: 602
   module: cuora-vault-age
 - name: drop
   kind: function
@@ -100,22 +110,27 @@ api:
 - name: encrypt_payload
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 264
+  line: 279
   module: cuora-vault-age
 - name: encrypt_to
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 489
+  line: 583
   module: cuora-vault-age
 - name: entries_without_version_fields_default_to_one
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 621
+  line: 715
+  module: cuora-vault-age
+- name: fresh_vault
+  kind: function
+  file: crates/cuora-vault-age/tests/props.rs
+  line: 14
   module: cuora-vault-age
 - name: get
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 360
+  line: 419
   module: cuora-vault-age
 - name: held_is_stale
   kind: function
@@ -125,22 +140,27 @@ api:
 - name: home
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 437
+  line: 496
   module: cuora-vault-age
 - name: list
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 403
+  line: 462
   module: cuora-vault-age
 - name: list_rejects_a_stored_key_that_isnt_a_ref
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 787
+  line: 949
+  module: cuora-vault-age
+- name: loose_vault_permissions_warn_but_still_work
+  kind: function
+  file: crates/cuora-vault-age/src/lib.rs
+  line: 919
   module: cuora-vault-age
 - name: mutate
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 325
+  line: 340
   module: cuora-vault-age
 - name: one
   kind: function
@@ -150,63 +170,44 @@ api:
 - name: open
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 189
+  line: 197
   module: cuora-vault-age
 - name: open_or_init
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 217
+  line: 232
   module: cuora-vault-age
 - name: open_or_init_bootstraps_then_opens
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 568
+  line: 662
+  module: cuora-vault-age
+- name: open_tmp_exclusive
+  kind: function
+  file: crates/cuora-vault-age/src/lib.rs
+  line: 385
   module: cuora-vault-age
 - name: open_validates_recipients_and_vault_reads
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 547
+  line: 641
   module: cuora-vault-age
-- name: poisoned_state_is_an_error_not_a_panic
+- name: perm_note
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 640
+  line: 514
   module: cuora-vault-age
-- name: public_recipient
+- name: perm_note
   kind: function
   file: crates/cuora-vault-age/src/lib.rs
-  line: 228
+  line: 531
   module: cuora-vault-age
-- name: put
-  kind: function
-  file: crates/cuora-vault-age/src/lib.rs
-  line: 368
-  module: cuora-vault-age
-- name: read_disk
-  kind: function
-  file: crates/cuora-vault-age/src/lib.rs
-  line: 312
-  module: cuora-vault-age
-- name: record
-  kind: function
-  file: crates/cuora-vault-age/src/lib.rs
-  line: 159
-  module: cuora-vault-age
-- name: rm
-  kind: function
-  file: crates/cuora-vault-age/src/lib.rs
-  line: 392
-  module: cuora-vault-age
-- name: rotate
-  kind: function
-  file: crates/cuora-vault-age/src/lib.rs
-  line: 418
-  module: cuora-vault-age
-api_omitted: 11
+api_omitted: 21
 deps:
 - age
 - cuora-core
 - cuora-identity
+- cuora-notice
 - cuora-vault
 - serde
 - serde_json
@@ -214,12 +215,13 @@ deps:
 - zeroize
 - cuora-identity-file
 - cuora-testkit
+- proptest
 - temp-env
 - tempfile
 - age
 - cuora-core
-- cuora-identity
 - cuora-vault
+- cuora-identity
 - serde
 - time
 - zeroize
@@ -228,15 +230,18 @@ verify:
 - crates/cuora-vault-age/Cargo.toml
 - crates/cuora-vault-age/src/lib.rs
 - crates/cuora-vault-age/tests/conformance.rs
+- crates/cuora-vault-age/tests/props.rs
 provenance:
   files:
   - crates/cuora-vault-age/Cargo.toml
   - crates/cuora-vault-age/src/lib.rs
   - crates/cuora-vault-age/tests/conformance.rs
+  - crates/cuora-vault-age/tests/props.rs
   hashes:
-  - 96fdab5840dab381baa9f5260b2023f08fc7e3f5
-  - edefcd74e5b2619616470b609912f5f4ef19bb31
-  - 66339b7c1daef157139bc5db279219daa893f95f
-  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
-  generated_at: '1793684916'
+  - 07d95ed7761181c7545591538f08d907aaa4a523
+  - daee4ba56f55e1183a8f00515df44138c7e95b2e
+  - 7ea838bc8753375d9d9f2865822e1d3a7b01b685
+  - 75b6e73f4b1a0eca4fcf5fa6c8398cb6c1bd1b58
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
   generator: kuda-template/0.1.2

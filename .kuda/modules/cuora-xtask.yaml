@@ -12,15 +12,10 @@ api:
   file: xtask/tests/verbs.rs
   line: 42
   module: cuora-xtask
-- name: cuora-xtask
-  kind: module
-  file: xtask/Cargo.toml
-  line: 1
-  module: cuora-xtask
 - name: check
   kind: function
   file: xtask/src/main.rs
-  line: 57
+  line: 61
   module: cuora-xtask
 - name: check_runs_fmt_and_clippy
   kind: function
@@ -35,47 +30,52 @@ api:
 - name: coverage
   kind: function
   file: xtask/src/main.rs
-  line: 86
+  line: 113
   module: cuora-xtask
 - name: coverage_needs_llvm_cov
   kind: function
   file: xtask/tests/verbs.rs
-  line: 83
+  line: 108
+  module: cuora-xtask
+- name: cuora-xtask
+  kind: module
+  file: xtask/Cargo.toml
+  line: 1
   module: cuora-xtask
 - name: have
   kind: function
   file: xtask/src/main.rs
-  line: 37
+  line: 41
   module: cuora-xtask
 - name: have_cargo_sub
   kind: function
   file: xtask/src/main.rs
-  line: 47
+  line: 51
   module: cuora-xtask
 - name: install
   kind: function
   file: xtask/src/main.rs
-  line: 106
+  line: 133
   module: cuora-xtask
 - name: install_delegates_to_cargo_install
   kind: function
   file: xtask/tests/verbs.rs
-  line: 108
+  line: 133
   module: cuora-xtask
 - name: main
   kind: function
   file: xtask/src/main.rs
-  line: 126
+  line: 153
   module: cuora-xtask
 - name: run
   kind: function
   file: xtask/src/main.rs
-  line: 13
+  line: 17
   module: cuora-xtask
 - name: run_in
   kind: function
   file: xtask/src/main.rs
-  line: 24
+  line: 28
   module: cuora-xtask
 - name: scratch
   kind: function
@@ -85,12 +85,12 @@ api:
 - name: site
   kind: function
   file: xtask/src/main.rs
-  line: 112
+  line: 139
   module: cuora-xtask
 - name: site_needs_the_docs_worktree
   kind: function
   file: xtask/tests/verbs.rs
-  line: 116
+  line: 141
   module: cuora-xtask
 - name: stub
   kind: function
@@ -100,7 +100,7 @@ api:
 - name: test
   kind: function
   file: xtask/src/main.rs
-  line: 76
+  line: 80
   module: cuora-xtask
 - name: test_prefers_nextest_then_falls_back
   kind: function
@@ -110,7 +110,17 @@ api:
 - name: unknown_and_empty_verbs_print_usage
   kind: function
   file: xtask/tests/verbs.rs
-  line: 137
+  line: 162
+  module: cuora-xtask
+- name: worker
+  kind: function
+  file: xtask/src/main.rs
+  line: 103
+  module: cuora-xtask
+- name: worker_and_test_wire_the_bun_smoke_test
+  kind: function
+  file: xtask/tests/verbs.rs
+  line: 83
   module: cuora-xtask
 - name: xtask
   kind: function
@@ -129,9 +139,9 @@ provenance:
   - xtask/src/main.rs
   - xtask/tests/verbs.rs
   hashes:
-  - 9c55ec755d27dd29ba8bd214918b0213f0283c14
-  - fad3f6f344ce90eca5dbd73943c95eb4f4d9e238
-  - 18eeec9a39ef81f1b7b90a85ca743eecd1835eca
-  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
-  generated_at: '1793684916'
+  - 1b2c254cc2d5e144e6ee3eedfdcbb94db8a3dedb
+  - 2e27741735f77c7528a145c2dd4d808ef451d4d4
+  - 4e95d53c693dd9301eef9183eb83feac9501a8d8
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
   generator: kuda-template/0.1.2

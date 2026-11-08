@@ -5,7 +5,7 @@ api:
 - name: AUTH
   kind: const
   file: crates/cuora-testkit/src/mocks.rs
-  line: 402
+  line: 422
   module: cuora-testkit
 - name: FAKE
   kind: const
@@ -27,6 +27,11 @@ api:
   file: crates/cuora-testkit/src/httpmock.rs
   line: 55
   module: cuora-testkit
+- name: SEQ
+  kind: const
+  file: crates/cuora-testkit/src/mocks.rs
+  line: 429
+  module: cuora-testkit
 - name: ScopedToken
   kind: type
   file: crates/cuora-testkit/src/mocks.rs
@@ -42,35 +47,35 @@ api:
   file: crates/cuora-testkit/src/httpmock.rs
   line: 287
   module: cuora-testkit
-- name: cuora-testkit
-  kind: module
-  file: crates/cuora-testkit/Cargo.toml
-  line: 1
-  module: cuora-testkit
 - name: authenticate
   kind: function
   file: crates/cuora-testkit/src/mocks.rs
-  line: 122
+  line: 125
   module: cuora-testkit
 - name: authenticate_scores_a_valid_sig_and_denies_a_bad_one
   kind: function
   file: crates/cuora-testkit/src/mocks.rs
-  line: 444
+  line: 468
   module: cuora-testkit
 - name: cf_secrets_store
   kind: function
   file: crates/cuora-testkit/src/mocks.rs
-  line: 294
+  line: 314
   module: cuora-testkit
 - name: cf_store_handles_missing_ids_and_odd_methods
   kind: function
   file: crates/cuora-testkit/src/mocks.rs
-  line: 547
+  line: 623
   module: cuora-testkit
 - name: ct_eq
   kind: function
   file: crates/cuora-testkit/src/mocks.rs
   line: 85
+  module: cuora-testkit
+- name: cuora-testkit
+  kind: module
+  file: crates/cuora-testkit/Cargo.toml
+  line: 1
   module: cuora-testkit
 - name: drop
   kind: function
@@ -100,7 +105,7 @@ api:
 - name: exchange
   kind: function
   file: crates/cuora-testkit/src/mocks.rs
-  line: 392
+  line: 412
   module: cuora-testkit
 - name: find_subslice
   kind: function
@@ -125,7 +130,7 @@ api:
 - name: hmac_auth
   kind: function
   file: crates/cuora-testkit/src/mocks.rs
-  line: 407
+  line: 427
   module: cuora-testkit
 - name: hmac_sha256
   kind: function
@@ -197,12 +202,7 @@ api:
   file: crates/cuora-testkit/src/lib.rs
   line: 139
   module: cuora-testkit
-- name: row_json
-  kind: function
-  file: crates/cuora-testkit/src/mocks.rs
-  line: 42
-  module: cuora-testkit
-api_omitted: 17
+api_omitted: 18
 deps:
 - cuora-core
 - cuora-vault
@@ -229,10 +229,10 @@ provenance:
   - crates/cuora-testkit/src/lib.rs
   - crates/cuora-testkit/src/mocks.rs
   hashes:
-  - 714ef5eddf2c1868b02fd1eac622b2f2c3737911
+  - be58afb0cde0c39560e013b419a0dfdc476e21b2
   - b1ac3e5154ce8e547fccb50864aff2bedcedd285
-  - be8cf704ce5f24e809dba21e2fca111b86243799
-  - ba97d21f3cea1fbe69f65b3359cd66046fb0b66d
-  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
-  generated_at: '1793684916'
+  - ef584122b1264eed3b674384996a9d57307a7726
+  - 725afcb81a08095e7462d7cc44aa2e10bfb6c0f3
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
   generator: kuda-template/0.1.2

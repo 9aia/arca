@@ -1,0 +1,64 @@
+name: cuora-notice
+path: crates/cuora-notice/Cargo.toml
+purpose: Process-wide UX notices — cuora:-prefixed stderr notes, mutable for terminal-owning surfaces
+api:
+- name: STATE
+  kind: const
+  file: crates/cuora-notice/src/lib.rs
+  line: 18
+  module: cuora-notice
+- name: State
+  kind: type
+  file: crates/cuora-notice/src/lib.rs
+  line: 13
+  module: cuora-notice
+- name: cuora-notice
+  kind: module
+  file: crates/cuora-notice/Cargo.toml
+  line: 1
+  module: cuora-notice
+- name: lock
+  kind: function
+  file: crates/cuora-notice/src/lib.rs
+  line: 23
+  module: cuora-notice
+- name: mute
+  kind: function
+  file: crates/cuora-notice/src/lib.rs
+  line: 42
+  module: cuora-notice
+- name: muted_notes_replay_in_order_on_unmute
+  kind: function
+  file: crates/cuora-notice/src/lib.rs
+  line: 65
+  module: cuora-notice
+- name: note
+  kind: function
+  file: crates/cuora-notice/src/lib.rs
+  line: 29
+  module: cuora-notice
+- name: tests
+  kind: module
+  file: crates/cuora-notice/src/lib.rs
+  line: 61
+  module: cuora-notice
+- name: unmute
+  kind: function
+  file: crates/cuora-notice/src/lib.rs
+  line: 48
+  module: cuora-notice
+deps: []
+notes: ''
+verify:
+- crates/cuora-notice/Cargo.toml
+- crates/cuora-notice/src/lib.rs
+provenance:
+  files:
+  - crates/cuora-notice/Cargo.toml
+  - crates/cuora-notice/src/lib.rs
+  hashes:
+  - ca24f91ffa63a58ab8099943aba4d2231cf69d74
+  - 4d362b6617542bd3d48485f490df327cee8033ca
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
+  generator: kuda-template/0.1.2

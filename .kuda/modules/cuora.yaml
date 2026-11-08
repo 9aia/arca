@@ -5,12 +5,12 @@ api:
 - name: Cli
   kind: type
   file: crates/cuora-cli/src/main.rs
-  line: 30
+  line: 31
   module: cuora
 - name: Cmd
   kind: type
   file: crates/cuora-cli/src/main.rs
-  line: 56
+  line: 57
   module: cuora
 - name: FAKE
   kind: const
@@ -45,7 +45,82 @@ api:
 - name: a_deleted_cwd_is_a_clean_error_not_a_panic
   kind: function
   file: crates/cuora-cli/tests/edges.rs
-  line: 324
+  line: 316
+  module: cuora
+- name: audit_fallback
+  kind: function
+  file: crates/cuora-cli/src/main.rs
+  line: 286
+  module: cuora
+- name: audit_fallback_covers_every_actor_and_ref_arm
+  kind: function
+  file: crates/cuora-cli/tests/edges.rs
+  line: 447
+  module: cuora
+- name: bad_ref_args_fail_before_touching_the_vault
+  kind: function
+  file: crates/cuora-cli/tests/edges.rs
+  line: 153
+  module: cuora
+- name: cf_resolution_without_an_explicit_file_notes_the_missing_keyring
+  kind: function
+  file: crates/cuora-cli/tests/cloud.rs
+  line: 310
+  module: cuora
+- name: cf_vault_roundtrips_through_the_wire
+  kind: function
+  file: crates/cuora-cli/tests/cloud.rs
+  line: 82
+  module: cuora
+- name: check_prints_findings_for_humans
+  kind: function
+  file: crates/cuora-cli/tests/edges.rs
+  line: 386
+  module: cuora
+- name: check_reports_findings_and_exit_codes
+  kind: function
+  file: crates/cuora-cli/tests/verbs.rs
+  line: 332
+  module: cuora
+- name: check_reports_unreachable_cf_vault_not_panic
+  kind: function
+  file: crates/cuora-cli/tests/cloud.rs
+  line: 282
+  module: cuora
+- name: cmd_op
+  kind: function
+  file: crates/cuora-cli/src/main.rs
+  line: 236
+  module: cuora
+- name: cmd_op_maps_every_variant
+  kind: function
+  file: crates/cuora-cli/src/main.rs
+  line: 895
+  module: cuora
+- name: cmd_rref
+  kind: function
+  file: crates/cuora-cli/src/main.rs
+  line: 260
+  module: cuora
+- name: config
+  kind: function
+  file: crates/cuora-cli/tests/cloud.rs
+  line: 63
+  module: cuora
+- name: config
+  kind: function
+  file: crates/cuora-cli/tests/edges.rs
+  line: 89
+  module: cuora
+- name: config
+  kind: function
+  file: crates/cuora-cli/tests/verbs.rs
+  line: 70
+  module: cuora
+- name: config_named
+  kind: function
+  file: crates/cuora-cli/tests/verbs.rs
+  line: 63
   module: cuora
 - name: cuora
   kind: module
@@ -77,100 +152,30 @@ api:
   file: crates/cuora-cli/tests/verbs.rs
   line: 13
   module: cuora
-- name: audit_fallback
-  kind: function
-  file: crates/cuora-cli/src/main.rs
-  line: 280
-  module: cuora
-- name: audit_fallback_covers_every_actor_and_ref_arm
-  kind: function
-  file: crates/cuora-cli/tests/edges.rs
-  line: 476
-  module: cuora
-- name: bad_ref_args_fail_before_touching_the_vault
-  kind: function
-  file: crates/cuora-cli/tests/edges.rs
-  line: 161
-  module: cuora
-- name: cf_resolution_without_an_explicit_file_notes_the_missing_keyring
-  kind: function
-  file: crates/cuora-cli/tests/cloud.rs
-  line: 305
-  module: cuora
-- name: cf_vault_roundtrips_through_the_wire
-  kind: function
-  file: crates/cuora-cli/tests/cloud.rs
-  line: 82
-  module: cuora
-- name: check_prints_findings_for_humans
-  kind: function
-  file: crates/cuora-cli/tests/edges.rs
-  line: 394
-  module: cuora
-- name: check_reports_findings_and_exit_codes
-  kind: function
-  file: crates/cuora-cli/tests/verbs.rs
-  line: 332
-  module: cuora
-- name: check_reports_unreachable_cf_vault_not_panic
-  kind: function
-  file: crates/cuora-cli/tests/cloud.rs
-  line: 277
-  module: cuora
-- name: cmd_op
-  kind: function
-  file: crates/cuora-cli/src/main.rs
-  line: 229
-  module: cuora
-- name: cmd_op_maps_every_variant
-  kind: function
-  file: crates/cuora-cli/src/main.rs
-  line: 887
-  module: cuora
-- name: cmd_rref
-  kind: function
-  file: crates/cuora-cli/src/main.rs
-  line: 254
-  module: cuora
-- name: config
-  kind: function
-  file: crates/cuora-cli/tests/cloud.rs
-  line: 63
-  module: cuora
-- name: config
-  kind: function
-  file: crates/cuora-cli/tests/edges.rs
-  line: 100
-  module: cuora
-- name: config
-  kind: function
-  file: crates/cuora-cli/tests/verbs.rs
-  line: 70
-  module: cuora
-- name: config_named
-  kind: function
-  file: crates/cuora-cli/tests/verbs.rs
-  line: 63
-  module: cuora
 - name: deploy_prints_created_then_updated
   kind: function
   file: crates/cuora-cli/tests/edges.rs
-  line: 429
+  line: 421
   module: cuora
 - name: deploy_pushes_the_value_to_the_sink
   kind: function
   file: crates/cuora-cli/tests/cloud.rs
-  line: 195
+  line: 200
   module: cuora
 - name: deploy_requires_an_unambiguous_target
   kind: function
   file: crates/cuora-cli/tests/edges.rs
-  line: 587
+  line: 558
+  module: cuora
+- name: dispatch
+  kind: function
+  file: crates/cuora-cli/src/main.rs
+  line: 183
   module: cuora
 - name: env_and_run_reject_invalid_var_names
   kind: function
   file: crates/cuora-cli/tests/edges.rs
-  line: 559
+  line: 530
   module: cuora
 - name: env_output_is_shell_quote_safe
   kind: function
@@ -185,35 +190,29 @@ api:
 - name: env_writes_fail_cleanly_on_a_full_device
   kind: function
   file: crates/cuora-cli/tests/edges.rs
-  line: 304
+  line: 296
   module: cuora
 - name: fail
   kind: function
   file: crates/cuora-cli/src/main.rs
-  line: 872
+  line: 880
   module: cuora
 - name: guardrails_deny_ops_advisedly
   kind: function
   file: crates/cuora-cli/tests/verbs.rs
   line: 100
   module: cuora
-- name: happy_path
-  kind: function
-  file: crates/cuora-cli/tests/smoke.rs
-  line: 58
-  module: cuora
-api_omitted: 60
+api_omitted: 59
 deps:
+- clap
+- clap-markdown
 - cuora-config
 - cuora-config-toml
 - cuora-core
 - cuora-ops
 - cuora-serve
 - cuora-shell
-- cuora-tui
 - cuora-vault
-- clap
-- clap-markdown
 - rpassword
 - schemars
 - serde_json
@@ -222,9 +221,9 @@ deps:
 - temp-env
 - tempfile
 - cuora-testkit
+- clap
 - cuora-core
 - cuora-ops
-- clap
 notes: ''
 verify:
 - .agents/skills/skill-creator/scripts/__init__.py
@@ -287,13 +286,13 @@ provenance:
   - e58c70bea39d5b252a1e819f242bbdcdf20e8b87
   - 30a263d674ef19de11c756d6f7537f91a421909e
   - 51b6a07dd57174197a937034b7eecebd5768ff8a
-  - 65f4dae5d073ddbbf1475e1be2024fb99919eb84
-  - 4f6c201493139ae473e54824ef6afa0a9572e431
-  - 372c4ef098f044e0b3e2bb5285039c541a8a5b36
-  - 25e6f9d7ecd3f9a5d18e368995260653cd6c195e
-  - 16894c768d3ce800d9f64c0d97e6766e72d9328d
-  - e3f4c1be3f3883f8f851baf55fed8a6bfce330f0
-  - 716a30714b1f1cdaa7900e4abf70d7553d57c147
-  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
-  generated_at: '1793684916'
+  - 7e21cb7b3d2e40866ff8e170c4db81fb53a7a01b
+  - 9d8390cd3ffe01c1314423787399eac35a139ccf
+  - 60827c9fea48c910e1e19e1a9f47b525a4e34d36
+  - 15ccebcfeda4b45ea78951f99b6604965222e89f
+  - de3d531bca3cdd58d77faa57e567447ec4062814
+  - 0ae7fc408e5140a0aa020c63b17c0cb5be52bf64
+  - ace7650c549520956fd4fc05a1136b7018cd2e97
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
   generator: kuda-template/0.1.2

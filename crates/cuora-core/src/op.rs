@@ -34,8 +34,6 @@ pub enum Op {
     Deploy,
     /// Rewrite stored records for a wire/config upgrade.
     Migrate,
-    /// Interactive TUI.
-    Ui,
     /// ndjson verb dispatch (later ADR).
     Serve,
     /// Agent self-discovery.
@@ -46,7 +44,7 @@ pub enum Op {
 
 impl Op {
     /// All ops, in declaration order.
-    pub const ALL: [Op; 15] = [
+    pub const ALL: [Op; 14] = [
         Op::Init,
         Op::Put,
         Op::Get,
@@ -58,7 +56,6 @@ impl Op {
         Op::Check,
         Op::Deploy,
         Op::Migrate,
-        Op::Ui,
         Op::Serve,
         Op::Manifest,
         Op::Schema,
@@ -85,7 +82,6 @@ impl Op {
             Op::Check => "check",
             Op::Deploy => "deploy",
             Op::Migrate => "migrate",
-            Op::Ui => "ui",
             Op::Serve => "serve",
             Op::Manifest => "manifest",
             Op::Schema => "schema",

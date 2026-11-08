@@ -1,0 +1,28 @@
+[package]
+name = "cuora-driver"
+description = "tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["cuora", "secrets", "pavo", "driver"]
+categories = ["development-tools"]
+
+[[bin]]
+name = "tamias-driver-cuora"
+path = "src/main.rs"
+
+[dependencies]
+cuora-core.workspace = true
+cuora-ops.workspace = true
+cuora-vault.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+# The public wire contract — sibling-checkout path dep until
+# pavo-protocol is published (the whole 9aia org lives side-by-side
+# under one parent dir; `version` is the crates.io fallback).
+pavo-protocol = { path = "../../../pavo/crates/pavo-protocol", version = "0.1.0" }
+
+[lints]
+workspace = true

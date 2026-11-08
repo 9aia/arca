@@ -72,9 +72,9 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/cuora-deploy-cf` | Deploy impl — CF account Secrets Store via API v4 |
 | `crates/cuora-shell` | `bash -c <cmd>` + env injection — the `cuora run` path |
 | `crates/cuora-ops` | Ops I/O — vault open/save, ref resolution, audit events, verb plumbing |
-| `crates/cuora-notice` | Process-wide `cuora:` stderr notices — muted/replayed so `cuora ui`'s alt screen stays clean |
+| `crates/cuora-notice` | Process-wide `cuora:` stderr notices — muted/replayed for terminal-owning surfaces |
 | `crates/cuora-testkit` | Vault conformance suite — every impl passes the same contract tests |
-| `crates/cuora-tui` | Interactive vault TUI (ratatui) — thin front-end over cuora-ops; `cuora ui`, feature-gated |
+| `crates/cuora-driver` | `tamias-driver-cuora` — pavo view driver (read-only vault *metadata*; never renders values); replaced the TUI |
 | `crates/cuora-serve` | ndjson IPC surface — thin front-end over cuora-ops; `cuora serve`, the `[serve.pdp]` exec consult (ADR-0003) |
 | `crates/cuora-cli` | The `cuora` binary — clap, `--json` everywhere, `manifest`/`schema` |
 | `xtask` (pkg `cuora-xtask`) | check / test / worker / coverage / install / site |
@@ -144,8 +144,8 @@ commit their contents to `main`.
   value; explicit `.expose()` is the only way out.
 - Every materialization is auditable: actor, ref, env, outcome,
   timestamp — ndjson on stderr + OTLP span export when
-  `OTEL_EXPORTER_OTLP_ENDPOINT` is configured; `cuora ui` mutes
-  live stderr for the session and replays on exit.
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is configured; terminal-owning
+  surfaces can mute live stderr and replay on exit.
 - Secrets never enter via CLI args (args land in shell history and
   `/proc`) — stdin, prompt, or keychain only.
 - Agents never hand-edit `project/` when a `myco` verb exists.

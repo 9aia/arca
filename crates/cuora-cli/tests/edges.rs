@@ -79,17 +79,6 @@ fn run_pty_prelude(home: &Path, args: &[&str], input: &[u8], prelude: &str) -> O
     child.wait_with_output().unwrap()
 }
 
-/// Same, but fires SIGWINCH at the child once the TUI is up —
-/// crossterm turns it into an `Event::Resize`, which exercises the
-/// event loop's non-Key arm, and the delayed input also leaves a
-/// few idle `poll` ticks on the clock.
-fn run_pty_winch(home: &Path, args: &[&str], input: &[u8]) -> Output {
-    // `$$` inside the parens is the `sh -c` pid — the same pid the
-    // `exec` hands to cuora. Two pokes for startup-timing slack.
-    let prelude = "(sleep 1; kill -WINCH $$; sleep 0.4; kill -WINCH $$) & ";
-    run_pty_prelude(home, args, input, prelude)
-}
-
 fn stdout(o: &Output) -> String {
     String::from_utf8_lossy(&o.stdout).into_owned()
 }
@@ -452,27 +441,6 @@ fn deploy_prints_created_then_updated() {
         assert!(o.status.success());
         assert!(stderr(&o).contains("updated"), "{}", stderr(&o));
     });
-}
-
-#[test]
-fn ui_declines_a_non_tty_and_runs_on_a_pty() {
-    let home = tempfile::tempdir().unwrap();
-    let home = home.path();
-    init(home);
-    run_stdin(home, &["put", "cuora://x/y"], FAKE.as_bytes());
-    // piped stdout → the TUI declines up front
-    let o = run(home, &["ui"]);
-    assert!(!o.status.success());
-    assert!(stderr(&o).contains("terminal"), "{}", stderr(&o));
-    // a pty → the browser opens and 'q' quits clean (pty merges
-    // stdout+stderr — the audit event lands in script's stdout).
-    // 'x' first so a key event *isn't* consumed by the quit arm —
-    // covers the loop's no-op-key iteration before 'q' breaks it;
-    // the winch adds a Resize event for the non-Key arm.
-    let o = run_pty_winch(home, &["ui"], b"xq");
-    assert!(o.status.success(), "{}", stderr(&o));
-    let all = format!("{}{}", stdout(&o), stderr(&o));
-    assert!(all.contains("\"op\":\"ui\""), "{all}");
 }
 
 #[test]

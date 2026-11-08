@@ -1,0 +1,245 @@
+name: cuora-vault-cached
+path: crates/cuora-vault-cached/Cargo.toml
+purpose: 'Composite vault impl: read-through age-encrypted local cache in front of any backend (P-007)'
+api:
+- name: CachePolicy
+  kind: type
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 57
+  module: cuora-vault-cached
+- name: CacheRow
+  kind: type
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 94
+  module: cuora-vault-cached
+- name: CachedVault
+  kind: type
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 158
+  module: cuora-vault-cached
+- name: DEFAULT_TTL
+  kind: const
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 49
+  module: cuora-vault-cached
+- name: FAKE
+  kind: const
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 20
+  module: cuora-vault-cached
+- name: Fix
+  kind: type
+  file: crates/cuora-vault-cached/tests/conformance.rs
+  line: 19
+  module: cuora-vault-cached
+- name: MapVault
+  kind: type
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 28
+  module: cuora-vault-cached
+- name: MetaFile
+  kind: type
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 149
+  module: cuora-vault-cached
+- name: ROW_VERSION
+  kind: const
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 52
+  module: cuora-vault-cached
+- name: Rig
+  kind: type
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 128
+  module: cuora-vault-cached
+- name: all
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 68
+  module: cuora-vault-cached
+- name: cache_dir
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 365
+  module: cuora-vault-cached
+- name: cache_file_holds_no_plaintext
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 426
+  module: cuora-vault-cached
+- name: cache_for
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 200
+  module: cuora-vault-cached
+- name: cache_row
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 211
+  module: cuora-vault-cached
+- name: caches
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 81
+  module: cuora-vault-cached
+- name: corrupt_cache_row_is_a_miss_not_a_failure
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 335
+  module: cuora-vault-cached
+- name: cuora-vault-cached
+  kind: module
+  file: crates/cuora-vault-cached/Cargo.toml
+  line: 1
+  module: cuora-vault-cached
+- name: default_cache_file
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 188
+  module: cuora-vault-cached
+- name: default_meta_file
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 194
+  module: cuora-vault-cached
+- name: default_paths_follow_xdg
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 434
+  module: cuora-vault-cached
+- name: dev
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 164
+  module: cuora-vault-cached
+- name: down
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 34
+  module: cuora-vault-cached
+- name: env_scoping_keeps_unlisted_envs_off_disk
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 317
+  module: cuora-vault-cached
+- name: fresh
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 119
+  module: cuora-vault-cached
+- name: fresh
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 137
+  module: cuora-vault-cached
+- name: fresh_hit_never_touches_the_remote
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 199
+  module: cuora-vault-cached
+- name: freshness_window
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 475
+  module: cuora-vault-cached
+- name: gate
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 38
+  module: cuora-vault-cached
+- name: get
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 279
+  module: cuora-vault-cached
+- name: get
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 48
+  module: cuora-vault-cached
+- name: get
+  kind: function
+  file: crates/cuora-vault-cached/tests/conformance.rs
+  line: 25
+  module: cuora-vault-cached
+- name: get_none_from_remote_invalidates_the_row
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 245
+  module: cuora-vault-cached
+- name: home
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 379
+  module: cuora-vault-cached
+- name: list
+  kind: function
+  file: crates/cuora-vault-cached/src/lib.rs
+  line: 328
+  module: cuora-vault-cached
+- name: list
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 93
+  module: cuora-vault-cached
+- name: list
+  kind: function
+  file: crates/cuora-vault-cached/tests/conformance.rs
+  line: 34
+  module: cuora-vault-cached
+- name: list_reconciles_remote_deletes
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 391
+  module: cuora-vault-cached
+- name: list_uses_the_marker_and_stays_offline_capable
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 372
+  module: cuora-vault-cached
+- name: list_without_a_marker_fails_with_the_remote
+  kind: function
+  file: crates/cuora-vault-cached/tests/cached.rs
+  line: 411
+  module: cuora-vault-cached
+api_omitted: 34
+deps:
+- cuora-core
+- cuora-vault
+- serde
+- serde_json
+- time
+- zeroize
+- age
+- cuora-testkit
+- cuora-vault-age
+- temp-env
+- tempfile
+- age
+- cuora-core
+- cuora-vault
+- cuora-vault-age
+- tempfile
+- time
+- serde
+- zeroize
+notes: ''
+verify:
+- crates/cuora-vault-cached/Cargo.toml
+- crates/cuora-vault-cached/src/lib.rs
+- crates/cuora-vault-cached/tests/cached.rs
+- crates/cuora-vault-cached/tests/conformance.rs
+provenance:
+  files:
+  - crates/cuora-vault-cached/Cargo.toml
+  - crates/cuora-vault-cached/src/lib.rs
+  - crates/cuora-vault-cached/tests/cached.rs
+  - crates/cuora-vault-cached/tests/conformance.rs
+  hashes:
+  - df97d7ea0f12c02fec10db53389137ddf5dddcc2
+  - 38043e9e6a0b2f04f32a3d2ad144c7d67389d1e3
+  - a75a0fc722354abaf11f508c4ed7724dec8aaf01
+  - 16baae2b8b6b37bb16415a2d55009209c5447c4b
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
+  generator: kuda-template/0.1.2

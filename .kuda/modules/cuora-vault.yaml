@@ -5,17 +5,17 @@ api:
 - name: SecretRecord
   kind: type
   file: crates/cuora-vault/src/lib.rs
-  line: 30
+  line: 31
   module: cuora-vault
 - name: Vault
   kind: trait
   file: crates/cuora-vault/src/lib.rs
-  line: 43
+  line: 44
   module: cuora-vault
 - name: VaultError
   kind: type
   file: crates/cuora-vault/src/lib.rs
-  line: 64
+  line: 65
   module: cuora-vault
 - name: cuora-vault
   kind: module
@@ -25,17 +25,17 @@ api:
 - name: from
   kind: function
   file: crates/cuora-vault/src/lib.rs
-  line: 88
+  line: 89
   module: cuora-vault
 - name: io_error_maps_to_the_io_variant
   kind: function
   file: crates/cuora-vault/src/lib.rs
-  line: 99
+  line: 100
   module: cuora-vault
 - name: tests
   kind: module
   file: crates/cuora-vault/src/lib.rs
-  line: 95
+  line: 96
   module: cuora-vault
 deps:
 - cuora-core
@@ -52,8 +52,8 @@ provenance:
   - crates/cuora-vault/Cargo.toml
   - crates/cuora-vault/src/lib.rs
   hashes:
-  - e58ba1bc7da3c98491c89cf9d751bb9cf3858afb
-  - 57663f439d1508761fc40d9718ef06a8f3f2984f
-  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
-  generated_at: '1793684916'
+  - d299151058457fff78b5efba2132b2bf75d972f3
+  - cb1af28717cbf68d7916984044b154d8824211ad
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
   generator: kuda-template/0.1.2

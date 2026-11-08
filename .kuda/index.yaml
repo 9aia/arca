@@ -8,23 +8,27 @@ modules:
 - cuora-core
 - cuora-deploy
 - cuora-deploy-cf
+- cuora-driver
 - cuora-identity
 - cuora-identity-file
 - cuora-identity-keyring
+- cuora-notice
 - cuora-ops
 - cuora-serve
 - cuora-shell
 - cuora-testkit
-- cuora-tui
 - cuora-vault
 - cuora-vault-age
+- cuora-vault-cached
 - cuora-vault-cf
 - cuora-xtask
+- docs
+- project
 commands:
 - cargo check
 - cargo test --workspace
-tree_digest: b546d6f89c61c6e5b37ea74a5ff30d15bf4185cf
-files_total: 80
+tree_digest: 9eda2bc206158e7f7f1308ab51d39ea991672ca5
+files_total: 162
 provenance:
   files:
   - Cargo.toml
@@ -35,39 +39,43 @@ provenance:
   - crates/cuora-core/Cargo.toml
   - crates/cuora-deploy/Cargo.toml
   - crates/cuora-deploy-cf/Cargo.toml
+  - crates/cuora-driver/Cargo.toml
   - crates/cuora-identity/Cargo.toml
   - crates/cuora-identity-file/Cargo.toml
   - crates/cuora-identity-keyring/Cargo.toml
+  - crates/cuora-notice/Cargo.toml
   - crates/cuora-ops/Cargo.toml
   - crates/cuora-serve/Cargo.toml
   - crates/cuora-shell/Cargo.toml
   - crates/cuora-testkit/Cargo.toml
-  - crates/cuora-tui/Cargo.toml
   - crates/cuora-vault/Cargo.toml
   - crates/cuora-vault-age/Cargo.toml
+  - crates/cuora-vault-cached/Cargo.toml
   - crates/cuora-vault-cf/Cargo.toml
   - xtask/Cargo.toml
   hashes:
-  - 65f4dae5d073ddbbf1475e1be2024fb99919eb84
-  - 704abb17c3c236de7f53e0767040dc521c3ce81e
-  - 4f6c201493139ae473e54824ef6afa0a9572e431
-  - cf00672b233762c2e1aa7121fa3921782757a2df
-  - 3bb6412ec59f79642d32c9aa8f4c45e38be95068
-  - 6dcc3b1198677927e82d542e41e26fab610796b1
-  - fc4e4318276c49bf88d4c39a46e2f04b1aeff9a4
-  - 7a61cefca5b4664322a3b081cbc36b30130bf13d
-  - d68fda81cc69983fbbdb3b9130c7c2e9540ea1a7
-  - 1b8e235789058404a28e464ce18bcf798558876a
-  - 2834df38f1023d6910c9c16960ab325e6b5254ef
-  - d7beff3210026cccf25ab65b01f2f181424e5681
-  - 3b2a5797b7f36f6269b6a5eb1ecbe1e70d8b5a6b
-  - d1e286873314306b3ec3e30cd61cc9db964378d0
-  - 714ef5eddf2c1868b02fd1eac622b2f2c3737911
-  - 98c2adeaee57801617a05341fcfba6228dabd630
-  - e58ba1bc7da3c98491c89cf9d751bb9cf3858afb
-  - 96fdab5840dab381baa9f5260b2023f08fc7e3f5
-  - b46d583411dc1b18a9083b85f11b657f92017a4b
-  - 9c55ec755d27dd29ba8bd214918b0213f0283c14
-  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
-  generated_at: '1793684916'
+  - 7e21cb7b3d2e40866ff8e170c4db81fb53a7a01b
+  - 51e751f962c67b7c2b883cbfb7f7b2226e6cface
+  - 9d8390cd3ffe01c1314423787399eac35a139ccf
+  - cfc09e62e4451faec3b10a1f95f3e27381c6a419
+  - b2eca6beea68ada3630a0f06505f85b69f295997
+  - 84f4d48465d7a00aa61152d1261563f5e806c35b
+  - 000e41d5840b658bf1370bc0a1f4c10626a91fcb
+  - c140ab8aed34d70490289b50e722c42ac084fadd
+  - c218f8adbe1c4d6603f7f243f6b885af5c1ff379
+  - 61f701f21c7a5745cc8e5b624533b590af330534
+  - 470575d39bfa27414e5acfb96383fa473a62744e
+  - f1b047a37b1d9ebf50b0ca5c43cd946617a89ac7
+  - ca24f91ffa63a58ab8099943aba4d2231cf69d74
+  - d422f3d129f7f486ba4c88183f306ec61c92b98e
+  - 874e99d5adec58f0aa1b68fab12d8bd79bbbf622
+  - 85700da84b4e3dbeef45489b31a713b1cd9a2271
+  - be58afb0cde0c39560e013b419a0dfdc476e21b2
+  - d299151058457fff78b5efba2132b2bf75d972f3
+  - 07d95ed7761181c7545591538f08d907aaa4a523
+  - df97d7ea0f12c02fec10db53389137ddf5dddcc2
+  - 422f52f2ca23213aedb8eb77d63058314f245371
+  - 1b2c254cc2d5e144e6ee3eedfdcbb94db8a3dedb
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
   generator: kuda/0.1.0

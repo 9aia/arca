@@ -1,0 +1,109 @@
+name: project
+path: project/BACKLOG.md
+purpose: myco work ledger — tasks, ADRs, issues, plans, handoffs
+api: []
+deps: []
+notes: ''
+verify:
+- project/BACKLOG.md
+- project/TODO.md
+- project/adrs/0001-resolution-model-wire-surface-and-crypto-port-boundaries.md
+- project/adrs/0002-identity-storage-the-arca-identity-port-keyring-preferred-file-fallback.md
+- project/adrs/0003-arca-serve-the-ndjson-ipc-surface-and-exec-driven-policy-decision-wire.md
+- project/adrs/0004-identity-backend-selection-fail-closed-keyring-default-explicit-file-opt-out.md
+- project/handoffs/I-002.md
+- project/handoffs/I-004.md
+- project/handoffs/I-008.md
+- project/handoffs/P-001.md
+provenance:
+  files:
+  - project/BACKLOG.md
+  - project/TODO.md
+  - project/adrs/0001-resolution-model-wire-surface-and-crypto-port-boundaries.md
+  - project/adrs/0002-identity-storage-the-arca-identity-port-keyring-preferred-file-fallback.md
+  - project/adrs/0003-arca-serve-the-ndjson-ipc-surface-and-exec-driven-policy-decision-wire.md
+  - project/adrs/0004-identity-backend-selection-fail-closed-keyring-default-explicit-file-opt-out.md
+  - project/handoffs/I-002.md
+  - project/handoffs/I-004.md
+  - project/handoffs/I-008.md
+  - project/handoffs/P-001.md
+  - project/handoffs/P-003.md
+  - project/handoffs/P-004.md
+  - project/handoffs/P-005.md
+  - project/handoffs/P-006.md
+  - project/handoffs/P-007.md
+  - project/handoffs/PL-001.md
+  - project/handoffs/archive/T-001.md
+  - project/handoffs/archive/T-002.md
+  - project/handoffs/archive/T-003.md
+  - project/handoffs/archive/T-004.md
+  - project/handoffs/archive/T-005.md
+  - project/handoffs/archive/T-006.md
+  - project/handoffs/archive/T-008.md
+  - project/handoffs/archive/T-009.md
+  - project/handoffs/archive/T-010.md
+  - project/index.md
+  - project/issues/issue-0002-shared-target-dir-xtask-collision-wrong-repo-s-xtask-binary-can-run.md
+  - project/issues/issue-0003-adversarial-a-12-vault-age-mode-0666-produced-no-permission-note.md
+  - project/issues/issue-0004-peregrin-campaign-run-validate-agent-shell-drivers-exist-only-on-the-v2-branch.md
+  - project/issues/issue-0005-audit-should-be-otel-based-stderr-ndjson-corrupts-arca-ui.md
+  - project/issues/issue-0006-keyring-store-fails-on-empty-store-secret-service-no-result-found-create-item-path.md
+  - project/issues/issue-0007-identity-fallback-keyring-file-is-a-silent-security-downgrade-consider-fail-closed-option.md
+  - project/issues/issue-0008-rename-arca-cuora-full-incl-dependents-archived-repos.md
+  - project/issues/issue-0009-cuora-vault-workers-deployed-secrets-re-put-client-url-flip-pending.md
+  - project/issues/issue-0010-post-v0-1-0-hardening-backlog.md
+  - project/plans/pl-0001-cuora-v1-roadmap-scaffold-domain-verbs-cloud-ship.md
+  - project/proposals/proposal-0001-cuora-v1-secrets-broker-for-agents-in-rust.md
+  - project/proposals/proposal-0002-keychain-backed-identity-storage.md
+  - project/proposals/proposal-0003-scoped-tokens-and-hmac-request-signing-for-cf-vault.md
+  - project/proposals/proposal-0004-private-ref-metadata-via-hmac-derived-keys.md
+  - project/proposals/proposal-0005-arca-serve-ndjson-policy-decision-wire-for-peregrin.md
+  - project/proposals/proposal-0006-constant-time-bearer-comparison-in-cf-worker.md
+  - project/proposals/proposal-0007-cached-remote-vault-read-through-encrypted-local-cache.md
+  hashes:
+  - 9065e6f6e33503b5f7a4a773acd637396048731c
+  - 50e678358a4d2e79cef1e727f354cc0cf66748b3
+  - e82fea0b0e09636fe2a149dd0884f2be792c6173
+  - ccfaf162d9bc3dc19f912a51272f2952ea8ec882
+  - 882835256374c35eab6878e243082dae60c62328
+  - ed9af776485f1d6357cae479f767b35a1a708c8d
+  - 96cc1a633a9d4fa71dfca3bf3a444147ab47cff5
+  - d9b7ab2096f6775efde4acaacf11f26cf84d4250
+  - 48567900ccbf1fd1ebeffcd6c886345bd198df42
+  - dbe02c6cbe3f64bff8d1d3229c7ea0ef693612ce
+  - 7da840473f4659307b6078caa38cdb8d8bfbbc08
+  - 937818f103d066f7ed4223b5dac262c40e881199
+  - 49d11ffa38e7f8961eaae8a2b6f51fe7391eb0c5
+  - d04883e426d95276975b67b7db3ff1040de47aab
+  - 0a88026e2e39d1c3cce43e74091912276dadb496
+  - c145c11313cb9d387c10301d91243872969f6ada
+  - 632a07e506ddcd6826969234ec6f9dc52a33fb31
+  - 92ba6487d7a9bf93310822f7bbb402529d5de272
+  - 61045ce618b570f22259c1fe8e9515b6f02a9c28
+  - 475e0adc4a90323f3598862e8dfa1afd3954a0ab
+  - 46c504ab2d24be2c48087e781c62f2eedcc59d1a
+  - a7e77f3378fec573d17206d27abe0cb7b6208c63
+  - e6bd6ff0b768a077c080e9ac9d535045c0171045
+  - b04f642e31f84a03e8f9ec26335ec1ceb1d24b01
+  - bd0c663a33bc625b41665198e7ff7e74129ad959
+  - c485f2120363d37af8c2d8675e92ba2d89c07cd1
+  - be75d2e3c50c12e9ff88091e7ff0896cd59796b6
+  - 15db5d8611f9f8266d810552d3b5cfaeb3118f48
+  - 66503d88567a5a202b11c498aca49b8c52168fdb
+  - 520be0a4b210b659ceb9416f22637a157364ee6e
+  - 150f43341c4050f3714b856778af5609223e903b
+  - 80072e98e0bc30c8d92af71416c8668502c3959d
+  - 93c312d949b0bc411a6d8b61d616146f125138c5
+  - 95356a2d0674667afbbc59e85735fe3fd2dfe48d
+  - 66607f655a0baeadf2f772ee1b89d9e8c8857ecf
+  - 340095aaf23025189915b88def95ec44ea0f98b5
+  - 7d42aba09c0ee8e02a68c32a9778394d9da51823
+  - a7fce18d17161e7cd4f7fe28144961ee9daa58d9
+  - 76f2dd4364f224d6c52ad03f20256d7287181932
+  - f5218be7a01c38d287558b6df367d765aec59928
+  - 2f833b5785fcc77ed87a8f1984d0d4bdf58bfa2f
+  - f5ea53eda54409a8922805b45efa218155f2998e
+  - de5bd1df9a072e791a63b86c0c1b4d1914934ef9
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
+  generator: kuda-template/0.1.2

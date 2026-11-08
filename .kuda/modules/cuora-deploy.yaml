@@ -35,8 +35,8 @@ provenance:
   - crates/cuora-deploy/Cargo.toml
   - crates/cuora-deploy/src/lib.rs
   hashes:
-  - fc4e4318276c49bf88d4c39a46e2f04b1aeff9a4
-  - d373d5d1932a3e20283aa02833d5ff4c25333208
-  commit_sha: d7be8f483c95735af5c205d7ac5acc46187d4200
-  generated_at: '1793684916'
+  - 000e41d5840b658bf1370bc0a1f4c10626a91fcb
+  - c266b8d49117a08a80acc0750330f33158bb6117
+  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
+  generated_at: '1794154232'
   generator: kuda-template/0.1.2

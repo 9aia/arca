@@ -1,6 +1,6 @@
 [package]
 name = "cuora-notice"
-description = "Process-wide UX notices — muted/replayed stderr notes that must not corrupt the cuora ui alternate screen"
+description = "Process-wide UX notices — cuora:-prefixed stderr notes, mutable for terminal-owning surfaces"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
