@@ -815,6 +815,7 @@ fn manifest() -> serde_json::Value {
             "ARCA_ENV": "env context (default dev)",
             "ARCA_ACTOR": "audit actor attribution",
             "ARCA_IDENTITY_FILE": "explicit identity keyfile path — pins file mode, skipping the session keyring",
+            "ARCA_IDENTITY_BACKEND": "auto (default) | keyring (fail closed, no file fallback) | file (never probe the keyring); wins over [identity] backend",
             "ARCA_CF_TOKEN": "default cf-vault bearer env var ([vaults.*] token_env overrides the name)",
             "CLOUDFLARE_API_TOKEN": "default deploy-token env var ([deploy.*] token_env overrides the name)",
             "ARCA_AUDIT_STDERR": "0/false/off/no silences the stderr ndjson audit wire (OTLP-only mode); unset keeps it",
@@ -826,7 +827,7 @@ fn manifest() -> serde_json::Value {
         },
         "config": {
             "search": ["--config", "$ARCA_CONFIG", "./arca.toml", "~/.config/arca/arca.toml"],
-            "tables": ["vaults", "envs", "secrets", "deploy", "guardrails", "serve"],
+            "tables": ["vaults", "envs", "secrets", "deploy", "guardrails", "serve", "identity"],
             "schema": "arca schema",
             "env_pin": "arca://prod/ns/name pins the env regardless of context",
         },

@@ -514,6 +514,10 @@ mod tests {
                     Some(home.path().join(".local/share").to_str().unwrap()),
                 ),
                 ("ARCA_IDENTITY_FILE", None::<&str>),
+                // pin file mode — on keyring-equipped boxes the
+                // auto probe would return the *real* session
+                // identity, not the seeded keyfile's
+                ("ARCA_IDENTITY_BACKEND", Some("file")),
             ],
             || {
                 // seed a secret at the *default* vault location

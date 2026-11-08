@@ -324,9 +324,13 @@ fn cf_resolution_without_an_explicit_file_notes_the_missing_keyring() {
     );
     // no ARCA_IDENTITY_FILE — the cf vault's identity resolution
     // probes the session keyring, fails headless, then falls back
-    // to the file: a note, not a panic.
+    // to the file: a note, not a panic. Point the child's bus at a
+    // dead socket (+ bogus runtime dir, libdbus' fallback) so
+    // "unreachable" holds on keyring-equipped dev boxes too.
     let mut cmd = arca(home, &["--config", cfg.to_str().unwrap(), "list"]);
-    cmd.env_remove("ARCA_IDENTITY_FILE");
+    cmd.env_remove("ARCA_IDENTITY_FILE")
+        .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/tmp/arca-no-such-bus")
+        .env("XDG_RUNTIME_DIR", "/tmp/arca-no-such-run");
     let o = cmd.output().unwrap();
     assert!(
         stderr(&o).contains("no session keyring reachable"),
