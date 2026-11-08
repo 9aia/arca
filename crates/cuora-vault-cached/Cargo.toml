@@ -1,0 +1,27 @@
+[package]
+name = "cuora-vault-cached"
+description = "Composite vault impl: read-through age-encrypted local cache in front of any backend (P-007)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["secrets", "cuora", "cache"]
+categories = ["development-tools"]
+
+[dependencies]
+cuora-core.workspace = true
+cuora-vault.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+age.workspace = true
+cuora-testkit.workspace = true
+cuora-vault-age.workspace = true
+tempfile.workspace = true
+temp-env.workspace = true
+
+[lints]
+workspace = true

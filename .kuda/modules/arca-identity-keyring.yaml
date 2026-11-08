@@ -1,167 +1,167 @@
-name: arca-identity-keyring
-path: crates/arca-identity-keyring/Cargo.toml
+name: cuora-identity-keyring
+path: crates/cuora-identity-keyring/Cargo.toml
 purpose: 'Identity impl: the platform session secret store (secret-service / Keychain / Credential Manager) via keyring-core'
 api:
 - name: DeadStore
   kind: type
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 225
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: KeyringIdentity
   kind: type
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 35
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: SERVICE
   kind: const
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 30
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: USER
   kind: const
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 32
-  module: arca-identity-keyring
-- name: arca-identity-keyring
+  module: cuora-identity-keyring
+- name: cuora-identity-keyring
   kind: module
-  file: crates/arca-identity-keyring/Cargo.toml
+  file: crates/cuora-identity-keyring/Cargo.toml
   line: 1
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: as_any
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 237
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: build
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 234
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: describe
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 94
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: entry
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 57
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: entry_build_failures_surface_as_store_errors
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 243
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: id
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 231
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: kind
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 90
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: load
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 67
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: load_rejects_garbage_material
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 184
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: mock
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 162
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: platform
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 46
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: platform_probe_never_panics
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 208
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: platform_store
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 107
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: platform_store
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 121
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: platform_store
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 128
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: platform_store
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 135
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: platform_store
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 149
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: store
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 83
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: store_error_tests
   kind: module
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 218
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: store_failures_are_store_errors_not_none
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 192
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: store_then_load_roundtrips
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 171
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: tests
   kind: module
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 157
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: vendor
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 228
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 - name: with_store
   kind: function
-  file: crates/arca-identity-keyring/src/lib.rs
+  file: crates/cuora-identity-keyring/src/lib.rs
   line: 52
-  module: arca-identity-keyring
+  module: cuora-identity-keyring
 deps:
 - age
-- arca-identity
+- cuora-identity
 - keyring-core
 - age
-- arca-identity
+- cuora-identity
 - keyring_core
 notes: ''
 verify:
-- crates/arca-identity-keyring/Cargo.toml
-- crates/arca-identity-keyring/src/lib.rs
+- crates/cuora-identity-keyring/Cargo.toml
+- crates/cuora-identity-keyring/src/lib.rs
 provenance:
   files:
-  - crates/arca-identity-keyring/Cargo.toml
-  - crates/arca-identity-keyring/src/lib.rs
+  - crates/cuora-identity-keyring/Cargo.toml
+  - crates/cuora-identity-keyring/src/lib.rs
   hashes:
   - 2834df38f1023d6910c9c16960ab325e6b5254ef
   - bbfdff869f2b848fca107b3f1a7bfca6eeb400a2

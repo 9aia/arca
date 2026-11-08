@@ -2,7 +2,7 @@
 //! against PATH stubs so `check`/`test`/`coverage`/`install`/`site`
 //! all execute their dispatch, args, and exit-code paths without
 //! touching a real toolchain. Stubs are sh scripts (unix repo —
-//! `script`/`mkfifo` are already assumed by the arca tests).
+//! `script`/`mkfifo` are already assumed by the cuora tests).
 
 #![allow(clippy::unwrap_used)]
 
@@ -42,7 +42,7 @@ exit "${CARGO_EXIT:-0}"
 const OK_STUB: &str = "#!/bin/sh\nexit 0\n";
 
 fn xtask(dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_arca-xtask"));
+    let mut c = Command::new(env!("CARGO_BIN_EXE_cuora-xtask"));
     c.args(args)
         // the stub bin dir is the whole PATH — unstubbed tools are
         // "not installed" and unstubbed spawns fail, on purpose
@@ -90,7 +90,7 @@ fn worker_and_test_wire_the_bun_smoke_test() {
     // bun installed: `test` runs the smoke test inside the worker
     // dir — it must exist relative to cwd
     stub(&dir, "bun", OK_STUB);
-    std::fs::create_dir_all(dir.join("crates/arca-vault-cf/worker")).unwrap();
+    std::fs::create_dir_all(dir.join("crates/cuora-vault-cf/worker")).unwrap();
     assert_eq!(code(&xtask(&dir, &["worker"], &[])), 0);
     assert_eq!(code(&xtask(&dir, &["test"], &[])), 0);
     // a failing smoke test fails both `worker` and `test` — the

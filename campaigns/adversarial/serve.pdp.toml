@@ -1,11 +1,11 @@
-# serve.pdp.toml — example `arca serve` config wiring the campaign's
+# serve.pdp.toml — example `cuora serve` config wiring the campaign's
 # policy decision point. NOT loaded by default — point at it with
-# `arca serve --config campaigns/adversarial/serve.pdp.toml` (or
-# $ARCA_CONFIG) when you want the campaign's ops gated.
+# `cuora serve --config campaigns/adversarial/serve.pdp.toml` (or
+# $CUORA_CONFIG) when you want the campaign's ops gated.
 #
 # `[serve.pdp] exec` is trust-root config: it authorizes shell exec on
-# every vault-touching op, so arca warns when it loads one from an
-# implicit ./arca.toml — pin it explicitly, like this file intends.
+# every vault-touching op, so cuora warns when it loads one from an
+# implicit ./cuora.toml — pin it explicitly, like this file intends.
 #
 # The exec contract (ADR-0003): one JSON request line on stdin —
 # {actor, attestation?, op, env, ref?} — one JSON verdict on stdout —

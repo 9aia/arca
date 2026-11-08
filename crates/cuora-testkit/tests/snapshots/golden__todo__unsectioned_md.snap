@@ -1,0 +1,11 @@
+---
+source: crates/cuora-testkit/tests/golden.rs
+expression: out
+---
+# TODO — cuora
+
+- [ ] T-001 Loose task
+
+## Now
+
+- [ ] T-002 Sectioned

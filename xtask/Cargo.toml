@@ -1,9 +1,9 @@
-# `arca-xtask`, not `xtask`: a shared CARGO_TARGET_DIR across repos
+# `cuora-xtask`, not `xtask`: a shared CARGO_TARGET_DIR across repos
 # keys fingerprints/binaries by package name — a foreign `xtask`
 # package could own target/debug/xtask and run for `cargo xtask`
 # here (I-002).
 [package]
-name = "arca-xtask"
+name = "cuora-xtask"
 description = "Repo chores: check / test / coverage / install / site"
 version.workspace = true
 edition.workspace = true

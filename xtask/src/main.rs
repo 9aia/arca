@@ -5,11 +5,11 @@
 //! - `test`     — `cargo nextest run` when installed, else `cargo test`;
 //!   plus the worker smoke test when `bun` is installed
 //! - `worker`   — the worker smoke test: `bun test` in
-//!   crates/arca-vault-cf/worker — executes the REAL index.js over
+//!   crates/cuora-vault-cf/worker — executes the REAL index.js over
 //!   a bun:sqlite D1 shim (the Rust mock can't catch worker bugs)
 //! - `coverage` — `cargo llvm-cov` (HTML → target/llvm-cov/html);
 //!   extra args pass through, e.g. `--fail-under-lines 100`
-//! - `install`  — release-install `arca` into ~/.cargo/bin
+//! - `install`  — release-install `cuora` into ~/.cargo/bin
 //! - `site`     — build the docs site (docs/ worktree, VitePress)
 
 use std::process::{Command, ExitStatus};
@@ -89,7 +89,7 @@ fn test() -> i32 {
     // skipped (with a note) in lean envs so the Rust tests still
     // run everywhere.
     if have("bun") {
-        let w = run_in("crates/arca-vault-cf/worker", &["bun", "test"])
+        let w = run_in("crates/cuora-vault-cf/worker", &["bun", "test"])
             .code()
             .unwrap_or(1);
         return if code == 0 { w } else { code };
@@ -105,7 +105,7 @@ fn worker() -> i32 {
         eprintln!("bun not installed — needed for the worker smoke test");
         return 1;
     }
-    run_in("crates/arca-vault-cf/worker", &["bun", "test"])
+    run_in("crates/cuora-vault-cf/worker", &["bun", "test"])
         .code()
         .unwrap_or(1)
 }
@@ -131,7 +131,7 @@ fn coverage(extra: &[String]) -> i32 {
 }
 
 fn install() -> i32 {
-    run(&["cargo", "install", "--path", "crates/arca-cli", "--force"])
+    run(&["cargo", "install", "--path", "crates/cuora-cli", "--force"])
         .code()
         .unwrap_or(1)
 }

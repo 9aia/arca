@@ -1,25 +1,25 @@
-name: arca
-root: /home/luis/GitHub/9aia/arca
+name: cuora
+root: /home/luis/GitHub/9aia/cuora
 purpose: '*Secrets broker for agents — sealed, not spilled.*'
 modules:
-- arca
-- arca-config
-- arca-config-toml
-- arca-core
-- arca-deploy
-- arca-deploy-cf
-- arca-identity
-- arca-identity-file
-- arca-identity-keyring
-- arca-ops
-- arca-serve
-- arca-shell
-- arca-testkit
-- arca-tui
-- arca-vault
-- arca-vault-age
-- arca-vault-cf
-- arca-xtask
+- cuora
+- cuora-config
+- cuora-config-toml
+- cuora-core
+- cuora-deploy
+- cuora-deploy-cf
+- cuora-identity
+- cuora-identity-file
+- cuora-identity-keyring
+- cuora-ops
+- cuora-serve
+- cuora-shell
+- cuora-testkit
+- cuora-tui
+- cuora-vault
+- cuora-vault-age
+- cuora-vault-cf
+- cuora-xtask
 commands:
 - cargo check
 - cargo test --workspace
@@ -29,23 +29,23 @@ provenance:
   files:
   - Cargo.toml
   - README.md
-  - crates/arca-cli/Cargo.toml
-  - crates/arca-config/Cargo.toml
-  - crates/arca-config-toml/Cargo.toml
-  - crates/arca-core/Cargo.toml
-  - crates/arca-deploy/Cargo.toml
-  - crates/arca-deploy-cf/Cargo.toml
-  - crates/arca-identity/Cargo.toml
-  - crates/arca-identity-file/Cargo.toml
-  - crates/arca-identity-keyring/Cargo.toml
-  - crates/arca-ops/Cargo.toml
-  - crates/arca-serve/Cargo.toml
-  - crates/arca-shell/Cargo.toml
-  - crates/arca-testkit/Cargo.toml
-  - crates/arca-tui/Cargo.toml
-  - crates/arca-vault/Cargo.toml
-  - crates/arca-vault-age/Cargo.toml
-  - crates/arca-vault-cf/Cargo.toml
+  - crates/cuora-cli/Cargo.toml
+  - crates/cuora-config/Cargo.toml
+  - crates/cuora-config-toml/Cargo.toml
+  - crates/cuora-core/Cargo.toml
+  - crates/cuora-deploy/Cargo.toml
+  - crates/cuora-deploy-cf/Cargo.toml
+  - crates/cuora-identity/Cargo.toml
+  - crates/cuora-identity-file/Cargo.toml
+  - crates/cuora-identity-keyring/Cargo.toml
+  - crates/cuora-ops/Cargo.toml
+  - crates/cuora-serve/Cargo.toml
+  - crates/cuora-shell/Cargo.toml
+  - crates/cuora-testkit/Cargo.toml
+  - crates/cuora-tui/Cargo.toml
+  - crates/cuora-vault/Cargo.toml
+  - crates/cuora-vault-age/Cargo.toml
+  - crates/cuora-vault-cf/Cargo.toml
   - xtask/Cargo.toml
   hashes:
   - 65f4dae5d073ddbbf1475e1be2024fb99919eb84

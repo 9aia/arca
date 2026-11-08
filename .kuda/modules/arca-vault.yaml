@@ -1,56 +1,56 @@
-name: arca-vault
-path: crates/arca-vault/Cargo.toml
+name: cuora-vault
+path: crates/cuora-vault/Cargo.toml
 purpose: 'Vault port: readable secret stores — get/put/rm/list/rotate, per-env; every impl stores opaque ciphertext'
 api:
 - name: SecretRecord
   kind: type
-  file: crates/arca-vault/src/lib.rs
+  file: crates/cuora-vault/src/lib.rs
   line: 30
-  module: arca-vault
+  module: cuora-vault
 - name: Vault
   kind: trait
-  file: crates/arca-vault/src/lib.rs
+  file: crates/cuora-vault/src/lib.rs
   line: 43
-  module: arca-vault
+  module: cuora-vault
 - name: VaultError
   kind: type
-  file: crates/arca-vault/src/lib.rs
+  file: crates/cuora-vault/src/lib.rs
   line: 64
-  module: arca-vault
-- name: arca-vault
+  module: cuora-vault
+- name: cuora-vault
   kind: module
-  file: crates/arca-vault/Cargo.toml
+  file: crates/cuora-vault/Cargo.toml
   line: 1
-  module: arca-vault
+  module: cuora-vault
 - name: from
   kind: function
-  file: crates/arca-vault/src/lib.rs
+  file: crates/cuora-vault/src/lib.rs
   line: 88
-  module: arca-vault
+  module: cuora-vault
 - name: io_error_maps_to_the_io_variant
   kind: function
-  file: crates/arca-vault/src/lib.rs
+  file: crates/cuora-vault/src/lib.rs
   line: 99
-  module: arca-vault
+  module: cuora-vault
 - name: tests
   kind: module
-  file: crates/arca-vault/src/lib.rs
+  file: crates/cuora-vault/src/lib.rs
   line: 95
-  module: arca-vault
+  module: cuora-vault
 deps:
-- arca-core
+- cuora-core
 - thiserror
 - time
-- arca-core
+- cuora-core
 - time
 notes: ''
 verify:
-- crates/arca-vault/Cargo.toml
-- crates/arca-vault/src/lib.rs
+- crates/cuora-vault/Cargo.toml
+- crates/cuora-vault/src/lib.rs
 provenance:
   files:
-  - crates/arca-vault/Cargo.toml
-  - crates/arca-vault/src/lib.rs
+  - crates/cuora-vault/Cargo.toml
+  - crates/cuora-vault/src/lib.rs
   hashes:
   - e58ba1bc7da3c98491c89cf9d751bb9cf3858afb
   - 57663f439d1508761fc40d9718ef06a8f3f2984f

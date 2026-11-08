@@ -1,0 +1,9 @@
+---
+source: crates/cuora-testkit/tests/golden.rs
+expression: out
+---
+# TODO — cuora
+
+## Now
+
+- [ ] T-007 Short id

@@ -1,9 +1,0 @@
-# TODO — arca
-
-## Now
-
-- [ ] T-012 Parent task · status:in-progress · pri:high · owner:devin
-  - [ ] T-013 Subtask one · pri:low
-  - [ ] T-014 Subtask two · #core
-    - [ ] T-015 Grandchild
-- [ ] T-020 Sibling task

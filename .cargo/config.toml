@@ -1,2 +1,2 @@
 [alias]
-xtask = "run --package arca-xtask --"
+xtask = "run --package cuora-xtask --"

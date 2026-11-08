@@ -1,0 +1,44 @@
+[package]
+name = "cuora"
+description = "cuora — secrets broker for agents: reference URIs, redaction, env-injection CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["secrets", "cuora"]
+categories = ["development-tools"]
+
+[[bin]]
+name = "cuora"
+path = "src/main.rs"
+
+[dependencies]
+cuora-core = { workspace = true, features = ["schema"] }
+cuora-config.workspace = true
+cuora-config-toml.workspace = true
+cuora-ops.workspace = true
+cuora-serve.workspace = true
+cuora-shell.workspace = true
+cuora-vault.workspace = true
+cuora-tui = { workspace = true, optional = true }
+clap.workspace = true
+clap-markdown.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+sigpipe.workspace = true
+rpassword.workspace = true
+
+[features]
+default = ["tui"]
+## `cuora ui` — interactive vault TUI.
+## `--no-default-features` keeps the lean agent binary.
+tui = ["dep:cuora-tui"]
+
+[dev-dependencies]
+cuora-testkit.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+temp-env.workspace = true
+
+[lints]
+workspace = true

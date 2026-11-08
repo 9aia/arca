@@ -1,14 +1,14 @@
-# Arca
+# Cuora
 
-Secrets broker for agents — sealed, not spilled. Named for *Arca
-noae* (the ark clam) and Latin *arca*, the strongbox. Code and
-config carry `arca://` references, never values; the `arca` CLI
+Secrets broker for agents — sealed, not spilled. Named for *Cuora
+noae* (the ark clam) and Latin *cuora*, the strongbox. Code and
+config carry `cuora://` references, never values; the `cuora` CLI
 materializes secrets as env vars at run time; every
 materialization emits an audit event — ndjson on stderr, plus
 OTLP spans when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. The skill
 (`.agents/skills/`) teaches agents the verbs, not file formats.
 
-<!-- arca:agent-awareness -->
+<!-- cuora:agent-awareness -->
 
 <!-- myco:agent-awareness -->
 
@@ -55,51 +55,51 @@ OTLP spans when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. The skill
 
 ## Layout
 
-Ports-and-adapters, flat `crates/` workspace. `arca-core` is pure
+Ports-and-adapters, flat `crates/` workspace. `cuora-core` is pure
 domain (no I/O); ports are traits, impls are separate crates;
-`crates/arca-cli` (package `arca`) is the composition root.
+`crates/cuora-cli` (package `cuora`) is the composition root.
 
 | Crate | Role |
 | --- | --- |
-| `crates/arca-core` | `arca://` refs, `Secret` redacting newtype, env axis (dev/staging/prod), actor attribution — pure, no I/O |
-| `crates/arca-config` | Config port — where `arca.toml`-shaped config comes from |
-| `crates/arca-config-toml` | Config impl — explicit path → `$ARCA_CONFIG` → `./arca.toml` → `~/.config/arca/` |
-| `crates/arca-vault` | Vault port — readable secret stores: `get/put/list/rotate`, per-env variants |
-| `crates/arca-vault-age` | Local vault impl — age-encrypted file (v1) |
-| `crates/arca-vault-cf` | Remote vault impl — self-hosted CF Worker + D1, per-secret client-side age ciphertext (`worker/` has the deployable JS) |
-| `crates/arca-vault-cached` | Composite vault — read-through age-encrypted cache wrapping any impl; `cache`/`cache_ttl_secs` on `[vaults.*]` (P-007) |
-| `crates/arca-deploy` | Deploy port — write-only push targets (sinks, never sources) |
-| `crates/arca-deploy-cf` | Deploy impl — CF account Secrets Store via API v4 |
-| `crates/arca-shell` | `bash -c <cmd>` + env injection — the `arca run` path |
-| `crates/arca-ops` | Ops I/O — vault open/save, ref resolution, audit events, verb plumbing |
-| `crates/arca-notice` | Process-wide `arca:` stderr notices — muted/replayed so `arca ui`'s alt screen stays clean |
-| `crates/arca-testkit` | Vault conformance suite — every impl passes the same contract tests |
-| `crates/arca-tui` | Interactive vault TUI (ratatui) — thin front-end over arca-ops; `arca ui`, feature-gated |
-| `crates/arca-serve` | ndjson IPC surface — thin front-end over arca-ops; `arca serve`, the `[serve.pdp]` exec consult (ADR-0003) |
-| `crates/arca-cli` | The `arca` binary — clap, `--json` everywhere, `manifest`/`schema` |
-| `xtask` (pkg `arca-xtask`) | check / test / worker / coverage / install / site |
+| `crates/cuora-core` | `cuora://` refs, `Secret` redacting newtype, env axis (dev/staging/prod), actor attribution — pure, no I/O |
+| `crates/cuora-config` | Config port — where `cuora.toml`-shaped config comes from |
+| `crates/cuora-config-toml` | Config impl — explicit path → `$CUORA_CONFIG` → `./cuora.toml` → `~/.config/cuora/` |
+| `crates/cuora-vault` | Vault port — readable secret stores: `get/put/list/rotate`, per-env variants |
+| `crates/cuora-vault-age` | Local vault impl — age-encrypted file (v1) |
+| `crates/cuora-vault-cf` | Remote vault impl — self-hosted CF Worker + D1, per-secret client-side age ciphertext (`worker/` has the deployable JS) |
+| `crates/cuora-vault-cached` | Composite vault — read-through age-encrypted cache wrapping any impl; `cache`/`cache_ttl_secs` on `[vaults.*]` (P-007) |
+| `crates/cuora-deploy` | Deploy port — write-only push targets (sinks, never sources) |
+| `crates/cuora-deploy-cf` | Deploy impl — CF account Secrets Store via API v4 |
+| `crates/cuora-shell` | `bash -c <cmd>` + env injection — the `cuora run` path |
+| `crates/cuora-ops` | Ops I/O — vault open/save, ref resolution, audit events, verb plumbing |
+| `crates/cuora-notice` | Process-wide `cuora:` stderr notices — muted/replayed so `cuora ui`'s alt screen stays clean |
+| `crates/cuora-testkit` | Vault conformance suite — every impl passes the same contract tests |
+| `crates/cuora-tui` | Interactive vault TUI (ratatui) — thin front-end over cuora-ops; `cuora ui`, feature-gated |
+| `crates/cuora-serve` | ndjson IPC surface — thin front-end over cuora-ops; `cuora serve`, the `[serve.pdp]` exec consult (ADR-0003) |
+| `crates/cuora-cli` | The `cuora` binary — clap, `--json` everywhere, `manifest`/`schema` |
+| `xtask` (pkg `cuora-xtask`) | check / test / worker / coverage / install / site |
 
-`arca-vault-aws` stays a spike — proved on a local branch that the
+`cuora-vault-aws` stays a spike — proved on a local branch that the
 `Vault` port fits a second backend family unchanged, then deleted
-per PL-001. No `arca-sdk` by default — env vars are the interface;
+per PL-001. No `cuora-sdk` by default — env vars are the interface;
 revisit only if a Rust-native embed is ever needed.
 
 ## Boundary
 
-arca owns **secret materialization** — refs, vaults, env
+cuora owns **secret materialization** — refs, vaults, env
 injection, redaction, audit. Neighbors own theirs:
 
 - **myco** — work memory; this repo's `project/` ledger is myco's.
 - **sturn** — ephemeral coordination (live claims/ops/topics).
 - **kuda** — code memory.
 - **peregrin** — orchestration; campaigns consume secrets via
-  `arca run`; embedding + the policy-decision wire is `arca serve`
-  (ndjson, ADR-0003) — arca consults, peregrin decides.
+  `cuora run`; embedding + the policy-decision wire is `cuora serve`
+  (ndjson, ADR-0003) — cuora consults, peregrin decides.
 - **bupha** — CI gate; asserts no plaintext secrets land in
   pipelines.
-- **mimus** — critic; secrets resolve env → arca → legacy
-  (keyring, `~/.config/mimus/env`) via its `mimus-arca` adapter
-  shelling `arca` — vaults are canonical, writes land in them.
+- **mimus** — critic; secrets resolve env → cuora → legacy
+  (keyring, `~/.config/mimus/env`) via its `mimus-cuora` adapter
+  shelling `cuora` — vaults are canonical, writes land in them.
 - **sepia** — session lifecycle.
 
 A hosted vault service is in scope (it's a store impl);
@@ -113,7 +113,7 @@ cargo xtask test           # whole suite (nextest if present);
                            # + worker smoke test when bun is installed
 cargo xtask worker         # bun test on the real worker/index.js
                            # (bun:sqlite D1 shim)
-cargo xtask install        # release-install arca → ~/.cargo/bin
+cargo xtask install        # release-install cuora → ~/.cargo/bin
 cargo xtask coverage       # llvm-cov report (HTML → target/llvm-cov/html);
                            # extra args pass through, e.g. --fail-under-lines 100
 cargo xtask site           # build the docs site (needs docs/ worktree)
@@ -144,7 +144,7 @@ commit their contents to `main`.
   value; explicit `.expose()` is the only way out.
 - Every materialization is auditable: actor, ref, env, outcome,
   timestamp — ndjson on stderr + OTLP span export when
-  `OTEL_EXPORTER_OTLP_ENDPOINT` is configured; `arca ui` mutes
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is configured; `cuora ui` mutes
   live stderr for the session and replays on exit.
 - Secrets never enter via CLI args (args land in shell history and
   `/proc`) — stdin, prompt, or keychain only.
@@ -155,6 +155,6 @@ commit their contents to `main`.
 ## Docs
 
 `docs/` worktree — VitePress + Diátaxis (tutorials/how-to/reference/
-explanation) → GitHub Pages at `9aia.com/arca`. `docs/gen-*.py`
+explanation) → GitHub Pages at `9aia.com/cuora`. `docs/gen-*.py`
 renders cli/config/crate-map from source — keep `lib.rs` module docs
 accurate; they feed the generated reference.

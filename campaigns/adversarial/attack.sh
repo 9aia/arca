@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # attack.sh — the adversarial battery for the `adversarial` peregrin
 # campaign. Codifies the repro patterns from the T-008 (cf worker +
-# vault-age findings) and T-009 (arca serve PDP / wire-hardening
+# vault-age findings) and T-009 (cuora serve PDP / wire-hardening
 # findings) adversarial passes as executable checks, plus the T-006
-# `arca run` env-scrub and audit-redaction assertions.
+# `cuora run` env-scrub and audit-redaction assertions.
 #
 # Every check runs against a throwaway age vault with FAKE values
 # only — nothing here needs (or accepts) a real secret.
@@ -15,7 +15,7 @@
 #     --keep-work  don't rm the fixture tmpdir (debugging)
 #
 # Env:
-#   ARCA_BIN   path to the arca binary (default: ./target/debug/arca,
+#   CUORA_BIN   path to the cuora binary (default: ./target/debug/cuora,
 #              built on demand)
 #   FINDINGS   findings ndjson path (default: target/adversarial/findings.ndjson)
 #
@@ -24,7 +24,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-ARCA="${ARCA_BIN:-$ROOT/target/debug/arca}"
+CUORA="${CUORA_BIN:-$ROOT/target/debug/cuora}"
 FINDINGS="${FINDINGS:-$ROOT/target/adversarial/findings.ndjson}"
 FULL=0
 KEEP_WORK=0
@@ -39,15 +39,15 @@ done
 mkdir -p "$(dirname "$FINDINGS")"
 : > "$FINDINGS"
 
-if [ ! -x "$ARCA" ]; then
-    echo "attack.sh: building arca ($ARCA missing)…" >&2
-    (cd "$ROOT" && cargo build -p arca) || {
-        echo "attack.sh: cargo build -p arca failed" >&2
+if [ ! -x "$CUORA" ]; then
+    echo "attack.sh: building cuora ($CUORA missing)…" >&2
+    (cd "$ROOT" && cargo build -p cuora) || {
+        echo "attack.sh: cargo build -p cuora failed" >&2
         exit 2
     }
 fi
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/arca-adv.XXXXXX")"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/cuora-adv.XXXXXX")"
 [ "$KEEP_WORK" = 1 ] || trap 'rm -rf "$WORK"' EXIT
 
 CANARY="CANARY-$(date +%s)-DO-NOT-USE"
@@ -63,24 +63,24 @@ pass() { echo "  ok   $1: $2" >&2; }
 
 # --- fixtures ---------------------------------------------------------------
 
-# mkvault <dir> — fresh age vault + identity + an arca.toml, canary stored.
+# mkvault <dir> — fresh age vault + identity + an cuora.toml, canary stored.
 mkvault() {
     local d="$1"
-    cat > "$d/arca.toml" <<EOF
+    cat > "$d/cuora.toml" <<EOF
 [vaults.local]
 kind = "age"
 path = "$d/vault.age"
 identity = "$d/identity.txt"
 EOF
-    ARCA_CONFIG="$d/arca.toml" "$ARCA" init --with-file >/dev/null 2>&1 \
-        && printf '%s' "$CANARY" | ARCA_CONFIG="$d/arca.toml" \
-            "$ARCA" put arca://test/key >/dev/null 2>&1
+    CUORA_CONFIG="$d/cuora.toml" "$CUORA" init --with-file >/dev/null 2>&1 \
+        && printf '%s' "$CANARY" | CUORA_CONFIG="$d/cuora.toml" \
+            "$CUORA" put cuora://test/key >/dev/null 2>&1
 }
 
 # serve <config> <input-file> — run the wire; replies on stdout,
 # audit ndjson captured at <input-file>.audit.
 serve() {
-    "$ARCA" serve --config "$1" < "$2" 2>"$2.audit"
+    "$CUORA" serve --config "$1" < "$2" 2>"$2.audit"
 }
 
 # pdp <dir> <body> — write a PDP script under <dir>, print its exec line.
@@ -93,16 +93,16 @@ pdp() {
 # --- A-01: deny blocks every vault-touching op; manifest still answers ------
 check_deny_consults() {
     local d="$WORK/a01"; mkdir -p "$d"; mkvault "$d" || return
-    cat >> "$d/arca.toml" <<EOF
+    cat >> "$d/cuora.toml" <<EOF
 [serve.pdp]
 exec = "$(pdp "$d" 'cat > /dev/null; printf %s "{\"allow\":false,\"reason\":\"closed\"}"')"
 EOF
     printf '%s\n' \
-        '{"id":1,"op":"get","ref":"arca://test/key"}' \
+        '{"id":1,"op":"get","ref":"cuora://test/key"}' \
         '{"id":2,"op":"list"}' \
         '{"id":3,"op":"check"}' \
         '{"id":4,"op":"manifest"}' > "$d/in.ndjson"
-    serve "$d/arca.toml" "$d/in.ndjson" > "$d/out.json"
+    serve "$d/cuora.toml" "$d/in.ndjson" > "$d/out.json"
     local bad=0
     # reply field order is {"error":{…},"id":N,…} — match per-id line
     grep '"id":1,' "$d/out.json" | grep -q '"denied"' || bad=1
@@ -119,12 +119,12 @@ EOF
 # --- A-02: a doomed request never spawns a PDP consult -----------------------
 check_doomed_no_consult() {
     local d="$WORK/a02"; mkdir -p "$d"; mkvault "$d" || return
-    cat >> "$d/arca.toml" <<EOF
+    cat >> "$d/cuora.toml" <<EOF
 [serve.pdp]
 exec = "$(pdp "$d" "cat > '$d/consulted'; printf %s '{\"allow\":true}'")"
 EOF
-    printf '%s\n' '{"id":1,"op":"put","ref":"arca://test/key"}' > "$d/in.ndjson"
-    serve "$d/arca.toml" "$d/in.ndjson" > "$d/out.json"
+    printf '%s\n' '{"id":1,"op":"put","ref":"cuora://test/key"}' > "$d/in.ndjson"
+    serve "$d/cuora.toml" "$d/in.ndjson" > "$d/out.json"
     if ! grep -q '"bad_request"' "$d/out.json"; then
         finding A-02 med "value-less put was not rejected as bad_request" "$(cat "$d/out.json")"
     elif [ -e "$d/consulted" ]; then
@@ -137,15 +137,15 @@ EOF
 # --- A-03: a hung PDP is killed at timeout_ms and fails CLOSED --------------
 check_hung_pdp() {
     local d="$WORK/a03"; mkdir -p "$d"; mkvault "$d" || return
-    cat >> "$d/arca.toml" <<'EOF'
+    cat >> "$d/cuora.toml" <<'EOF'
 [serve.pdp]
 exec = "sleep 60"
 timeout_ms = 400
 EOF
-    printf '%s\n' '{"id":1,"op":"get","ref":"arca://test/key"}' > "$d/in.ndjson"
+    printf '%s\n' '{"id":1,"op":"get","ref":"cuora://test/key"}' > "$d/in.ndjson"
     local t0 t1
     t0=$(date +%s)
-    serve "$d/arca.toml" "$d/in.ndjson" > "$d/out.json"
+    serve "$d/cuora.toml" "$d/in.ndjson" > "$d/out.json"
     t1=$(date +%s)
     if ! grep -q '"pdp_unreachable"' "$d/out.json"; then
         finding A-03 crit "hung PDP was not reported pdp_unreachable (fail-closed violated)" "$(cat "$d/out.json")"
@@ -159,13 +159,13 @@ EOF
 # --- A-04: a flooding verdict is capped and fails CLOSED ---------------------
 check_flood_pdp() {
     local d="$WORK/a04"; mkdir -p "$d"; mkvault "$d" || return
-    cat >> "$d/arca.toml" <<'EOF'
+    cat >> "$d/cuora.toml" <<'EOF'
 [serve.pdp]
 exec = "cat >/dev/null; head -c 100000 /dev/zero | tr '\\0' 'x'"
 timeout_ms = 3000
 EOF
-    printf '%s\n' '{"id":1,"op":"get","ref":"arca://test/key"}' > "$d/in.ndjson"
-    serve "$d/arca.toml" "$d/in.ndjson" > "$d/out.json"
+    printf '%s\n' '{"id":1,"op":"get","ref":"cuora://test/key"}' > "$d/in.ndjson"
+    serve "$d/cuora.toml" "$d/in.ndjson" > "$d/out.json"
     if ! grep -q '"pdp_unreachable"' "$d/out.json"; then
         finding A-04 high "a >64KiB PDP verdict was not treated as unreachable" "$(cat "$d/out.json")"
     else
@@ -176,17 +176,17 @@ EOF
 # --- A-05: garbage verdict fails closed; allow_on_error degrades openly ------
 check_garbage_pdp() {
     local d="$WORK/a05"; mkdir -p "$d"; mkvault "$d" || return
-    cat >> "$d/arca.toml" <<'EOF'
+    cat >> "$d/cuora.toml" <<'EOF'
 [serve.pdp]
 exec = "cat >/dev/null; printf garbage"
 EOF
-    printf '%s\n' '{"id":1,"op":"get","ref":"arca://test/key"}' > "$d/in.ndjson"
-    serve "$d/arca.toml" "$d/in.ndjson" > "$d/out.json"
+    printf '%s\n' '{"id":1,"op":"get","ref":"cuora://test/key"}' > "$d/in.ndjson"
+    serve "$d/cuora.toml" "$d/in.ndjson" > "$d/out.json"
     grep -q '"pdp_unreachable"' "$d/out.json" \
         || finding A-05 high "unparseable PDP verdict did not fail closed" "$(cat "$d/out.json")"
     # same misbehaving PDP under allow_on_error — op runs, degraded
     # verdict recorded on the reply + audit event
-    cat > "$d/arca.toml" <<EOF
+    cat > "$d/cuora.toml" <<EOF
 [vaults.local]
 kind = "age"
 path = "$d/vault.age"
@@ -196,8 +196,8 @@ identity = "$d/identity.txt"
 exec = "cat >/dev/null; printf garbage"
 allow_on_error = true
 EOF
-    printf '%s\n' '{"id":1,"op":"get","ref":"arca://test/key"}' > "$d/in2.ndjson"
-    serve "$d/arca.toml" "$d/in2.ndjson" > "$d/out2.json"
+    printf '%s\n' '{"id":1,"op":"get","ref":"cuora://test/key"}' > "$d/in2.ndjson"
+    serve "$d/cuora.toml" "$d/in2.ndjson" > "$d/out2.json"
     if ! grep -q '"ok":true' "$d/out2.json" || ! grep -q 'allow_on_error' "$d/out2.json"; then
         finding A-05 med "allow_on_error did not run the op with a recorded degraded verdict" "$(cat "$d/out2.json")"
     else
@@ -208,17 +208,17 @@ EOF
 # --- A-06: the PDP child's env is scrubbed of parent credentials ------------
 check_pdp_env_scrub() {
     local d="$WORK/a06"; mkdir -p "$d"; mkvault "$d" || return
-    cat >> "$d/arca.toml" <<EOF
+    cat >> "$d/cuora.toml" <<EOF
 [serve.pdp]
 exec = "$(pdp "$d" "env > '$d/pdp-env'; printf %s '{\"allow\":true}'")"
 EOF
-    printf '%s\n' '{"id":1,"op":"get","ref":"arca://test/key"}' > "$d/in.ndjson"
-    ARCA_CF_TOKEN=fake CLOUDFLARE_API_TOKEN=fake ARCA_ADV_MARKER=leak \
-        serve "$d/arca.toml" "$d/in.ndjson" > /dev/null
-    if grep -qE 'ARCA_CF_TOKEN|CLOUDFLARE_API_TOKEN|ARCA_ADV_MARKER' "$d/pdp-env" 2>/dev/null; then
-        finding A-06 crit "parent credentials leaked into the PDP child's environment" "$(grep -E 'ARCA_|CLOUDFLARE' "$d/pdp-env")"
+    printf '%s\n' '{"id":1,"op":"get","ref":"cuora://test/key"}' > "$d/in.ndjson"
+    CUORA_CF_TOKEN=fake CLOUDFLARE_API_TOKEN=fake CUORA_ADV_MARKER=leak \
+        serve "$d/cuora.toml" "$d/in.ndjson" > /dev/null
+    if grep -qE 'CUORA_CF_TOKEN|CLOUDFLARE_API_TOKEN|CUORA_ADV_MARKER' "$d/pdp-env" 2>/dev/null; then
+        finding A-06 crit "parent credentials leaked into the PDP child's environment" "$(grep -E 'CUORA_|CLOUDFLARE' "$d/pdp-env")"
     else
-        pass A-06 "PDP child env scrubbed to the arca-shell allowlist"
+        pass A-06 "PDP child env scrubbed to the cuora-shell allowlist"
     fi
 }
 
@@ -231,7 +231,7 @@ check_oversized_line() {
         printf '}\n'
         printf '{"id":9,"op":"manifest"}\n'
     } > "$d/in.ndjson"
-    serve "$d/arca.toml" "$d/in.ndjson" > "$d/out.json"
+    serve "$d/cuora.toml" "$d/in.ndjson" > "$d/out.json"
     if ! grep -q '"bad_request"' "$d/out.json"; then
         finding A-07 high ">4MiB request line was not rejected" "$(head -c 300 "$d/out.json")"
     elif ! grep -q '"id":9,"ok":true' "$d/out.json"; then
@@ -244,16 +244,16 @@ check_oversized_line() {
 # --- A-08: oversized fields are rejected before any consult ------------------
 check_oversized_fields() {
     local d="$WORK/a08"; mkdir -p "$d"; mkvault "$d" || return
-    cat >> "$d/arca.toml" <<EOF
+    cat >> "$d/cuora.toml" <<EOF
 [serve.pdp]
 exec = "$(pdp "$d" "cat > '$d/consulted'; printf %s '{\"allow\":true}'")"
 EOF
     local big_actor big_ref
     big_actor=$(head -c 300 /dev/zero | tr '\0' 'a')
     big_ref=$(head -c 1100 /dev/zero | tr '\0' 'r')
-    printf '{"id":1,"op":"get","ref":"arca://test/key","actor":"%s"}\n' "$big_actor" > "$d/in.ndjson"
+    printf '{"id":1,"op":"get","ref":"cuora://test/key","actor":"%s"}\n' "$big_actor" > "$d/in.ndjson"
     printf '{"id":2,"op":"get","ref":"%s"}\n' "$big_ref" >> "$d/in.ndjson"
-    serve "$d/arca.toml" "$d/in.ndjson" > "$d/out.json"
+    serve "$d/cuora.toml" "$d/in.ndjson" > "$d/out.json"
     local bad=0
     grep '"id":1,' "$d/out.json" | grep -q '"bad_request"' || bad=1
     grep '"id":2,' "$d/out.json" | grep -q '"bad_request"' || bad=1
@@ -265,23 +265,23 @@ EOF
     fi
 }
 
-# --- A-09: `arca run` scrubs the child env to an allowlist + declared secrets -
+# --- A-09: `cuora run` scrubs the child env to an allowlist + declared secrets -
 check_run_env_scrub() {
     local d="$WORK/a09"; mkdir -p "$d"; mkvault "$d" || return
-    cat >> "$d/arca.toml" <<'EOF'
+    cat >> "$d/cuora.toml" <<'EOF'
 [secrets]
-CAMPAIGN_TOKEN = "arca://test/key"
+CAMPAIGN_TOKEN = "cuora://test/key"
 EOF
     local env_out
-    env_out=$(ARCA_CF_TOKEN=fake CLOUDFLARE_API_TOKEN=fake ARCA_ADV_MARKER=leak \
-        "$ARCA" run --config "$d/arca.toml" -- 'env' 2>/dev/null)
-    if printf '%s' "$env_out" | grep -qE '^(ARCA_CF_TOKEN|CLOUDFLARE_API_TOKEN|ARCA_ADV_MARKER)='; then
-        finding A-09 crit "arca run leaks undeclared parent env into the child" "$(printf '%s' "$env_out" | grep -E 'ARCA_|CLOUDFLARE')"
+    env_out=$(CUORA_CF_TOKEN=fake CLOUDFLARE_API_TOKEN=fake CUORA_ADV_MARKER=leak \
+        "$CUORA" run --config "$d/cuora.toml" -- 'env' 2>/dev/null)
+    if printf '%s' "$env_out" | grep -qE '^(CUORA_CF_TOKEN|CLOUDFLARE_API_TOKEN|CUORA_ADV_MARKER)='; then
+        finding A-09 crit "cuora run leaks undeclared parent env into the child" "$(printf '%s' "$env_out" | grep -E 'CUORA_|CLOUDFLARE')"
         return
     fi
     # positive control: the declared secret DOES inject
     local got
-    got=$("$ARCA" run --config "$d/arca.toml" -- 'printf %s "$CAMPAIGN_TOKEN"' 2>/dev/null)
+    got=$("$CUORA" run --config "$d/cuora.toml" -- 'printf %s "$CAMPAIGN_TOKEN"' 2>/dev/null)
     if [ "$got" != "$CANARY" ]; then
         finding A-09 high "declared [secrets] ref did not materialize into the child env" "got '$got'"
     else
@@ -292,8 +292,8 @@ EOF
 # --- A-10: secret values never reach the audit stream -------------------------
 check_audit_redaction() {
     local d="$WORK/a10"; mkdir -p "$d"; mkvault "$d" || return
-    printf '%s\n' '{"id":1,"op":"get","ref":"arca://test/key"}' > "$d/in.ndjson"
-    serve "$d/arca.toml" "$d/in.ndjson" > /dev/null
+    printf '%s\n' '{"id":1,"op":"get","ref":"cuora://test/key"}' > "$d/in.ndjson"
+    serve "$d/cuora.toml" "$d/in.ndjson" > /dev/null
     if grep -q "$CANARY" "$d/in.ndjson.audit"; then
         finding A-10 crit "secret value leaked into the audit ndjson stream" "$(cat "$d/in.ndjson.audit")"
     else
@@ -301,19 +301,19 @@ check_audit_redaction() {
     fi
 }
 
-# --- A-11: implicit ./arca.toml carrying [serve.pdp] warns on stderr ----------
+# --- A-11: implicit ./cuora.toml carrying [serve.pdp] warns on stderr ----------
 check_implicit_config_warning() {
     local d="$WORK/a11"; mkdir -p "$d"; mkvault "$d" || return
-    cat >> "$d/arca.toml" <<'EOF'
+    cat >> "$d/cuora.toml" <<'EOF'
 [serve.pdp]
 exec = "cat >/dev/null; printf %s '{\"allow\":true}'"
 EOF
     local err
-    err=$(cd "$d" && "$ARCA" serve <<< '{"op":"shutdown"}' 2>&1 >/dev/null)
+    err=$(cd "$d" && "$CUORA" serve <<< '{"op":"shutdown"}' 2>&1 >/dev/null)
     if printf '%s' "$err" | grep -qiE 'implicit|trust'; then
-        pass A-11 "implicit ./arca.toml with pdp config warns on stderr"
+        pass A-11 "implicit ./cuora.toml with pdp config warns on stderr"
     else
-        finding A-11 med "no trust-root warning when [serve.pdp] loads from implicit ./arca.toml" "$err"
+        finding A-11 med "no trust-root warning when [serve.pdp] loads from implicit ./cuora.toml" "$err"
     fi
 }
 
@@ -322,7 +322,7 @@ check_permission_notes() {
     local d="$WORK/a12"; mkdir -p "$d"; mkvault "$d" || return
     chmod 0666 "$d/vault.age" 2>/dev/null || return 0
     local err
-    err=$(ARCA_CONFIG="$d/arca.toml" "$ARCA" list 2>&1 >/dev/null)
+    err=$(CUORA_CONFIG="$d/cuora.toml" "$CUORA" list 2>&1 >/dev/null)
     if printf '%s' "$err" | grep -qiE 'perm|0600|0700'; then
         pass A-12 "permissive vault file surfaces a stderr note (F-3)"
     else
@@ -342,7 +342,7 @@ check_full_suite() {
     fi
 }
 
-echo "attack.sh: battery against $ARCA (work: $WORK)" >&2
+echo "attack.sh: battery against $CUORA (work: $WORK)" >&2
 check_deny_consults
 check_doomed_no_consult
 check_hung_pdp

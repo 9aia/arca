@@ -1,0 +1,38 @@
+# cuora.toml — repo-level cuora config (dogfooding). Search order:
+# --config → $CUORA_CONFIG → ./cuora.toml → ~/.config/cuora/cuora.toml.
+# Secrets are refs, never values.
+
+# The declared secret surface — what `cuora run`/`cuora env` may inject.
+# The adversarial campaign (campaigns/adversarial/) runs under
+# `cuora run --env dev -- peregrin campaign run …`, so its credentials
+# arrive through here. Fake values are all the campaign needs:
+#
+#   printf 'fake-devin-token' | cuora put cuora://agents/devin
+#   printf 'fake-cf-token'    | cuora put cuora://cf/token
+#
+# Values live in the 9aia CF vault (cuora.9aia.com, Gaia account);
+# the local age vault keeps only the scoped-token refs below.
+
+[envs]
+dev     = { vault = "nine" }
+staging = { vault = "nine" }
+preview = { vault = "nine" }
+prod    = { vault = "nine" }
+
+[vaults.nine]
+kind = "cf"
+url = "https://cuora.9aia.com"
+token_env = "CUORA_CF_TOKEN"
+cache = ["dev", "preview"] # prod reads live — no stale-prod footgun
+
+[vaults.nine.tokens]
+dev     = "cuora://9aia/cf-token-dev"
+staging = "cuora://9aia/cf-token-staging"
+preview = "cuora://9aia/cf-token-preview"
+prod    = "cuora://9aia/cf-token-prod"
+
+[secrets]
+# agent-runner credential the campaign's agent nodes may consume
+DEVIN_API_KEY = "cuora://agents/devin"
+# cf-vault bearer — materializes only when a [vaults.cloud] is wired
+CUORA_CF_TOKEN = "cuora://cf/token"

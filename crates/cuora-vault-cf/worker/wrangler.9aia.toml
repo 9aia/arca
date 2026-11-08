@@ -1,0 +1,13 @@
+name = "cuora"
+main = "index.js"
+compatibility_date = "2025-10-01"
+account_id = "cf5a672bcf77fc2318ec7f0a709c1f77"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cuora-vault"
+database_id = "628fc6ce-f270-4518-809f-4b999e1160f9"
+
+[[routes]]
+pattern = "cuora.9aia.com"
+custom_domain = true

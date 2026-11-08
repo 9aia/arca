@@ -1,27 +1,27 @@
-name: arca-config
-path: crates/arca-config/Cargo.toml
-purpose: 'Config port: where arca.toml-shaped config comes from'
+name: cuora-config
+path: crates/cuora-config/Cargo.toml
+purpose: 'Config port: where cuora.toml-shaped config comes from'
 api:
 - name: ConfigSource
   kind: trait
-  file: crates/arca-config/src/lib.rs
+  file: crates/cuora-config/src/lib.rs
   line: 5
-  module: arca-config
-- name: arca-config
+  module: cuora-config
+- name: cuora-config
   kind: module
-  file: crates/arca-config/Cargo.toml
+  file: crates/cuora-config/Cargo.toml
   line: 1
-  module: arca-config
+  module: cuora-config
 deps:
-- arca-core
+- cuora-core
 notes: ''
 verify:
-- crates/arca-config/Cargo.toml
-- crates/arca-config/src/lib.rs
+- crates/cuora-config/Cargo.toml
+- crates/cuora-config/src/lib.rs
 provenance:
   files:
-  - crates/arca-config/Cargo.toml
-  - crates/arca-config/src/lib.rs
+  - crates/cuora-config/Cargo.toml
+  - crates/cuora-config/src/lib.rs
   hashes:
   - cf00672b233762c2e1aa7121fa3921782757a2df
   - bfeab7ce177cba4fff075d6fa993e58005e13278

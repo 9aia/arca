@@ -1,9 +1,0 @@
----
-source: crates/arca-testkit/tests/golden.rs
-expression: out
----
-# TODO — arca
-
-## Now
-
-- [ ] T-007 Short id

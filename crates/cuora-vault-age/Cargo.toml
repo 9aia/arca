@@ -1,0 +1,30 @@
+[package]
+name = "cuora-vault-age"
+description = "Local vault impl: one age-x25519-encrypted JSON doc — the v1 default backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["secrets", "cuora", "age"]
+categories = ["development-tools"]
+
+[dependencies]
+age.workspace = true
+cuora-core.workspace = true
+cuora-identity.workspace = true
+cuora-notice.workspace = true
+cuora-vault.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+cuora-identity-file.workspace = true
+cuora-testkit.workspace = true
+tempfile.workspace = true
+temp-env.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

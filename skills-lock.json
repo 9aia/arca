@@ -18,11 +18,11 @@
       "sourceType": "local",
       "computedHash": "1bf3b14f1961053d170092458bab1e961f08fdad7b557bce399b4cc3f9b7c398"
     },
-    "arca": {
-      "source": "9aia/arca",
+    "cuora": {
+      "source": "9aia/cuora",
       "sourceType": "local",
-      "skillPath": ".agents/skills/arca/SKILL.md",
-      "computedHash": "a34920131ae5eebe3487b26714f142469d0698b727db0c6ffe33bd62ec9bb4d2"
+      "skillPath": ".agents/skills/cuora/SKILL.md",
+      "computedHash": "9ed317142bc1ec100e68981ee30491da5e2e38faaf8c4b81de8ca39f47c69185"
     }
   }
 }

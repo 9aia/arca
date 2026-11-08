@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # triage.sh — campaign `triage` node. Registers each attack finding in
-# arca's project ledger: `myco issue new` (the bug record) + a matching
+# cuora's project ledger: `myco issue new` (the bug record) + a matching
 # `myco todo add` (the work item). Idempotent — a finding whose title
 # already matches an open issue is counted, not refiled.
 #

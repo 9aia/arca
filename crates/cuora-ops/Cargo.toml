@@ -1,0 +1,40 @@
+[package]
+name = "cuora-ops"
+description = "cuora ops I/O: config load, env/ref resolution, vault open, verb plumbing, audit emission"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["secrets", "cuora"]
+categories = ["development-tools"]
+
+[dependencies]
+age.workspace = true
+cuora-core.workspace = true
+cuora-config.workspace = true
+cuora-config-toml.workspace = true
+cuora-deploy.workspace = true
+cuora-deploy-cf.workspace = true
+cuora-identity.workspace = true
+cuora-identity-file.workspace = true
+cuora-identity-keyring.workspace = true
+cuora-notice.workspace = true
+cuora-vault.workspace = true
+cuora-vault-age.workspace = true
+cuora-vault-cached.workspace = true
+cuora-vault-cf.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+time.workspace = true
+ureq.workspace = true
+
+[dev-dependencies]
+cuora-testkit.workspace = true
+keyring-core.workspace = true
+tempfile.workspace = true
+temp-env.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

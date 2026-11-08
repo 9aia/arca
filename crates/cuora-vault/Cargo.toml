@@ -1,0 +1,17 @@
+[package]
+name = "cuora-vault"
+description = "Vault port: readable secret stores — get/put/rm/list/rotate, per-env; every impl stores opaque ciphertext"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["secrets", "cuora"]
+categories = ["development-tools"]
+
+[dependencies]
+cuora-core.workspace = true
+thiserror.workspace = true
+time.workspace = true
+
+[lints]
+workspace = true

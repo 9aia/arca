@@ -1,7 +1,7 @@
 # campaigns/adversarial — attack → triage → fix → verify
 
 A [peregrin](https://github.com/9aia/peregrin) campaign that makes
-arca eat its own cooking: an **attack** node runs the adversarial
+cuora eat its own cooking: an **attack** node runs the adversarial
 battery, **triage** registers every finding as a myco issue + todo in
 the `project/` ledger, a **fix** agent works the issues, and
 **verify** re-runs the lint gate + battery — issues close on green,
@@ -18,13 +18,13 @@ start → attack ─┬─ attack.clean ─────────────�
 ## Running it
 
 ```bash
-# secrets the campaign needs arrive via arca run — the dogfood path.
-# declared surface lives in the repo-root arca.toml `[secrets]`:
-arca run --env dev -- peregrin campaign run campaigns/adversarial/main.yaml
+# secrets the campaign needs arrive via cuora run — the dogfood path.
+# declared surface lives in the repo-root cuora.toml `[secrets]`:
+cuora run --env dev -- peregrin campaign run campaigns/adversarial/main.yaml
 
 # fake secrets are all it needs — a one-time dev-vault bootstrap:
-printf 'fake-devin-token' | arca put arca://agents/devin
-printf 'fake-cf-token'    | arca put arca://cf/token
+printf 'fake-devin-token' | cuora put cuora://agents/devin
+printf 'fake-cf-token'    | cuora put cuora://cf/token
 
 # validate / dry-run without executing nodes:
 peregrin campaign validate campaigns/adversarial/main.yaml
@@ -34,7 +34,7 @@ peregrin campaign run campaigns/adversarial/main.yaml --dry-run
 Run from the **repo root** — node commands are relative paths.
 
 `AGENT_RUNNER` (env, default `devin`) picks the agent-driver runner;
-it's a normal env var, so `AGENT_RUNNER=claude arca run --env dev --
+it's a normal env var, so `AGENT_RUNNER=claude cuora run --env dev --
 peregrin campaign run …` works.
 
 ## Files
@@ -46,8 +46,8 @@ peregrin campaign run …` works.
 | `triage.sh` | findings → `myco issue new` + `myco todo add`, dedup'd → `target/adversarial/issues.txt` |
 | `verify.sh` | `cargo xtask check` + `attack.sh` re-run → rc 0/1/2 |
 | `close.sh` | `myco issue resolve` for everything verify green-lit (best-effort) |
-| `pdp-campaign.sh` | campaign-local policy decider for `arca serve`'s `[serve.pdp] exec` wire — the stand-in until `peregrin policy decide` exists |
-| `serve.pdp.toml` | example `arca serve` config wiring `[serve.pdp] exec` to that decider |
+| `pdp-campaign.sh` | campaign-local policy decider for `cuora serve`'s `[serve.pdp] exec` wire — the stand-in until `peregrin policy decide` exists |
+| `serve.pdp.toml` | example `cuora serve` config wiring `[serve.pdp] exec` to that decider |
 
 ## What the battery checks (repro patterns from prior audits)
 
@@ -58,12 +58,12 @@ peregrin campaign run …` works.
 | A-03 | hung PDP killed at `timeout_ms` → `pdp_unreachable`, fail-closed | T-009 F-1 |
 | A-04 | verdict >64 KiB → `pdp_unreachable` | T-009 F-2 |
 | A-05 | unparseable verdict → fail-closed; `allow_on_error` degrades *openly* | T-009 |
-| A-06 | PDP child env scrubbed — `ARCA_*`/deploy tokens never cross | T-009 F-3 |
+| A-06 | PDP child env scrubbed — `CUORA_*`/deploy tokens never cross | T-009 F-3 |
 | A-07 | request line >4 MiB → `bad_request` + reader resync | T-009 F-4 |
 | A-08 | actor >256 B / ref >1 KiB → `bad_request`, no consult | T-009 F-5 |
-| A-09 | `arca run` child env = allowlist + declared `[secrets]` only | T-006 HIGH-2 |
+| A-09 | `cuora run` child env = allowlist + declared `[secrets]` only | T-006 HIGH-2 |
 | A-10 | secret values never land in the audit ndjson stream | invariant |
-| A-11 | implicit `./arca.toml` carrying `[serve.pdp]` warns (trust root) | T-009 F-6 |
+| A-11 | implicit `./cuora.toml` carrying `[serve.pdp]` warns (trust root) | T-009 F-6 |
 | A-12 | permissive vault file (0666) → non-fatal stderr note | T-008 F-3 |
 | A-FULL | `cargo xtask test` green (incl. worker bun smoke when bun present) | T-006/T-008 suites |
 
@@ -72,7 +72,7 @@ unknown-id timing oracle, 3→4-field HMAC) are covered by the worker
 smoke suite that `cargo xtask test` runs when `bun` is installed —
 the battery doesn't duplicate them; a red suite lands as A-FULL.
 
-## The `arca serve` ↔ peregrin PDP wire
+## The `cuora serve` ↔ peregrin PDP wire
 
 `[serve.pdp] exec` (ADR-0003) is the real integration seam: before
 every vault-touching op, serve spawns the configured command, sends
@@ -82,7 +82,7 @@ every vault-touching op, serve spawns the configured command, sends
 Wire it up for a gated serve:
 
 ```bash
-arca serve --config campaigns/adversarial/serve.pdp.toml
+cuora serve --config campaigns/adversarial/serve.pdp.toml
 ```
 
 `pdp-campaign.sh` is the stand-in decider (non-prod rw allowed,

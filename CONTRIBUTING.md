@@ -5,10 +5,10 @@ dogfoods its own PM ledger (`project/`). Fork freely under MIT.
 
 ## Layout
 
-`crates/` — flat rust workspace, ports-and-adapters. `arca-core` is
-pure domain (no I/O); `arca-config`/`arca-vault`/`arca-deploy` are
-ports, `-toml`/`-age`/`-cf` crates their impls; `arca-ops` is the ops
-shell; `arca` (`crates/arca-cli`) is the composition root. `xtask/`
+`crates/` — flat rust workspace, ports-and-adapters. `cuora-core` is
+pure domain (no I/O); `cuora-config`/`cuora-vault`/`cuora-deploy` are
+ports, `-toml`/`-age`/`-cf` crates their impls; `cuora-ops` is the ops
+shell; `cuora` (`crates/cuora-cli`) is the composition root. `xtask/`
 is repo chores.
 
 ## Rules of thumb
@@ -19,7 +19,7 @@ is repo chores.
   `target/llvm-cov/html`; pass `--fail-under-lines 100` to gate.
 - Keep the binary dependency-light and sync; no async runtime.
 - Commits: conventional prefixes (`feat:`/`fix:`/`refactor:`/`docs:`/`chore:`).
-- Never commit secrets — `arca.toml` takes names of env vars, not
+- Never commit secrets — `cuora.toml` takes names of env vars, not
   values; no plaintext secret in tests, fixtures, docs, or logs.
 - Never hand-edit `project/` when a `myco` verb exists — the ledger
   is myco's, verbs are the audit trail.
@@ -27,7 +27,7 @@ is repo chores.
 ## Releasing
 
 No crates.io publish, no git tags — the install path is
-`cargo install --git https://github.com/9aia/arca arca`. Keep the
+`cargo install --git https://github.com/9aia/cuora cuora`. Keep the
 workspace building under plain `cargo install` (default features
 include the TUI; `--no-default-features` must stay lean).
 

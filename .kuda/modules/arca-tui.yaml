@@ -1,238 +1,238 @@
-name: arca-tui
-path: crates/arca-tui/Cargo.toml
-purpose: arca — interactive vault TUI; a thin front-end over arca-ops (phase 5 polish)
+name: cuora-tui
+path: crates/cuora-tui/Cargo.toml
+purpose: cuora — interactive vault TUI; a thin front-end over cuora-ops (phase 5 polish)
 api:
 - name: ACCENT
   kind: const
-  file: crates/arca-tui/src/render.rs
+  file: crates/cuora-tui/src/render.rs
   line: 15
-  module: arca-tui
+  module: cuora-tui
 - name: Entry
   kind: type
-  file: crates/arca-tui/src/app.rs
+  file: crates/cuora-tui/src/app.rs
   line: 28
-  module: arca-tui
+  module: cuora-tui
 - name: EnvTab
   kind: type
-  file: crates/arca-tui/src/app.rs
+  file: crates/cuora-tui/src/app.rs
   line: 15
-  module: arca-tui
+  module: cuora-tui
 - name: Guard
   kind: type
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 31
-  module: arca-tui
+  module: cuora-tui
 - name: Listing
   kind: type
-  file: crates/arca-tui/src/app.rs
+  file: crates/cuora-tui/src/app.rs
   line: 41
-  module: arca-tui
+  module: cuora-tui
 - name: MUTED
   kind: const
-  file: crates/arca-tui/src/render.rs
+  file: crates/cuora-tui/src/render.rs
   line: 16
-  module: arca-tui
+  module: cuora-tui
 - name: Model
   kind: type
-  file: crates/arca-tui/src/app.rs
+  file: crates/cuora-tui/src/app.rs
   line: 49
-  module: arca-tui
+  module: cuora-tui
 - name: WARN
   kind: const
-  file: crates/arca-tui/src/render.rs
+  file: crates/cuora-tui/src/render.rs
   line: 17
-  module: arca-tui
+  module: cuora-tui
 - name: app
   kind: module
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 16
-  module: arca-tui
-- name: arca-tui
+  module: cuora-tui
+- name: cuora-tui
   kind: module
-  file: crates/arca-tui/Cargo.toml
+  file: crates/cuora-tui/Cargo.toml
   line: 1
-  module: arca-tui
+  module: cuora-tui
 - name: broken_vault_renders_error_not_panic
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 199
-  module: arca-tui
+  module: cuora-tui
 - name: clear_value
   kind: function
-  file: crates/arca-tui/src/app.rs
+  file: crates/cuora-tui/src/app.rs
   line: 305
-  module: arca-tui
+  module: cuora-tui
 - name: code
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 262
-  module: arca-tui
+  module: cuora-tui
 - name: current
   kind: function
-  file: crates/arca-tui/src/app.rs
+  file: crates/cuora-tui/src/app.rs
   line: 169
-  module: arca-tui
+  module: cuora-tui
 - name: custom_envs_and_unlisted_selection_get_tabs
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 473
-  module: arca-tui
+  module: cuora-tui
 - name: custom_envs_open_sorted
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 236
-  module: arca-tui
+  module: cuora-tui
 - name: detail_pane_shows_default_paths_when_unconfigured
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 493
-  module: arca-tui
+  module: cuora-tui
 - name: draw
   kind: function
-  file: crates/arca-tui/src/render.rs
+  file: crates/cuora-tui/src/render.rs
   line: 20
-  module: arca-tui
+  module: cuora-tui
 - name: draw_detail
   kind: function
-  file: crates/arca-tui/src/render.rs
+  file: crates/cuora-tui/src/render.rs
   line: 164
-  module: arca-tui
+  module: cuora-tui
 - name: draw_footer
   kind: function
-  file: crates/arca-tui/src/render.rs
+  file: crates/cuora-tui/src/render.rs
   line: 227
-  module: arca-tui
+  module: cuora-tui
 - name: draw_help
   kind: function
-  file: crates/arca-tui/src/render.rs
+  file: crates/cuora-tui/src/render.rs
   line: 258
-  module: arca-tui
+  module: cuora-tui
 - name: draw_list
   kind: function
-  file: crates/arca-tui/src/render.rs
+  file: crates/cuora-tui/src/render.rs
   line: 82
-  module: arca-tui
+  module: cuora-tui
 - name: draw_main
   kind: function
-  file: crates/arca-tui/src/render.rs
+  file: crates/cuora-tui/src/render.rs
   line: 71
-  module: arca-tui
+  module: cuora-tui
 - name: draw_tabs
   kind: function
-  file: crates/arca-tui/src/render.rs
+  file: crates/cuora-tui/src/render.rs
   line: 50
-  module: arca-tui
+  module: cuora-tui
 - name: drop
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 34
-  module: arca-tui
+  module: cuora-tui
 - name: empty_and_tiny_and_narrow_frames_render
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 536
-  module: arca-tui
+  module: cuora-tui
 - name: env_tabs_and_filter_and_help
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 165
-  module: arca-tui
+  module: cuora-tui
 - name: every_key_in_the_map_behaves
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 280
-  module: arca-tui
+  module: cuora-tui
 - name: filter_editing_keys_all_do_something
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 362
-  module: arca-tui
+  module: cuora-tui
 - name: filter_key
   kind: function
-  file: crates/arca-tui/src/app.rs
+  file: crates/cuora-tui/src/app.rs
   line: 261
-  module: arca-tui
+  module: cuora-tui
 - name: fmt_ts
   kind: function
-  file: crates/arca-tui/src/app.rs
+  file: crates/cuora-tui/src/app.rs
   line: 349
-  module: arca-tui
+  module: cuora-tui
 - name: install_panic_hook
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 43
-  module: arca-tui
+  module: cuora-tui
 - name: key
   kind: function
-  file: crates/arca-tui/src/app.rs
+  file: crates/cuora-tui/src/app.rs
   line: 181
-  module: arca-tui
+  module: cuora-tui
 - name: key
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 132
-  module: arca-tui
+  module: cuora-tui
 - name: non_tty_declines
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 256
-  module: arca-tui
+  module: cuora-tui
 - name: open
   kind: function
-  file: crates/arca-tui/src/app.rs
+  file: crates/cuora-tui/src/app.rs
   line: 77
-  module: arca-tui
+  module: cuora-tui
 - name: ops_on_config
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 268
-  module: arca-tui
+  module: cuora-tui
 - name: ops_with_secrets
   kind: function
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 94
-  module: arca-tui
+  module: cuora-tui
 - name: reload
   kind: function
-  file: crates/arca-tui/src/app.rs
+  file: crates/cuora-tui/src/app.rs
   line: 130
-  module: arca-tui
+  module: cuora-tui
 - name: render
   kind: module
-  file: crates/arca-tui/src/lib.rs
+  file: crates/cuora-tui/src/lib.rs
   line: 17
-  module: arca-tui
+  module: cuora-tui
 api_omitted: 13
 deps:
-- arca-core
-- arca-ops
-- arca-vault
+- cuora-core
+- cuora-ops
+- cuora-vault
 - crossterm
 - ratatui
 - time
-- arca-identity
-- arca-identity-file
-- arca-testkit
-- arca-vault-age
+- cuora-identity
+- cuora-identity-file
+- cuora-testkit
+- cuora-vault-age
 - temp-env
 - tempfile
-- arca-core
-- arca-ops
+- cuora-core
+- cuora-ops
 - ratatui
 - crossterm
-- arca-vault
+- cuora-vault
 notes: ''
 verify:
-- crates/arca-tui/Cargo.toml
-- crates/arca-tui/src/app.rs
-- crates/arca-tui/src/lib.rs
-- crates/arca-tui/src/render.rs
+- crates/cuora-tui/Cargo.toml
+- crates/cuora-tui/src/app.rs
+- crates/cuora-tui/src/lib.rs
+- crates/cuora-tui/src/render.rs
 provenance:
   files:
-  - crates/arca-tui/Cargo.toml
-  - crates/arca-tui/src/app.rs
-  - crates/arca-tui/src/lib.rs
-  - crates/arca-tui/src/render.rs
+  - crates/cuora-tui/Cargo.toml
+  - crates/cuora-tui/src/app.rs
+  - crates/cuora-tui/src/lib.rs
+  - crates/cuora-tui/src/render.rs
   hashes:
   - 98c2adeaee57801617a05341fcfba6228dabd630
   - 4fa212caf389787e30f1d3c0c420de4385c9ffa4

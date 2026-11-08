@@ -1,0 +1,9 @@
+---
+source: crates/cuora-testkit/tests/golden.rs
+expression: out
+---
++++
+item = "ADR-0004"
++++
+
+# Handoffs — ADR-0004

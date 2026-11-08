@@ -1,76 +1,76 @@
-name: arca-config-toml
-path: crates/arca-config-toml/Cargo.toml
-purpose: 'Config impl: arca.toml file (explicit path, env, ./, ~/.config)'
+name: cuora-config-toml
+path: crates/cuora-config-toml/Cargo.toml
+purpose: 'Config impl: cuora.toml file (explicit path, env, ./, ~/.config)'
 api:
 - name: TomlSource
   kind: type
-  file: crates/arca-config-toml/src/lib.rs
+  file: crates/cuora-config-toml/src/lib.rs
   line: 8
-  module: arca-config-toml
-- name: arca-config-toml
+  module: cuora-config-toml
+- name: cuora-config-toml
   kind: module
-  file: crates/arca-config-toml/Cargo.toml
+  file: crates/cuora-config-toml/Cargo.toml
   line: 1
-  module: arca-config-toml
+  module: cuora-config-toml
 - name: candidates
   kind: function
-  file: crates/arca-config-toml/src/lib.rs
+  file: crates/cuora-config-toml/src/lib.rs
   line: 15
-  module: arca-config-toml
+  module: cuora-config-toml
 - name: default_search_builds_candidates
   kind: function
-  file: crates/arca-config-toml/src/lib.rs
+  file: crates/cuora-config-toml/src/lib.rs
   line: 111
-  module: arca-config-toml
+  module: cuora-config-toml
 - name: explicit_missing_file_errors
   kind: function
-  file: crates/arca-config-toml/src/lib.rs
+  file: crates/cuora-config-toml/src/lib.rs
   line: 57
-  module: arca-config-toml
+  module: cuora-config-toml
 - name: load
   kind: function
-  file: crates/arca-config-toml/src/lib.rs
+  file: crates/cuora-config-toml/src/lib.rs
   line: 39
-  module: arca-config-toml
+  module: cuora-config-toml
 - name: locate
   kind: function
-  file: crates/arca-config-toml/src/lib.rs
+  file: crates/cuora-config-toml/src/lib.rs
   line: 33
-  module: arca-config-toml
+  module: cuora-config-toml
 - name: located_but_unreadable_errors
   kind: function
-  file: crates/arca-config-toml/src/lib.rs
+  file: crates/cuora-config-toml/src/lib.rs
   line: 66
-  module: arca-config-toml
+  module: cuora-config-toml
 - name: parses_secrets_table
   kind: function
-  file: crates/arca-config-toml/src/lib.rs
+  file: crates/cuora-config-toml/src/lib.rs
   line: 82
-  module: arca-config-toml
+  module: cuora-config-toml
 - name: tests
   kind: module
-  file: crates/arca-config-toml/src/lib.rs
+  file: crates/cuora-config-toml/src/lib.rs
   line: 53
-  module: arca-config-toml
+  module: cuora-config-toml
 - name: unknown_fields_fail_loud
   kind: function
-  file: crates/arca-config-toml/src/lib.rs
+  file: crates/cuora-config-toml/src/lib.rs
   line: 98
-  module: arca-config-toml
+  module: cuora-config-toml
 deps:
-- arca-config
-- arca-core
+- cuora-config
+- cuora-core
 - toml
 - temp-env
-- arca-config
+- cuora-config
 notes: ''
 verify:
-- crates/arca-config-toml/Cargo.toml
-- crates/arca-config-toml/src/lib.rs
+- crates/cuora-config-toml/Cargo.toml
+- crates/cuora-config-toml/src/lib.rs
 provenance:
   files:
-  - crates/arca-config-toml/Cargo.toml
-  - crates/arca-config-toml/src/lib.rs
+  - crates/cuora-config-toml/Cargo.toml
+  - crates/cuora-config-toml/src/lib.rs
   hashes:
   - 3bb6412ec59f79642d32c9aa8f4c45e38be95068
   - 8cfdb3b79ab4cb773fe7fe5342c91d8388847253
