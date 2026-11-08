@@ -1,7 +1,7 @@
 +++
 id = "I-007"
 title = "identity fallback keyring→file is a silent security downgrade — consider fail-closed option"
-status = "open"
+status = "done"
 created = "2026-11-08"
 owner = "devin"
 priority = "medium"
