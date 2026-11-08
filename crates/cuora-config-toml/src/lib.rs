@@ -14,9 +14,8 @@ pub struct TomlSource {
 impl TomlSource {
     /// The candidate files, in search order.
     pub fn candidates(&self) -> Vec<PathBuf> {
-        let env_path = std::env::var("CUORA_CONFIG")
-            .ok()
-            .or_else(|| std::env::var("ARCA_CONFIG").ok());
+        let read = |n: &str| std::env::var(n).ok().filter(|v| !v.is_empty());
+        let env_path = read("CUORA_CONFIG").or_else(|| read("ARCA_CONFIG"));
         match self.path.clone().or(env_path) {
             Some(p) => vec![PathBuf::from(p)],
             None => {

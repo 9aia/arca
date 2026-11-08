@@ -656,8 +656,12 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<ExitCode, OpsError> {
                     .and_then(|s| s.pdp.as_ref())
                     .is_some()
             {
+                let config_name = ops
+                    .config_path()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "cuora.toml".into());
                 eprintln!(
-                    "warning: ./cuora.toml declares [serve.pdp] exec — \
+                    "warning: {config_name} declares [serve.pdp] exec — \
                      this config is a trust root authorizing shell execution \
                      and was found on the implicit search path. \
                      Pin it with --config or $CUORA_CONFIG if this is intended."
@@ -829,7 +833,8 @@ fn manifest() -> serde_json::Value {
             "OTEL_SDK_DISABLED": "true/1 disables OTLP export entirely",
         },
         "config": {
-            "search": ["--config", "$CUORA_CONFIG", "./cuora.toml", "~/.config/cuora/cuora.toml"],
+            "search": ["--config", "$CUORA_CONFIG", "$ARCA_CONFIG", "./cuora.toml", "./arca.toml", "~/.config/cuora/cuora.toml", "~/.config/arca/arca.toml"],
+            "legacy_aliases": "pre-rename names (ARCA_*, arca://, arca.toml, ~/.config/arca/) are accepted as fallbacks — CUORA_* names win when both are set",
             "tables": ["vaults", "envs", "secrets", "deploy", "guardrails", "serve", "identity"],
             "schema": "cuora schema",
             "env_pin": "cuora://prod/ns/name pins the env regardless of context",

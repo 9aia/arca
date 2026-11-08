@@ -78,11 +78,6 @@ impl CfSecretsStore {
                 "env var {token_env} is unset — deploy tokens come via env, never config"
             ))
         })?;
-        if token.is_empty() {
-            return Err(DeployError::Config(format!(
-                "env var {token_env} is empty — deploy tokens come via env, never config"
-            )));
-        }
         Self::with_token(name, account_id, store_id, &token, base_url)
     }
 
@@ -265,9 +260,10 @@ impl CfSecretsStore {
 /// Env read with the pre-rename `ARCA_*` name as fallback for
 /// `CUORA_*`-prefixed vars — existing exports keep working.
 fn env_var(name: &str) -> Option<String> {
-    std::env::var(name).ok().or_else(|| {
+    let read = |n: &str| std::env::var(n).ok().filter(|v| !v.is_empty());
+    read(name).or_else(|| {
         name.strip_prefix("CUORA_")
-            .and_then(|s| std::env::var(format!("ARCA_{s}")).ok())
+            .and_then(|s| read(&format!("ARCA_{s}")))
     })
 }
 
@@ -367,18 +363,19 @@ mod tests {
 
     #[test]
     fn new_reads_the_token_env_var() {
-        temp_env::with_var_unset("CUORA_TEST_CF_DEPLOY_TOKEN", || {
+        temp_env::with_var_unset("KTB_TEST_CF_DEPLOY_TOKEN", || {
             let e =
-                CfSecretsStore::new("p", "a", "s", "CUORA_TEST_CF_DEPLOY_TOKEN", None).unwrap_err();
+                CfSecretsStore::new("p", "a", "s", "KTB_TEST_CF_DEPLOY_TOKEN", None).unwrap_err();
             assert!(e.to_string().contains("unset"), "{e}");
         });
-        temp_env::with_var("CUORA_TEST_CF_DEPLOY_TOKEN", Some(""), || {
+        // empty counts as unset — env_var filters blank values
+        temp_env::with_var("KTB_TEST_CF_DEPLOY_TOKEN", Some(""), || {
             let e =
-                CfSecretsStore::new("p", "a", "s", "CUORA_TEST_CF_DEPLOY_TOKEN", None).unwrap_err();
-            assert!(e.to_string().contains("empty"), "{e}");
+                CfSecretsStore::new("p", "a", "s", "KTB_TEST_CF_DEPLOY_TOKEN", None).unwrap_err();
+            assert!(e.to_string().contains("unset"), "{e}");
         });
-        temp_env::with_var("CUORA_TEST_CF_DEPLOY_TOKEN", Some("fake-tok"), || {
-            let t = CfSecretsStore::new("p", "a", "s", "CUORA_TEST_CF_DEPLOY_TOKEN", None).unwrap();
+        temp_env::with_var("KTB_TEST_CF_DEPLOY_TOKEN", Some("fake-tok"), || {
+            let t = CfSecretsStore::new("p", "a", "s", "KTB_TEST_CF_DEPLOY_TOKEN", None).unwrap();
             assert_eq!(t.name(), "p");
             assert_eq!(t.base, DEFAULT_BASE);
         });
@@ -415,12 +412,12 @@ mod tests {
         // None → the https default
         assert!(CfSecretsStore::with_token("p", "a", "s", "fake", None).is_ok());
         // and `new` enforces the same rule on the config path
-        temp_env::with_var("CUORA_TEST_CF_DEPLOY_TOKEN", Some("fake"), || {
+        temp_env::with_var("KTB_TEST_CF_DEPLOY_TOKEN", Some("fake"), || {
             let e = CfSecretsStore::new(
                 "p",
                 "a",
                 "s",
-                "CUORA_TEST_CF_DEPLOY_TOKEN",
+                "KTB_TEST_CF_DEPLOY_TOKEN",
                 Some("http://api.example.com"),
             )
             .err()

@@ -748,9 +748,10 @@ fn unix_ts() -> u64 {
 /// Env read with the pre-rename `ARCA_*` name as fallback for
 /// `CUORA_*`-prefixed vars — existing exports keep working.
 fn env_var(name: &str) -> Option<String> {
-    std::env::var(name).ok().or_else(|| {
+    let read = |n: &str| std::env::var(n).ok().filter(|v| !v.is_empty());
+    read(name).or_else(|| {
         name.strip_prefix("CUORA_")
-            .and_then(|s| std::env::var(format!("ARCA_{s}")).ok())
+            .and_then(|s| read(&format!("ARCA_{s}")))
     })
 }
 
@@ -1048,7 +1049,7 @@ mod tests {
             let e = CfVault::new(&cfg).err().unwrap();
             assert!(e.to_string().contains("no credentials"), "{e}");
         });
-        // set but empty → always an error
+        // set but empty → counts as unset; scoped creds still cover
         temp_env::with_var("CUORA_CF_TOKEN_TEST", Some(""), || {
             let mut cfg = test_config("https://x.invalid");
             cfg.scoped.insert(
@@ -1058,8 +1059,7 @@ mod tests {
                     secret: zeroize::Zeroizing::new("fake".into()),
                 },
             );
-            let e = CfVault::new(&cfg).err().unwrap();
-            assert!(e.to_string().contains("empty"), "{e}");
+            assert!(CfVault::new(&cfg).is_ok());
         });
         // unset but scoped creds exist → the fallback is optional
         temp_env::with_var_unset("CUORA_CF_TOKEN_TEST", || {

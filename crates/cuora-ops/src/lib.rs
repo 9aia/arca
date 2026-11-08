@@ -21,9 +21,10 @@ pub use error::OpsError;
 /// meaningful for `CUORA_`-prefixed names; anything else reads
 /// literally.
 pub fn env_var(name: &str) -> Option<String> {
-    std::env::var(name).ok().or_else(|| {
+    let read = |n: &str| std::env::var(n).ok().filter(|v| !v.is_empty());
+    read(name).or_else(|| {
         name.strip_prefix("CUORA_")
-            .and_then(|s| std::env::var(format!("ARCA_{s}")).ok())
+            .and_then(|s| read(&format!("ARCA_{s}")))
     })
 }
 
@@ -1777,6 +1778,47 @@ mod tests {
         config.vaults.insert("local".into(), v);
         let ops = mk_ops(config);
         assert!(ops.init(&InitOpts::default()).is_err());
+    }
+
+    #[test]
+    fn env_var_prefers_cuora_then_arca_and_ignores_empty() {
+        // CUORA_* wins when both are set
+        temp_env::with_vars(
+            [
+                ("CUORA_TEST_ENV_VAR", Some("new")),
+                ("ARCA_TEST_ENV_VAR", Some("old")),
+            ],
+            || assert_eq!(env_var("CUORA_TEST_ENV_VAR").as_deref(), Some("new")),
+        );
+        // ARCA_* is the fallback when CUORA_* is absent
+        temp_env::with_vars(
+            [
+                ("CUORA_TEST_ENV_VAR", None::<&str>),
+                ("ARCA_TEST_ENV_VAR", Some("old")),
+            ],
+            || assert_eq!(env_var("CUORA_TEST_ENV_VAR").as_deref(), Some("old")),
+        );
+        // an empty CUORA_* counts as unset — it must not shadow ARCA_*
+        temp_env::with_vars(
+            [
+                ("CUORA_TEST_ENV_VAR", Some("")),
+                ("ARCA_TEST_ENV_VAR", Some("old")),
+            ],
+            || assert_eq!(env_var("CUORA_TEST_ENV_VAR").as_deref(), Some("old")),
+        );
+        // empty on both sides → None, same as unset
+        temp_env::with_vars(
+            [
+                ("CUORA_TEST_ENV_VAR", Some("")),
+                ("ARCA_TEST_ENV_VAR", Some("")),
+            ],
+            || assert_eq!(env_var("CUORA_TEST_ENV_VAR"), None),
+        );
+        // non-CUORA_ names read literally — no ARCA_ magic
+        temp_env::with_var("PLAIN_TEST_VAR", Some("x"), || {
+            assert_eq!(env_var("PLAIN_TEST_VAR").as_deref(), Some("x"));
+            assert_eq!(env_var("ARCA_PLAIN_TEST_VAR"), None);
+        });
     }
 
     #[test]
