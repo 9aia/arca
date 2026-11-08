@@ -1,13 +1,14 @@
 name = "cuora"
 main = "index.js"
 compatibility_date = "2025-10-01"
+account_id = "6436f55847a456766fa025a0845834fa"
 
 # Create the database first:
 #   wrangler d1 create cuora-vault
 # then paste the real database_id below.
 [[d1_databases]]
 binding = "DB"
-database_name = "cuora"
+database_name = "arca"
 database_id = "4b0fbf31-5dac-48f4-ab88-bdf5ec6c0f3f"
 
 # The bearer token is NOT here — set it with:
