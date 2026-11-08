@@ -4,18 +4,18 @@ reference/crate-api.md from workspace Cargo.tomls — never hand-edit
 either."""
 import os, pathlib, re
 
-# See gen-config-docs.py — ARCA_ROOT overrides the `..` worktree layout.
+# See gen-config-docs.py — CUORA_ROOT overrides the `..` worktree layout.
 ROOT = pathlib.Path(
-    os.environ.get("ARCA_ROOT") or pathlib.Path(__file__).parent / "..")
+    os.environ.get("CUORA_ROOT") or pathlib.Path(__file__).parent / "..")
 WST = (ROOT / "Cargo.toml").read_text()
 
 LAYER = {
-    "arca": "binary",
-    "arca-core": "domain",
-    "arca-config": "port",
-    "arca-vault": "port",
-    "arca-deploy": "port",
-    "arca-ops": "ops",
+    "cuora": "binary",
+    "cuora-core": "domain",
+    "cuora-config": "port",
+    "cuora-vault": "port",
+    "cuora-deploy": "port",
+    "cuora-ops": "ops",
 }
 
 # workspace members — match `"crates/…"` paths only (not dep paths)
@@ -25,9 +25,9 @@ for m in members:
     if m not in seen:
         seen.add(m)
         order_dedup.append(m)
-# include the binary crate (path crates/arca-cli, package name arca)
-if "crates/arca-cli" not in order_dedup:
-    order_dedup.append("crates/arca-cli")
+# include the binary crate (path crates/cuora-cli, package name cuora)
+if "crates/cuora-cli" not in order_dedup:
+    order_dedup.append("crates/cuora-cli")
 
 rows = []
 for rel in order_dedup:
@@ -60,6 +60,6 @@ out = ["# Crate API", "",
        "documented at source (doc comments).", ""]
 for n, l, _ in rows:
     und = n.replace("-", "_")
-    out.append(f"- [{n}](/arca/api/{und}/index.html) — {l}")
+    out.append(f"- [{n}](/cuora/api/{und}/index.html) — {l}")
 pathlib.Path("reference/crate-api.md").write_text("\n".join(out) + "\n")
 print("crate-api regenerated")

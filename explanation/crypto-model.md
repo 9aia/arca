@@ -6,20 +6,20 @@ unlocks the local file vault and the remote `cf` vault alike.
 
 ## The pieces
 
-- **Identity** — one X25519 keypair, held by an `arca-identity`
+- **Identity** — one X25519 keypair, held by an `cuora-identity`
   impl (ADR-0002): the **session keyring** (secret-service,
   macOS Keychain, Credential Manager) by default — fail closed —
-  or the `~/.config/arca/identity.txt` keyfile (mode `0600`)
+  or the `~/.config/cuora/identity.txt` keyfile (mode `0600`)
   under `auto`/`file` modes or an explicit pin. An explicit
-  file — `ARCA_IDENTITY_FILE` or `[vaults.*].identity` — pins the
+  file — `CUORA_IDENTITY_FILE` or `[vaults.*].identity` — pins the
   keyfile outright; that is the headless/CI path. `[identity]
-  backend` (or `ARCA_IDENTITY_BACKEND`) selects the mode:
+  backend` (or `CUORA_IDENTITY_BACKEND`) selects the mode:
   `keyring` (default) fails closed — no reachable store or
   stored identity is an error, the keyfile is never read;
   `auto` is the fallback described above — convenient on
   headless/CI, but a *silent* downgrade if a desktop session
   loses its store, so it's opt-in; `file` skips the store
-  probe entirely. `arca init`
+  probe entirely. `cuora init`
   bootstraps whichever backend applies and prints the public
   `age1…` recipient. On a reachable-but-empty Secret Service (fresh
   daemon, no collections yet) the keyring impl claims the `default`
@@ -33,7 +33,7 @@ unlocks the local file vault and the remote `cf` vault alike.
   per-secret age ciphertext in D1. Neither store — local disk,
   remote worker — holds plaintext or key material.
 - **Seal/open at the edge** — values are plaintext only inside
-  the arca process, and only for as long as the op needs them.
+  the cuora process, and only for as long as the op needs them.
   `Secret` is a `Zeroizing` newtype: memory is scrubbed on drop,
   and nothing but `.expose()` reads it.
 - **HMAC alongside age** — the `cf` wire uses HMAC-SHA256 twice
@@ -56,21 +56,21 @@ unlocks the local file vault and the remote `cf` vault alike.
   `rage`/`age` tooling, so a human is never locked into the CLI
   for disaster recovery.
 
-## The cf wire (`arca-vault-cf/2`)
+## The cf wire (`cuora-vault-cf/2`)
 
-- **Request signing** — `Authorization: ArcaHmac &lt;token_id&gt;, &lt;ts&gt;,
+- **Request signing** — `Authorization: CuoraHmac &lt;token_id&gt;, &lt;ts&gt;,
   &lt;sig&gt;` with `sig = hex HMAC-SHA256(token, method+path+ts+
   sha256hex(body))`. The token is the HMAC key and never crosses
   the wire; a ±60s timestamp window bounds replay. Worker-side,
-  `ARCA_VAULT_TOKENS` maps `token_id → {env → {read, write}}`
+  `CUORA_VAULT_TOKENS` maps `token_id → {env → {read, write}}`
   scopes — per-env credentials instead of one static bearer
   (which stays accepted during migration).
 - **Private refs** — with `[vaults.*] private_refs = true`, the
   storage key is `ref_key = hex HMAC-SHA256(k, env + "/" + ref)`
-  where `k = HMAC-SHA256(identity, "arca-cf/private-refs/v1")`.
+  where `k = HMAC-SHA256(identity, "cuora-cf/private-refs/v1")`.
   Derivation is deterministic (lookup is a plain keyed read) and
   identity-bound (rotating the identity re-keys everything, via
-  `arca migrate --private-refs`). The real ref travels inside a
+  `cuora migrate --private-refs`). The real ref travels inside a
   `name` blob — age ciphertext — so `list` maps keys back while
   the store sees only hex.
 - **Constant-time compares** — every token/signature comparison
@@ -80,7 +80,7 @@ unlocks the local file vault and the remote `cf` vault alike.
 ## What is deliberately not here
 
 - **No KMS port yet** — managed-key backends (AWS KMS/Secrets
-  Manager) were explored in the `arca-vault-aws` spike to prove
+  Manager) were explored in the `cuora-vault-aws` spike to prove
   the `Vault` port generalizes to non-age stores; a KMS-backed
   *crypto* port is a later ADR, not v1.
 - **No passphrase-wrapped identity file** — when the keyring is

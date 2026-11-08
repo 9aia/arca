@@ -13,8 +13,8 @@ kind = "age"
 
 [vaults.cloud]
 kind = "cf"                    # self-hosted Worker + D1, age ciphertext
-url = "https://arca-vault.you.workers.dev"
-token_env = "ARCA_CF_TOKEN"    # env var NAME — token value stays in env
+url = "https://cuora-vault.you.workers.dev"
+token_env = "CUORA_CF_TOKEN"    # env var NAME — token value stays in env
 
 [envs]
 dev = "local"                  # bare-name form
@@ -29,17 +29,17 @@ Rules:
   exist; `[envs]` keys add custom envs (`ci`, `qa`, …).
 - `token_env` names the env var carrying the credential — the
   *name* is in config, the *value* only in the process env.
-- `ARCA_IDENTITY_FILE` overrides the age identity path globally.
+- `CUORA_IDENTITY_FILE` overrides the age identity path globally.
 
 ## What changes at run time
 
 ```sh
-arca list --env prod          # opens the "cloud" vault over HTTPS
-arca put arca://prod/x/y      # pin → writes to "cloud"
-arca run --env prod -- ./app  # [secrets] resolve under prod → cloud
+cuora list --env prod          # opens the "cloud" vault over HTTPS
+cuora put cuora://prod/x/y      # pin → writes to "cloud"
+cuora run --env prod -- ./app  # [secrets] resolve under prod → cloud
 ```
 
-The ref spelling doesn't change — `arca://ns/name` is env-agnostic;
+The ref spelling doesn't change — `cuora://ns/name` is env-agnostic;
 routing decides which backend serves it.
 
 ## The `cf` backend
@@ -52,7 +52,7 @@ see [Cloudflare Worker setup](cloudflare-worker-setup.md).
 ## Verify routing
 
 ```sh
-arca check
+cuora check
 # env: dev → vault "local"
 # vault "local" (age): readable
 # vault "cloud" (cf): readable      ← actually probed over the wire

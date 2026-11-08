@@ -7,8 +7,8 @@ import json, os, pathlib, shutil, subprocess
 DOCS = pathlib.Path(__file__).resolve().parent
 # The main checkout — docs/ normally mirrors it as a worktree (so
 # DOCS.parent works); under bupha the docs sha runs detached and
-# ARCA_ROOT points at the real repo.
-ROOT = pathlib.Path(os.environ.get("ARCA_ROOT") or DOCS.parent)
+# CUORA_ROOT points at the real repo.
+ROOT = pathlib.Path(os.environ.get("CUORA_ROOT") or DOCS.parent)
 
 
 def run(*args, capture=False):

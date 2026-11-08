@@ -6,7 +6,7 @@ branches inside this repo — and what that buys.
 ## The shape
 
 ```text
-arca/
+cuora/
 ├── crates/ …           ← code branch (main)
 ├── project/            ← worktree of the orphan `project` branch
 │   ├── TODO.md  BACKLOG.md  index.md  meta.toml
@@ -37,7 +37,7 @@ Worktrees keep all three branches checked out at once.
 
 ## `project/` — the PM ledger
 
-Owned by **myco**, not arca: this repo dogfoods the stack's PM
+Owned by **myco**, not cuora: this repo dogfoods the stack's PM
 tool. The `project` branch history is the audit trail — every
 mutating `myco` verb is one atomic commit. `myco init` created
 the branch and worktree; agents go through `myco` verbs rather
@@ -48,9 +48,9 @@ than hand-editing when a verb exists.
 The `docs` branch holds the VitePress + Diátaxis sources;
 generated pages (`reference/cli.md`, `reference/config.md`, the
 crate map in `architecture.md`, `reference/crate-api.md`) are
-rebuilt by `docs/gen-*.py` and `arca gen-cli-docs` — never
+rebuilt by `docs/gen-*.py` and `cuora gen-cli-docs` — never
 hand-edited. `cargo xtask site` builds the site; pushes deploy to
-GitHub Pages at `9aia.com/arca` via `scripts/deploy-docs.sh`.
+GitHub Pages at `9aia.com/cuora` via `scripts/deploy-docs.sh`.
 
 See [architecture](architecture.md) for the crates the code side
 is made of.

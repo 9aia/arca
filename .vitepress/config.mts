@@ -5,9 +5,9 @@ export default defineConfig({
   vite: {
     plugins: [llmstxt()],
   },
-  title: "arca",
+  title: "cuora",
   description: "secrets broker for agents — sealed, not spilled",
-  base: "/arca/",
+  base: "/cuora/",
   srcExclude: ["README.md"],
   ignoreDeadLinks: [/\/api\//],
   themeConfig: {
@@ -20,8 +20,8 @@ export default defineConfig({
       {
         text: "LLMs",
         items: [
-          { text: "llms.txt", link: "https://9aia.com/arca/llms.txt", target: "_blank" },
-          { text: "llms-full.txt", link: "https://9aia.com/arca/llms-full.txt", target: "_blank" },
+          { text: "llms.txt", link: "https://9aia.com/cuora/llms.txt", target: "_blank" },
+          { text: "llms-full.txt", link: "https://9aia.com/cuora/llms-full.txt", target: "_blank" },
         ],
       },
     ],
@@ -65,6 +65,6 @@ export default defineConfig({
         ],
       },
     ],
-    socialLinks: [{ icon: "github", link: "https://github.com/9aia/arca" }],
+    socialLinks: [{ icon: "github", link: "https://github.com/9aia/cuora" }],
   },
 });

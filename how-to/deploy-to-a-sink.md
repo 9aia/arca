@@ -1,7 +1,7 @@
 # Deploy a secret to a sink
 
-`arca deploy` pushes a vault-stored value to a write-only target —
-a `[deploy.NAME]` table in `arca.toml`. The vault is the source of
+`cuora deploy` pushes a vault-stored value to a write-only target —
+a `[deploy.NAME]` table in `cuora.toml`. The vault is the source of
 truth; the sink serves your runtimes directly (e.g. a Worker
 reading a Secrets Store binding).
 
@@ -21,8 +21,8 @@ The API token comes from the env var named by `token_env`
 ## Push
 
 ```sh
-arca deploy arca://billing/stripe --target prod
-# deployed arca://billing/stripe → "prod" as dev_billing_stripe (created)
+cuora deploy cuora://billing/stripe --target prod
+# deployed cuora://billing/stripe → "prod" as dev_billing_stripe (created)
 ```
 
 - `--target` may be omitted when exactly one `[deploy.*]` table is
@@ -35,20 +35,20 @@ arca deploy arca://billing/stripe --target prod
 
 Deploy targets are **sinks**, not sources: the plaintext crosses
 to the sink exactly once, at push time, and nothing ever reads it
-back through arca. A deploy emits a `deploy` audit event for the
+back through cuora. A deploy emits a `deploy` audit event for the
 ref.
 
 ## Rotate → re-deploy
 
-`arca rotate` changes the vault; the sink doesn't follow on its
+`cuora rotate` changes the vault; the sink doesn't follow on its
 own. Re-push after rotation:
 
 ```sh
-printf '%s' "$NEW_VALUE" | arca rotate arca://prod/billing/stripe
-arca deploy arca://prod/billing/stripe --target prod
+printf '%s' "$NEW_VALUE" | cuora rotate cuora://prod/billing/stripe
+cuora deploy cuora://prod/billing/stripe --target prod
 ```
 
 ## Verify
 
-`arca check` validates deploy tables (kind known, `account_id` +
+`cuora check` validates deploy tables (kind known, `account_id` +
 `store_id` present) as findings — it doesn't push anything.
