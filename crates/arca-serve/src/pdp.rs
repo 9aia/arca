@@ -203,11 +203,14 @@ impl ExecPdp {
                 return Decision::Unreachable("pdp stdout never drained".into());
             }
         };
-        if !status.success() {
-            return Decision::Unreachable(format!("pdp exited {status}"));
-        }
+        // Size before status: a flooding child that out-writes the
+        // bounded reader dies on SIGPIPE — the oversized verdict is
+        // the root cause and the more useful verdict either way.
         if out.len() as u64 > MAX_VERDICT_BYTES {
             return Decision::Unreachable(format!("pdp verdict exceeds {MAX_VERDICT_BYTES} bytes"));
+        }
+        if !status.success() {
+            return Decision::Unreachable(format!("pdp exited {status}"));
         }
         parse_verdict(&out)
     }

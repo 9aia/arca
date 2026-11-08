@@ -333,7 +333,10 @@ fn cf_resolution_without_an_explicit_file_notes_the_missing_keyring() {
             "DBUS_SESSION_BUS_ADDRESS",
             "unix:path=/tmp/arca-no-such-bus",
         )
-        .env("XDG_RUNTIME_DIR", "/tmp/arca-no-such-run");
+        .env("XDG_RUNTIME_DIR", "/tmp/arca-no-such-run")
+        // the note under test is the `auto` fallback — the
+        // default backend is now fail-closed `keyring`
+        .env("ARCA_IDENTITY_BACKEND", "auto");
     let o = cmd.output().unwrap();
     assert!(
         stderr(&o).contains("no session keyring reachable"),

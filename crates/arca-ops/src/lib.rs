@@ -551,10 +551,10 @@ impl Ops {
     /// 3. the **default keyfile** (`~/.config/arca/identity.txt`).
     ///
     /// `[identity] backend` / `ARCA_IDENTITY_BACKEND` picks the
-    /// mode: `auto` (default) falls back to the file with a
-    /// stderr note — a headless box is a degraded session, not a
-    /// crash; `keyring` fails closed instead; `file` skips the
-    /// store probe entirely.
+    /// mode: `keyring` (default) fails closed; `auto` falls back
+    /// to the file with a stderr note — a headless box is a
+    /// degraded session, not a crash; `file` skips the store
+    /// probe entirely.
     fn resolve_identity(&self, cfg: Option<&VaultConfig>) -> Result<x25519::Identity, OpsError> {
         // An explicit file pins the source — skip the store probe
         // entirely (no dbus round-trip, no misleading fallback note).
@@ -593,8 +593,9 @@ impl Ops {
     }
 
     /// Which identity backend this run uses — `ARCA_IDENTITY_BACKEND`
-    /// env wins over `[identity] backend`, absent both → `auto`.
-    /// An unrecognized env value is ignored (config/default apply).
+    /// env wins over `[identity] backend`, absent both → `keyring`
+    /// (fail closed). An unrecognized env value is ignored
+    /// (config/default apply).
     fn identity_backend(&self) -> IdentityBackend {
         std::env::var("ARCA_IDENTITY_BACKEND")
             .ok()
@@ -2132,6 +2133,9 @@ mod tests {
                     // libdbus falls back to $XDG_RUNTIME_DIR/bus —
                     // kill that path too.
                     ("XDG_RUNTIME_DIR", Some("/tmp/arca-no-such-run")),
+                    // this test exercises the `auto` fallback —
+                    // the default is now fail-closed `keyring`
+                    ("ARCA_IDENTITY_BACKEND", Some("auto")),
                 ],
                 || {
                     let ops = mk_ops(Config::default());
@@ -2258,11 +2262,12 @@ mod tests {
             ..Config::default()
         });
         temp_env::with_var_unset("ARCA_IDENTITY_BACKEND", || {
-            // config alone → keyring; absent both → auto
+            // config alone → keyring; absent both → keyring too
+            // (fail closed is the default)
             assert_eq!(ops.identity_backend(), IdentityBackend::Keyring);
             assert_eq!(
                 mk_ops(Config::default()).identity_backend(),
-                IdentityBackend::Auto
+                IdentityBackend::Keyring
             );
         });
         temp_env::with_var("ARCA_IDENTITY_BACKEND", Some("file"), || {

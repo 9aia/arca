@@ -25,8 +25,9 @@
 //!                                 #   stdout; absent → fail closed
 //!
 //! [identity]                     # which backend holds the age
-//! backend = "keyring"            #   identity — auto (default),
-//!                                 #   keyring (fail closed), file
+//! backend = "auto"               #   identity — keyring (default,
+//!                                 #   fail closed), auto (keyring
+//!                                 #   → keyfile fallback), file
 //! ```
 //!
 //! Unknown keys are rejected so a typo fails loud instead of
@@ -75,7 +76,7 @@ pub struct Config {
     #[serde(default)]
     pub serve: Option<ServeConfig>,
     /// Which backend holds the age identity — `[identity]`.
-    /// Absent → `auto` (keyring when reachable, keyfile else).
+    /// Absent → `keyring` (fail closed; `auto`/`file` opt out).
     #[serde(default)]
     pub identity: Option<IdentityConfig>,
 }
@@ -395,20 +396,22 @@ pub struct PdpConfig {
 
 /// `[identity]` — which backend the age identity comes from.
 ///
-/// `auto` (the default) probes the session keyring and falls
-/// back to the `0600` keyfile — the headless/CI-friendly mode,
-/// but a *silent* security downgrade when a desktop session
-/// loses its store. `keyring` fails closed instead: no
-/// reachable store or no stored identity is an error, never a
-/// quiet file read. `file` skips the store probe entirely —
-/// equivalent to `arca init --with-file` / `ARCA_IDENTITY_FILE`.
-/// An explicit per-vault `[vaults.*].identity` pin still wins
-/// over `keyring` — the pin is the more specific declaration.
+/// `keyring` (the default) fails closed: no reachable store or
+/// no stored identity is an error, never a quiet file read —
+/// the safe posture for a secrets broker. `auto` probes the
+/// session keyring and falls back to the `0600` keyfile with a
+/// stderr note — the headless/CI-friendly mode, but a *silent*
+/// security downgrade when a desktop session loses its store;
+/// opt into it explicitly. `file` skips the store probe
+/// entirely — equivalent to `arca init --with-file` /
+/// `ARCA_IDENTITY_FILE`. An explicit per-vault
+/// `[vaults.*].identity` pin still wins over `keyring` — the
+/// pin is the more specific declaration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct IdentityConfig {
-    /// The backend selection — `auto` when absent.
+    /// The backend selection — `keyring` (fail closed) when absent.
     #[serde(default)]
     pub backend: IdentityBackend,
 }
@@ -418,13 +421,15 @@ pub struct IdentityConfig {
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum IdentityBackend {
-    /// Keyring when reachable, keyfile otherwise — today's
-    /// default; a degraded session is a note, not an error.
-    #[default]
-    Auto,
     /// Session store only — unreachable store or missing
-    /// identity fails closed; the keyfile is never read.
+    /// identity fails closed; the keyfile is never read. The
+    /// default: a secrets broker shouldn't silently downgrade.
+    #[default]
     Keyring,
+    /// Keyring when reachable, keyfile otherwise — the
+    /// headless/CI opt-out; a degraded session is a note, not
+    /// an error.
+    Auto,
     /// Keyfile only — never probe the session store.
     File,
 }
@@ -438,11 +443,11 @@ mod tests {
     fn parses_identity_backend() {
         let cfg: Config = toml::from_str("[identity]\nbackend = \"keyring\"").unwrap();
         assert_eq!(cfg.identity.unwrap().backend, IdentityBackend::Keyring);
-        // absent → auto
+        // absent → keyring (fail closed is the default)
         let cfg: Config = toml::from_str("").unwrap();
         assert_eq!(
             cfg.identity.map(|i| i.backend).unwrap_or_default(),
-            IdentityBackend::Auto
+            IdentityBackend::Keyring
         );
         // bad value fails loud — deny_unknown_fields sibling
         assert!(toml::from_str::<Config>("[identity]\nbackend = \"bogus\"").is_err());
