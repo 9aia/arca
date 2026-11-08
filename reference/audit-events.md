@@ -101,3 +101,16 @@ audit wire. Consumers parsing stderr as pure ndjson should
 tolerate lines that don't start with `{`. During `arca ui` both
 audit events and notices are held and replayed after the
 terminal is restored.
+
+## Granularity
+
+Per-ref events fire when a value crosses the store boundary
+toward a caller: `get`, `put`, `rotate`, `rm`, `deploy`, `run`,
+`env`, and serve `get`/`put`/`rotate`/`rm`. Bulk reads — `list`,
+`check`, the TUI reload, serve `list` — emit **op-scoped** events
+only: they decrypt records internally to verify or enumerate, but
+no value is returned to the caller, so there is no per-ref
+materialization to attribute. If your threat model counts
+"decrypted in-process" as materialization, treat bulk ops as
+single events covering N refs — the op name tells you which verb
+ran, not which refs it touched.
