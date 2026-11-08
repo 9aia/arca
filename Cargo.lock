@@ -610,6 +610,7 @@ dependencies = [
  "cuora-ops",
  "cuora-vault",
  "pavo-protocol",
+ "pavo-testkit",
  "serde",
  "serde_json",
  "time",
@@ -1697,6 +1698,17 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "pavo-testkit"
+version = "0.1.0"
+dependencies = [
+ "pavo-protocol",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
 ]
 
