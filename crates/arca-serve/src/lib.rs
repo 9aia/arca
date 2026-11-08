@@ -2,8 +2,9 @@
 //! orchestrators (peregrin) embed (P-005).
 //!
 //! One JSON request per **stdin** line, one JSON response per
-//! **stdout** line; the audit wire stays on **stderr**, unchanged
-//! — three separate fds, so a reply never rides the event stream
+//! **stdout** line; the audit wire stays on **stderr** (plus OTLP
+//! span export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set) — three
+//! separate fds, so a reply never rides the event stream
 //! and an event never answers a request. A thin front over
 //! `arca-ops` like `arca-tui` — every vault access goes through
 //! [`Ops`], so env-pin resolution, `[envs]` routing, and the
@@ -103,8 +104,12 @@ pub fn run(ops: &Ops, reader: &mut impl BufRead, writer: &mut impl Write) -> io:
             .take(MAX_LINE_BYTES + 1)
             .read_until(b'\n', &mut buf)
         {
-            // EOF — the parent closed the wire; clean exit.
-            Ok(0) => return Ok(()),
+            // EOF — the parent closed the wire; flush buffered
+            // audit events to OTLP before the clean exit.
+            Ok(0) => {
+                arca_ops::audit::flush();
+                return Ok(());
+            }
             Ok(_) => {}
             Err(e) => return Err(e),
         }
@@ -147,6 +152,9 @@ pub fn run(ops: &Ops, reader: &mut impl BufRead, writer: &mut impl Write) -> io:
         let reply = dispatch(ops, pdp.as_ref(), &line);
         let done = reply.shutdown;
         write_reply(writer, &reply)?;
+        // Long-running surface — export buffered audit events per
+        // request rather than accumulating until shutdown.
+        arca_ops::audit::flush();
         if done {
             return Ok(());
         }
@@ -754,7 +762,7 @@ fn manifest() -> serde_json::Value {
         "name": "arca serve",
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": "arca-serve/1",
-        "wire": "one JSON request per stdin line → one JSON response per stdout line; audit ndjson stays on stderr",
+        "wire": "one JSON request per stdin line → one JSON response per stdout line; audit ndjson stays on stderr (+ OTLP spans when OTEL_EXPORTER_OTLP_ENDPOINT is set, flushed per request)",
         "ops": {
             "get": "value of a ref — consults the PDP; errors not_found when absent",
             "put": "store a secret — needs {ref, value}; consults the PDP",
@@ -799,7 +807,7 @@ fn manifest() -> serde_json::Value {
             "trust_root": "a [serve.pdp] exec line authorizes shell exec — an implicit ./arca.toml found on the search path is a trust root; arca serve warns on stderr when it loads one carrying pdp config (pin config with --config/ARCA_CONFIG)",
         },
         "notes": [
-            "three separate fds — requests stdin, responses stdout, audit ndjson stderr; a reply never rides the event stream",
+            "three separate fds — requests stdin, responses stdout, audit ndjson stderr (+ OTLP export when configured); a reply never rides the event stream",
             "actor/attestation are advisory claims — arca verifies neither; real signing is the PDP's side",
             "values cross this wire deliberately: get returns them, put/rotate take them — the parent owns the channel",
             "guardrails still apply (advisory); arca://<env>/… pins still resolve",

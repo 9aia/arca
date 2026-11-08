@@ -26,6 +26,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 time.workspace = true
+ureq.workspace = true
 
 [dev-dependencies]
 arca-testkit.workspace = true

@@ -7,7 +7,9 @@ strongbox. Agents need API keys, but every plaintext handoff is a
 leak surface: prompts, tool output, logs, `.env` pasted into
 configs. arca removes the handoff — code carries `arca://`
 references, never values; the CLI materializes secrets as env vars
-at run time; every materialization emits an audit event on stderr.
+at run time; every materialization emits an audit event — ndjson
+on stderr, plus OTLP spans when `OTEL_EXPORTER_OTLP_ENDPOINT` is
+set.
 
 ```
 agent ──► arca run -- cmd ──► resolve refs ──► inject env ──► child process
@@ -119,7 +121,9 @@ ref, different backend per env.
   Display/Debug of plaintext; explicit `.expose()` is the only
   way out
 - **audit wire** — every materialization, denial, and failure is
-  an ndjson event on stderr: actor, ref, env, outcome, timestamp
+  an ndjson event on stderr (silenceable via `ARCA_AUDIT_STDERR=0`)
+  and an `arca.<op>` OTLP span when `OTEL_EXPORTER_OTLP_ENDPOINT`
+  is set: actor, ref, env, outcome, timestamp
 - **surfaces for every actor** — `.agents/skills/` teaches agents
   the verbs, `--json`/`manifest`/`schema` for machines, ratatui
   `arca ui` for humans

@@ -27,13 +27,16 @@ use crossterm::terminal::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-/// Restore the terminal on any exit path.
+/// Restore the terminal on any exit path, then unmute the audit
+/// stderr wire — held events replay *after* the alt-screen exit so
+/// they land below the UI instead of splattering over it.
 struct Guard;
 
 impl Drop for Guard {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        arca_ops::audit::unmute_stderr();
     }
 }
 
@@ -59,11 +62,15 @@ pub fn run(ops: &arca_ops::Ops) -> io::Result<()> {
         ));
     }
     let mut model = app::Model::open(ops);
-    enable_raw_mode()?;
+    // The audit wire is stderr ndjson — live writes would splatter
+    // over the alt screen. Mute before the first fallible step so
+    // Guard's drop replays them after the terminal is restored.
+    arca_ops::audit::mute_stderr();
     // Guard first — raw mode is on from here, so every fallible
     // step below must restore on `?`.
     let _guard = Guard;
     install_panic_hook();
+    enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout))?;

@@ -3,7 +3,8 @@
 //! Code and config carry `arca://` references, never values; `arca
 //! run` materializes declared secrets as env vars in the child only.
 //! Every materialization — and every denial/failure — emits an
-//! audit ndjson line on stderr.
+//! audit event: ndjson on stderr, plus OTLP spans when
+//! `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
 //!
 //! Values never enter via CLI args — `put`/`rotate` read stdin or a
 //! hidden `/dev/tty` prompt (args land in shell history and
@@ -174,6 +175,14 @@ enum Cmd {
 fn main() -> ExitCode {
     sigpipe::reset();
     let cli = Cli::parse();
+    let code = dispatch(&cli);
+    // Buffered audit events export as OTLP spans here — every
+    // exit path funnels through this one flush.
+    arca_ops::audit::flush();
+    code
+}
+
+fn dispatch(cli: &Cli) -> ExitCode {
     match &cli.command {
         // Pure introspection — before config load, no audit event.
         Cmd::Manifest => json_out(&manifest()),
@@ -182,11 +191,11 @@ fn main() -> ExitCode {
         cmd => {
             let op = cmd_op(cmd);
             let rref = cmd_rref(cmd);
-            let ops = match load(&cli) {
+            let ops = match load(cli) {
                 Ok(ops) => ops,
                 Err(e) => {
-                    audit_fallback(&cli, op, rref, Outcome::Error);
-                    return fail(&cli, &e.to_string());
+                    audit_fallback(cli, op, rref, Outcome::Error);
+                    return fail(cli, &e.to_string());
                 }
             };
             // Advisory guardrails — accident prevention, not
@@ -204,7 +213,7 @@ fn main() -> ExitCode {
                         .display()
                         .to_string();
                     return fail(
-                        &cli,
+                        cli,
                         &format!(
                             "op '{op}' denied by guardrails in {at} \
                              (advisory — remove/relax the rule to allow)"
@@ -212,12 +221,12 @@ fn main() -> ExitCode {
                     );
                 }
             }
-            match run_cmd(cmd, &cli, &ops) {
+            match run_cmd(cmd, cli, &ops) {
                 Ok(code) => code,
                 Err(e) => {
                     let rref = norm_rref(&ops, rref);
                     ops.emit(op, rref.as_deref(), Outcome::Error);
-                    fail(&cli, &e.to_string())
+                    fail(cli, &e.to_string())
                 }
             }
         }
@@ -745,7 +754,7 @@ fn manifest() -> serde_json::Value {
     serde_json::json!({
         "name": "arca",
         "version": env!("CARGO_PKG_VERSION"),
-        "description": "secrets broker for agents — arca:// refs in code/config, env-var injection at run time, ndjson audit on stderr",
+        "description": "secrets broker for agents — arca:// refs in code/config, env-var injection at run time, audit on stderr + OTLP spans when OTEL_EXPORTER_OTLP_ENDPOINT is set",
         "repository": "https://github.com/9aia/arca",
         "protocol": "arca/1",
         "ops": arca_core::Op::ALL.iter().map(|o| o.as_str()).collect::<Vec<_>>(),
@@ -808,6 +817,12 @@ fn manifest() -> serde_json::Value {
             "ARCA_IDENTITY_FILE": "explicit identity keyfile path — pins file mode, skipping the session keyring",
             "ARCA_CF_TOKEN": "default cf-vault bearer env var ([vaults.*] token_env overrides the name)",
             "CLOUDFLARE_API_TOKEN": "default deploy-token env var ([deploy.*] token_env overrides the name)",
+            "ARCA_AUDIT_STDERR": "0/false/off/no silences the stderr ndjson audit wire (OTLP-only mode); unset keeps it",
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "OTLP/HTTP collector base — audit events export as arca.<op> spans to <endpoint>/v1/traces (JSON)",
+            "OTEL_EXPORTER_OTLP_HEADERS": "k=v,k2=v2 auth headers for the OTLP endpoint (values percent-decoded)",
+            "OTEL_EXPORTER_OTLP_TIMEOUT": "export timeout in ms (default 10000)",
+            "OTEL_SERVICE_NAME": "service.name resource attribute on exported spans (default arca)",
+            "OTEL_SDK_DISABLED": "true/1 disables OTLP export entirely",
         },
         "config": {
             "search": ["--config", "$ARCA_CONFIG", "./arca.toml", "~/.config/arca/arca.toml"],
@@ -826,9 +841,10 @@ fn manifest() -> serde_json::Value {
             "details": "send {\"op\":\"manifest\"} on the wire for the full protocol doc",
         },
         "audit": {
-            "wire": "ndjson lines on stderr",
+            "wire": "ndjson lines on stderr (default; ARCA_AUDIT_STDERR=0 silences) + OTLP/HTTP JSON spans to $OTEL_EXPORTER_OTLP_ENDPOINT/v1/traces when set — span per event named arca.<op>, attributes arca.op/arca.rref/arca.env/arca.actor/arca.outcome (+arca.policy.* on serve)",
             "event": {"ts": "rfc3339", "actor": "…", "op": "…", "rref": "…|absent when op-scoped", "env": "…", "outcome": "ok|denied|error", "policy?": "{allow, reason?, obligations?} — serve-path PDP verdicts only"},
             "shape": "per-ref event per materialized/mutated ref (put/get/rotate/rm/deploy, run/env); op-scoped event for init/list/check/ui; denied on guardrail refusal; error on op failure; manifest/schema emit none; a run child's exit code is not an arca failure",
+            "surfaces": "ui mutes live stderr for the session and replays held events on exit (alt-screen safety); serve flushes OTLP per request; CLI verbs flush once at exit; export failures warn once, never fail the op",
         },
         "features": {
             "tui": cfg!(feature = "tui"),

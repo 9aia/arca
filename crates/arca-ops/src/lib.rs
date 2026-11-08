@@ -4,12 +4,14 @@
 //! the outside world: config loading + env/vault resolution
 //! (`--env`/`ARCA_ENV` → `[envs]` routing → a concrete
 //! [`arca_vault::Vault`]), the env-pin override on refs, the verb
-//! operations the CLI calls, and the audit ndjson emission on
-//! stderr. `arca` (CLI) is a thin clap shell over this; `arca-tui`
+//! operations the CLI calls, and the audit emission — ndjson on
+//! stderr plus OTLP span export when `OTEL_EXPORTER_OTLP_ENDPOINT`
+//! is set. `arca` (CLI) is a thin clap shell over this; `arca-tui`
 //! calls the same functions.
 
 pub mod audit;
 mod error;
+mod otel;
 
 pub use audit::{AuditEvent, Outcome, PolicyVerdict};
 pub use error::OpsError;

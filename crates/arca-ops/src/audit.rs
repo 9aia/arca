@@ -1,10 +1,20 @@
-//! Audit events — the wire stand-in until `arca serve` lands.
+//! Audit events — the observability wire.
 //!
 //! ADR-0001 moved audit ownership to peregrin: no local
 //! `audit.jsonl`. Instead arca emits ndjson lines on **stderr** —
 //! a peregrin/sepia wrapper can capture them, a human sees a
-//! breadcrumb. Keep the struct small and serializable: it's the
-//! wire contract.
+//! breadcrumb — and, when `OTEL_EXPORTER_OTLP_ENDPOINT` is set,
+//! buffers each event for an OTLP/HTTP JSON span export on
+//! [`flush`] (see [`crate::otel`]).
+//!
+//! stderr stays the default human wire; `ARCA_AUDIT_STDERR=0`
+//! silences it (the OTLP-only mode). [`mute_stderr`] suspends
+//! live stderr writes for surfaces that own the terminal — the
+//! TUI — and [`unmute_stderr`] replays the held events afterward,
+//! so nothing is lost, just deferred past the alt-screen.
+//!
+//! Keep the struct small and serializable: it's the wire
+//! contract on both sinks.
 //!
 //! Every verb invocation leaves a trail, uniformly:
 //!
@@ -21,11 +31,57 @@
 //! child's outcome, not arca's — no `error` event for it.
 
 use std::io::{self, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use serde::Serialize;
 use time::OffsetDateTime;
 
 use arca_core::Op;
+
+/// Process-wide audit sink — the OTLP buffer plus the stderr
+/// mute the TUI engages. A poisoned lock is recovered rather than
+/// panicking: audit must never take the broker down.
+struct Sink {
+    /// Events held for the next [`flush`] — only populated when
+    /// `OTEL_EXPORTER_OTLP_ENDPOINT` is configured.
+    otel: Vec<AuditEvent>,
+    /// TUI mode — live stderr writes suspended; events collect in
+    /// `held` for [`unmute_stderr`] to replay once the terminal is
+    /// restored.
+    muted: bool,
+    held: Vec<AuditEvent>,
+}
+
+static SINK: Mutex<Sink> = Mutex::new(Sink {
+    otel: Vec::new(),
+    muted: false,
+    held: Vec::new(),
+});
+
+fn sink() -> std::sync::MutexGuard<'static, Sink> {
+    SINK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// `ARCA_AUDIT_STDERR` — `0`/`false`/`off`/`no` silences the
+/// stderr wire; anything else (or unset) keeps it. Resolved once:
+/// env doesn't change mid-process.
+fn stderr_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        !matches!(
+            std::env::var("ARCA_AUDIT_STDERR")
+                .ok()
+                .map(|v| v.to_ascii_lowercase())
+                .as_deref(),
+            Some("0" | "false" | "off" | "no")
+        )
+    })
+}
+
+/// Warn-once flag for OTLP export failures — a dead collector
+/// shouldn't spam stderr once per flush.
+static EXPORT_WARNED: AtomicBool = AtomicBool::new(false);
 
 /// What the policy decision point said — recorded on serve-path
 /// audit events so the stream shows the verdict behind the
@@ -116,11 +172,71 @@ impl AuditEvent {
     }
 }
 
-/// Write `event` as one ndjson line to stderr.
+/// Route one event to the live sinks: stderr ndjson (unless muted
+/// or `ARCA_AUDIT_STDERR` silences it) and the OTLP buffer (when
+/// `OTEL_EXPORTER_OTLP_ENDPOINT` is configured). A broken stderr
+/// must never take the broker down — write failures are
+/// deliberately swallowed, same for the buffer.
 pub fn emit(event: &AuditEvent) {
-    // stderr is the audit wire — a broken pipe must never take the
-    // broker down, so failures are deliberately swallowed.
-    let _ = emit_to(&mut io::stderr(), event);
+    let stderr_on = {
+        let mut s = sink();
+        if crate::otel::enabled() {
+            s.otel.push(event.clone());
+        }
+        if s.muted {
+            s.held.push(event.clone());
+            false
+        } else {
+            stderr_enabled()
+        }
+    };
+    if stderr_on {
+        let _ = emit_to(&mut io::stderr(), event);
+    }
+}
+
+/// Suspend live stderr audit writes — for surfaces that own the
+/// terminal (the TUI's alternate screen). Events keep buffering
+/// for OTLP and collect in `held` for [`unmute_stderr`].
+pub fn mute_stderr() {
+    sink().muted = true;
+}
+
+/// Resume stderr writes and replay every event held while muted —
+/// call after the terminal is restored so the breadcrumb lands
+/// below the UI, not inside it.
+pub fn unmute_stderr() {
+    let held = {
+        let mut s = sink();
+        s.muted = false;
+        std::mem::take(&mut s.held)
+    };
+    if !stderr_enabled() {
+        return;
+    }
+    let mut err = io::stderr();
+    for ev in &held {
+        let _ = emit_to(&mut err, ev);
+    }
+}
+
+/// Export every buffered audit event as OTLP spans, then clear the
+/// buffer. No-op when `OTEL_EXPORTER_OTLP_ENDPOINT` is unset or
+/// the buffer is empty. Export failures warn once on stderr —
+/// audit transport must never fail the op that produced it.
+pub fn flush() {
+    let events = {
+        let mut s = sink();
+        std::mem::take(&mut s.otel)
+    };
+    if events.is_empty() {
+        return;
+    }
+    if let Err(e) = crate::otel::export(&events) {
+        if !EXPORT_WARNED.swap(true, Ordering::Relaxed) {
+            eprintln!("arca: otel audit export failed: {e}");
+        }
+    }
 }
 
 /// Write `event` as one ndjson line to `w` — the testable core.
