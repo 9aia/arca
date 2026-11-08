@@ -46,11 +46,15 @@ does not.
   them. They prevent *accidents*, not adversaries. Real
   multi-actor policy and enforcement belong to **peregrin**.
 - **The identity's host protection** — the master key lives in
-  the session keyring when one exists (ADR-0002), which protects
-  it about as well as your login session. On headless/CI it is
-  still `identity.txt` (0600), raw key material — protect it like
-  a private SSH key. Either way, UID-level compromise reaches it:
-  the keyring raises the bar, it is not a TPM.
+  the session keyring by default (ADR-0002), which protects it
+  about as well as your login session — and the default backend
+  fails closed rather than silently downgrading. The `0600`
+  keyfile (`identity.txt`, raw key material like an unencrypted
+  SSH key) is reached only via explicit opt-in: `backend =
+  "auto"`/`"file"`, `ARCA_IDENTITY_FILE`, or `[vaults.*].identity`
+  — the headless/CI path, where no session store exists anyway.
+  Either way, UID-level compromise reaches it: the keyring
+  raises the bar, it is not a TPM.
 - **The child process** — once `run` injects env vars, the child
   owns them (`/proc/<pid>/environ`, core dumps, the child logging
   its own env). arca's guarantee ends at `exec`.

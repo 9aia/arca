@@ -94,3 +94,10 @@ Audit emission is best-effort on both wires: a closed stderr
 (broken pipe) never takes the broker down — the write error is
 swallowed by design — and a failed OTLP export warns once on
 stderr, never fails the op.
+
+Note: stderr can also carry non-ndjson `arca:` *notice* lines
+(permission warnings, keyring fallback notes) — UX chatter, not
+audit wire. Consumers parsing stderr as pure ndjson should
+tolerate lines that don't start with `{`. During `arca ui` both
+audit events and notices are held and replayed after the
+terminal is restored.

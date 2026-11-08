@@ -30,12 +30,19 @@ idempotent — run it any time.
 
 On a desktop session (GNOME Keyring, KeePassXC, KDE Wallet, macOS
 Keychain, Windows Credential Manager) the identity lands in the
-session keyring — it unlocks with login, no prompt. On headless
-boxes with no session store, `init` falls back to the
-`~/.config/arca/identity.txt` keyfile (mode `0600`) with a note
-saying so. `arca init --with-file` forces the keyfile; pinning
+session keyring — it unlocks with login, no prompt. The default
+backend is `keyring`: **fail closed** — if no session store is
+reachable, `init` (and every other verb) errors rather than
+silently downgrading to a file. Headless boxes (servers, CI,
+containers, plain SSH) have no session bus, so there you opt out
+explicitly — `[identity] backend = "auto"` in `arca.toml` (probe
+the keyring, fall back to the keyfile with a note), `"file"`
+(never probe), or the `ARCA_IDENTITY_BACKEND` env var. The
+fallback writes `~/.config/arca/identity.txt` (mode `0600`) —
+raw age key material, protect it like a private SSH key.
+`arca init --with-file` forces the keyfile; pinning
 `ARCA_IDENTITY_FILE` or `[vaults.*].identity` in config does the
-same — that's the headless/CI path.
+same — that's the deliberate headless/CI path.
 
 Already have an `identity.txt`? `arca init` imports it into the
 keyring rather than orphaning it, and leaves the file as a backup
