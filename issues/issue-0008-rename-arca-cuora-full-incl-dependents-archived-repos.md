@@ -1,7 +1,7 @@
 +++
 id = "I-008"
 title = "rename arca → cuora (full, incl. dependents + archived repos)"
-status = "open"
+status = "done"
 created = "2026-11-08"
 priority = "medium"
 +++
@@ -19,6 +19,8 @@ What is wrong and steps to reproduce.
 - [ ] Action item
 
 ## Resolution
+
+Renamed arca → cuora across main repo, all live dependents, and archived repos (thalapp/thal only). GH repo renamed with redirects; docs at 9aia.com/cuora; legacy ARCA_*/arca.toml/arca:// fallbacks preserved.
 
 ## Comments
 
