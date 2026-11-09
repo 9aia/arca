@@ -1,6 +1,6 @@
 +++
 id = "ADR-0002"
-title = "identity storage — the arca-identity port (keyring-preferred, file fallback)"
+title = "identity storage — the cuora-identity port (keyring-preferred, file fallback)"
 status = "done"
 created = "2026-11-02"
 owner = "devin"

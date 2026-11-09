@@ -1,6 +1,6 @@
 +++
 id = "P-005"
-title = "arca serve — ndjson policy-decision wire for peregrin"
+title = "cuora serve — ndjson policy-decision wire for peregrin"
 status = "done"
 created = "2026-11-02"
 priority = "low"
