@@ -9,7 +9,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 DOCS="$(pwd)"
-REPO="${CUORA_REPO:-$HOME/GitHub/9aia/cuora}"
+REPO="${CUORA_REPO:-$HOME/GitHub/9aia/workspace/repos/cuora}"
 export CUORA_ROOT="$REPO"
 
 echo "==> bun install"
