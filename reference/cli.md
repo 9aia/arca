@@ -17,7 +17,6 @@ This document contains the help content for the `cuora` command-line program.
 * [`cuora migrate`↴](#cuora-migrate)
 * [`cuora deploy`↴](#cuora-deploy)
 * [`cuora serve`↴](#cuora-serve)
-* [`cuora ui`↴](#cuora-ui)
 * [`cuora manifest`↴](#cuora-manifest)
 * [`cuora schema`↴](#cuora-schema)
 
@@ -43,7 +42,6 @@ Refs name logical secrets (`cuora://billing/stripe`); `--env` picks the resoluti
 * `migrate` — Rewrite stored records for a wire/config upgrade. Currently one transform: `--private-refs` re-keys every plaintext-named row in each env routed to a cf vault with `[vaults.*] private_refs = true` — ciphertext moves verbatim, old keys are deleted after the new rows land
 * `deploy` — Push a stored secret to a write-only deploy target (`[deploy.NAME]` in cuora.toml, e.g. a CF Secrets Store). The vault is the source of truth; the sink never gives the value back. With one configured target, `--target` may be omitted
 * `serve` — Serve the Vault port over ndjson — one JSON request per stdin line, one response per stdout line, audit events on stderr unchanged. For orchestrators embedding cuora (peregrin); with `[serve.pdp]` configured, a policy decision point is consulted before every vault-touching op. `{"op":"manifest"}` on the wire describes the protocol
-* `ui` — Interactive vault browser (requires the `tui` feature)
 * `manifest` — Capabilities, JSON shapes, env vars, audit contract — agent self-discovery (always JSON)
 * `schema` — JSON Schema for `cuora.toml`
 
@@ -201,14 +199,6 @@ Push a stored secret to a write-only deploy target (`[deploy.NAME]` in cuora.tom
 Serve the Vault port over ndjson — one JSON request per stdin line, one response per stdout line, audit events on stderr unchanged. For orchestrators embedding cuora (peregrin); with `[serve.pdp]` configured, a policy decision point is consulted before every vault-touching op. `{"op":"manifest"}` on the wire describes the protocol
 
 **Usage:** `cuora serve`
-
-
-
-## `cuora ui`
-
-Interactive vault browser (requires the `tui` feature)
-
-**Usage:** `cuora ui`
 
 
 
