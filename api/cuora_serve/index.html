@@ -5,7 +5,7 @@ orchestrators (peregrin) embed (P-005).</p>
 span export when <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> is set) — three
 separate fds, so a reply never rides the event stream
 and an event never answers a request. A thin front over
-<code>cuora-ops</code> like <code>cuora-tui</code> — every vault access goes through
+<code>cuora-ops</code> — every vault access goes through
 <a href="../cuora_ops/struct.Ops.html" title="struct cuora_ops::Ops"><code>Ops</code></a>, so env-pin resolution, <code>[envs]</code> routing, and the
 audit events are the same ones the CLI emits.</p>
 <p>Protocol <code>cuora-serve/1</code>:</p>
@@ -19,7 +19,7 @@ the configured <code>[serve.pdp]</code> first — <code>list</code> decrypts rec
 metadata and <code>check</code> probes vaults including scoped-token
 gets, so they are materializations too), <code>manifest</code> (this
 protocol’s self-description), and <code>shutdown</code> (clean exit).
-<code>run</code>/<code>env</code>/<code>deploy</code>/<code>init</code>/<code>ui</code> stay single-shot CLI verbs —
+<code>run</code>/<code>env</code>/<code>deploy</code>/<code>init</code> stay single-shot CLI verbs —
 serve covers the port peregrin needs in-process.</p>
 <p>Hard bounds on the wire: a request line over
 <a href="constant.MAX_LINE_BYTES.html" title="constant cuora_serve::MAX_LINE_BYTES"><code>MAX_LINE_BYTES</code></a> (4 MiB) answers <code>bad_request</code> and the

@@ -6,7 +6,7 @@
 <a href=#6 id=6 data-nosnippet>6</a>//! span export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set) — three
 <a href=#7 id=7 data-nosnippet>7</a>//! separate fds, so a reply never rides the event stream
 <a href=#8 id=8 data-nosnippet>8</a>//! and an event never answers a request. A thin front over
-<a href=#9 id=9 data-nosnippet>9</a>//! `cuora-ops` like `cuora-tui` — every vault access goes through
+<a href=#9 id=9 data-nosnippet>9</a>//! `cuora-ops` — every vault access goes through
 <a href=#10 id=10 data-nosnippet>10</a>//! [`Ops`], so env-pin resolution, `[envs]` routing, and the
 <a href=#11 id=11 data-nosnippet>11</a>//! audit events are the same ones the CLI emits.
 <a href=#12 id=12 data-nosnippet>12</a>//!
@@ -26,7 +26,7 @@
 <a href=#26 id=26 data-nosnippet>26</a>//! metadata and `check` probes vaults including scoped-token
 <a href=#27 id=27 data-nosnippet>27</a>//! gets, so they are materializations too), `manifest` (this
 <a href=#28 id=28 data-nosnippet>28</a>//! protocol's self-description), and `shutdown` (clean exit).
-<a href=#29 id=29 data-nosnippet>29</a>//! `run`/`env`/`deploy`/`init`/`ui` stay single-shot CLI verbs —
+<a href=#29 id=29 data-nosnippet>29</a>//! `run`/`env`/`deploy`/`init` stay single-shot CLI verbs —
 <a href=#30 id=30 data-nosnippet>30</a>//! serve covers the port peregrin needs in-process.
 <a href=#31 id=31 data-nosnippet>31</a>//!
 <a href=#32 id=32 data-nosnippet>32</a>//! Hard bounds on the wire: a request line over
@@ -814,7 +814,7 @@
 <a href=#814 id=814 data-nosnippet>814</a>            <span class="string">"guardrails still apply (advisory); cuora://&lt;env&gt;/… pins still resolve"</span>,
 <a href=#815 id=815 data-nosnippet>815</a>            <span class="string">"manifest/shutdown are protocol meta-ops — no guardrail or PDP consult; gating session lifecycle is the embedder's spawn decision"</span>,
 <a href=#816 id=816 data-nosnippet>816</a>            <span class="string">"every consult spawns a fresh exec; list decrypts each record and check probes every vault — batch reads rather than looping list"</span>,
-<a href=#817 id=817 data-nosnippet>817</a>            <span class="string">"run/env/deploy/init/ui stay single-shot CLI verbs — serve covers the Vault port peregrin embeds"</span>,
+<a href=#817 id=817 data-nosnippet>817</a>            <span class="string">"run/env/deploy/init stay single-shot CLI verbs — serve covers the Vault port peregrin embeds"</span>,
 <a href=#818 id=818 data-nosnippet>818</a>        ],
 <a href=#819 id=819 data-nosnippet>819</a>    })
 <a href=#820 id=820 data-nosnippet>820</a>}

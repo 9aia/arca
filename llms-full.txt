@@ -777,7 +777,6 @@ This document contains the help content for the `cuora` command-line program.
 * [`cuora migrate`↴](#cuora-migrate)
 * [`cuora deploy`↴](#cuora-deploy)
 * [`cuora serve`↴](#cuora-serve)
-* [`cuora ui`↴](#cuora-ui)
 * [`cuora manifest`↴](#cuora-manifest)
 * [`cuora schema`↴](#cuora-schema)
 
@@ -803,7 +802,6 @@ Refs name logical secrets (`cuora://billing/stripe`); `--env` picks the resoluti
 * `migrate` — Rewrite stored records for a wire/config upgrade. Currently one transform: `--private-refs` re-keys every plaintext-named row in each env routed to a cf vault with `[vaults.*] private_refs = true` — ciphertext moves verbatim, old keys are deleted after the new rows land
 * `deploy` — Push a stored secret to a write-only deploy target (`[deploy.NAME]` in cuora.toml, e.g. a CF Secrets Store). The vault is the source of truth; the sink never gives the value back. With one configured target, `--target` may be omitted
 * `serve` — Serve the Vault port over ndjson — one JSON request per stdin line, one response per stdout line, audit events on stderr unchanged. For orchestrators embedding cuora (peregrin); with `[serve.pdp]` configured, a policy decision point is consulted before every vault-touching op. `{"op":"manifest"}` on the wire describes the protocol
-* `ui` — Interactive vault browser (requires the `tui` feature)
 * `manifest` — Capabilities, JSON shapes, env vars, audit contract — agent self-discovery (always JSON)
 * `schema` — JSON Schema for `cuora.toml`
 
@@ -937,12 +935,6 @@ Push a stored secret to a write-only deploy target (`[deploy.NAME]` in cuora.tom
 Serve the Vault port over ndjson — one JSON request per stdin line, one response per stdout line, audit events on stderr unchanged. For orchestrators embedding cuora (peregrin); with `[serve.pdp]` configured, a policy decision point is consulted before every vault-touching op. `{"op":"manifest"}` on the wire describes the protocol
 
 **Usage:** `cuora serve`
-
-## `cuora ui`
-
-Interactive vault browser (requires the `tui` feature)
-
-**Usage:** `cuora ui`
 
 ## `cuora manifest`
 
@@ -1387,6 +1379,7 @@ documented at source (doc comments).
 * [cuora-ops](/cuora/api/cuora_ops/index.html) — ops
 * [cuora-config-toml](/cuora/api/cuora_config_toml/index.html) — adapter
 * [cuora-deploy-cf](/cuora/api/cuora_deploy_cf/index.html) — adapter
+* [cuora-driver](/cuora/api/cuora_driver/index.html) — adapter
 * [cuora-identity](/cuora/api/cuora_identity/index.html) — adapter
 * [cuora-identity-file](/cuora/api/cuora_identity_file/index.html) — adapter
 * [cuora-identity-keyring](/cuora/api/cuora_identity_keyring/index.html) — adapter
@@ -1394,7 +1387,6 @@ documented at source (doc comments).
 * [cuora-serve](/cuora/api/cuora_serve/index.html) — adapter
 * [cuora-shell](/cuora/api/cuora_shell/index.html) — adapter
 * [cuora-testkit](/cuora/api/cuora_testkit/index.html) — adapter
-* [cuora-tui](/cuora/api/cuora_tui/index.html) — adapter
 * [cuora-vault-age](/cuora/api/cuora_vault_age/index.html) — adapter
 * [cuora-vault-cached](/cuora/api/cuora_vault_cached/index.html) — adapter
 * [cuora-vault-cf](/cuora/api/cuora_vault_cf/index.html) — adapter
@@ -1442,14 +1434,14 @@ Design rules:
 | `cuora-ops` | ops | cuora ops I/O: config load, env/ref resolution, vault open, verb plumbing, audit emission |
 | `cuora-config-toml` | adapter | Config impl: cuora.toml file (explicit path, env, ./, ~/.config) |
 | `cuora-deploy-cf` | adapter | Deploy impl: push secret values to a Cloudflare account Secrets Store (write-only sink) via the CF API v4 |
+| `cuora-driver` | adapter | tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values) |
 | `cuora-identity` | adapter | Identity port: where the age identity (master key) comes from — file, keyring, later sealed variants |
 | `cuora-identity-file` | adapter | Identity impl: the ~/.config/cuora/identity.txt age keyfile (0600) — the headless/CI default |
 | `cuora-identity-keyring` | adapter | Identity impl: the platform session secret store (secret-service / Keychain / Credential Manager) via keyring-core |
-| `cuora-notice` | adapter | Process-wide UX notices — muted/replayed stderr notes that must not corrupt the cuora ui alternate screen |
+| `cuora-notice` | adapter | Process-wide UX notices — cuora:-prefixed stderr notes, mutable for terminal-owning surfaces |
 | `cuora-serve` | adapter | cuora serve — the ndjson request/response IPC surface orchestrators embed, with the external policy-decision consult (P-005) |
 | `cuora-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
 | `cuora-testkit` | adapter | Vault conformance suite — every cuora-vault impl passes the same contract tests (fake values only) |
-| `cuora-tui` | adapter | cuora — interactive vault TUI; a thin front-end over cuora-ops (phase 5 polish) |
 | `cuora-vault-age` | adapter | Local vault impl: one age-x25519-encrypted JSON doc — the v1 default backend |
 | `cuora-vault-cached` | adapter | Composite vault impl: read-through age-encrypted local cache in front of any backend (P-007) |
 | `cuora-vault-cf` | adapter | Remote vault impl: self-hosted Cloudflare Worker + D1 holding per-secret age ciphertext — the Worker never sees plaintext |

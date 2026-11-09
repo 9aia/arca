@@ -13,6 +13,7 @@ documented at source (doc comments).
 * [cuora-ops](/cuora/api/cuora_ops/index.html) — ops
 * [cuora-config-toml](/cuora/api/cuora_config_toml/index.html) — adapter
 * [cuora-deploy-cf](/cuora/api/cuora_deploy_cf/index.html) — adapter
+* [cuora-driver](/cuora/api/cuora_driver/index.html) — adapter
 * [cuora-identity](/cuora/api/cuora_identity/index.html) — adapter
 * [cuora-identity-file](/cuora/api/cuora_identity_file/index.html) — adapter
 * [cuora-identity-keyring](/cuora/api/cuora_identity_keyring/index.html) — adapter
@@ -20,7 +21,6 @@ documented at source (doc comments).
 * [cuora-serve](/cuora/api/cuora_serve/index.html) — adapter
 * [cuora-shell](/cuora/api/cuora_shell/index.html) — adapter
 * [cuora-testkit](/cuora/api/cuora_testkit/index.html) — adapter
-* [cuora-tui](/cuora/api/cuora_tui/index.html) — adapter
 * [cuora-vault-age](/cuora/api/cuora_vault_age/index.html) — adapter
 * [cuora-vault-cached](/cuora/api/cuora_vault_cached/index.html) — adapter
 * [cuora-vault-cf](/cuora/api/cuora_vault_cf/index.html) — adapter

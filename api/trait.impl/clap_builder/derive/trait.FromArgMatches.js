@@ -1,9 +1,9 @@
 (function() {
-    const implementors = Object.fromEntries([["arca",[["impl FromArgMatches for <a class=\"struct\" href=\"arca/struct.Cli.html\" title=\"struct arca::Cli\">Cli</a>",0],["impl FromArgMatches for <a class=\"enum\" href=\"arca/enum.Cmd.html\" title=\"enum arca::Cmd\">Cmd</a>",0]]],["cuora",[["impl FromArgMatches for <a class=\"struct\" href=\"cuora/struct.Cli.html\" title=\"struct cuora::Cli\">Cli</a>",0],["impl FromArgMatches for <a class=\"enum\" href=\"cuora/enum.Cmd.html\" title=\"enum cuora::Cmd\">Cmd</a>",0]]]]);
+    const implementors = Object.fromEntries([["cuora",[["impl FromArgMatches for <a class=\"struct\" href=\"cuora/struct.Cli.html\" title=\"struct cuora::Cli\">Cli</a>",0],["impl FromArgMatches for <a class=\"enum\" href=\"cuora/enum.Cmd.html\" title=\"enum cuora::Cmd\">Cmd</a>",0]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
         window.pending_implementors = implementors;
     }
 })()
-//{"start":59,"fragment_lengths":[234,240]}
+//{"start":59,"fragment_lengths":[239]}
