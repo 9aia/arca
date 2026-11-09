@@ -7,15 +7,10 @@ api:
   file: crates/cuora-driver/src/data.rs
   line: 31
   module: cuora-driver
-- name: binding
-  kind: function
-  file: crates/cuora-driver/src/views.rs
-  line: 100
-  module: cuora-driver
 - name: bound
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 52
+  line: 47
   module: cuora-driver
 - name: cache_desc
   kind: function
@@ -25,17 +20,17 @@ api:
 - name: capabilities_json
   kind: function
   file: crates/cuora-driver/src/main.rs
-  line: 32
+  line: 27
   module: cuora-driver
 - name: check_info
   kind: function
   file: crates/cuora-driver/src/data.rs
-  line: 423
+  line: 415
   module: cuora-driver
 - name: check_problems_rows
   kind: function
   file: crates/cuora-driver/src/data.rs
-  line: 489
+  line: 481
   module: cuora-driver
 - name: check_report
   kind: function
@@ -45,17 +40,17 @@ api:
 - name: check_secrets_rows
   kind: function
   file: crates/cuora-driver/src/data.rs
-  line: 467
+  line: 459
   module: cuora-driver
 - name: check_vaults_rows
   kind: function
   file: crates/cuora-driver/src/data.rs
-  line: 443
+  line: 435
   module: cuora-driver
 - name: col
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 60
+  line: 51
   module: cuora-driver
 - name: cuora-driver
   kind: module
@@ -75,12 +70,12 @@ api:
 - name: degraded_ctx_yields_error_payloads_not_wire_errors
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 421
+  line: 372
   module: cuora-driver
 - name: dispatch
   kind: function
   file: crates/cuora-driver/src/main.rs
-  line: 42
+  line: 37
   module: cuora-driver
 - name: driver_passes_pavo_conformance
   kind: function
@@ -110,17 +105,17 @@ api:
 - name: every_binding_is_a_known_query
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 394
+  line: 345
   module: cuora-driver
 - name: known_query
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 310
+  line: 261
   module: cuora-driver
 - name: kv
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 68
+  line: 55
   module: cuora-driver
 - name: location
   kind: function
@@ -130,27 +125,22 @@ api:
 - name: main
   kind: function
   file: crates/cuora-driver/src/main.rs
-  line: 100
+  line: 83
   module: cuora-driver
 - name: manifest
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 268
+  line: 232
   module: cuora-driver
 - name: manifest_advertises_pavo_and_lists_every_view
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 380
-  module: cuora-driver
-- name: manifest_json
-  kind: function
-  file: crates/cuora-driver/src/main.rs
-  line: 28
+  line: 331
   module: cuora-driver
 - name: no_view_can_bind_a_value_bearing_query
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 403
+  line: 354
   module: cuora-driver
 - name: open
   kind: function
@@ -170,7 +160,7 @@ api:
 - name: query_data
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 330
+  line: 281
   module: cuora-driver
 - name: refs_rows
   kind: function
@@ -180,33 +170,44 @@ api:
 - name: secret_payload
   kind: function
   file: crates/cuora-driver/src/data.rs
-  line: 378
+  line: 370
   module: cuora-driver
 - name: secret_query_requires_ref_param
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 448
+  line: 399
   module: cuora-driver
 - name: serve
   kind: function
   file: crates/cuora-driver/src/main.rs
-  line: 75
+  line: 76
   module: cuora-driver
 - name: spec
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 108
+  line: 75
   module: cuora-driver
 - name: specs
   kind: function
   file: crates/cuora-driver/src/views.rs
-  line: 130
+  line: 94
   module: cuora-driver
-api_omitted: 12
+- name: summary
+  kind: function
+  file: crates/cuora-driver/src/data.rs
+  line: 187
+  module: cuora-driver
+- name: table
+  kind: function
+  file: crates/cuora-driver/src/views.rs
+  line: 59
+  module: cuora-driver
+api_omitted: 10
 deps:
 - cuora-core
 - cuora-ops
 - cuora-vault
+- pavo-driver-kit
 - pavo-protocol
 - serde
 - serde_json
@@ -231,11 +232,11 @@ provenance:
   - crates/cuora-driver/src/views.rs
   - crates/cuora-driver/tests/conformance.rs
   hashes:
-  - 4c7f67fb590a050a41c5804027b7184ab9daf775
-  - 6a88cf177d6389aad898330224a574858f27dca5
-  - a1f55f66a98a3942f1d1996d8259c7e52c27e2d9
-  - 8ecb24860106a3fdcd31da6f63198251a6ff4c00
+  - 33fc0e9d7ad9578ba58211c6d38b3c93764b2c5c
+  - 30179227737243cf39cc488c7a7a58561314310f
+  - d2e6fee23d0566cd9f7e5085ee853e3b21715a29
+  - f540ce8f022cad65a59b22765437395be652d2e7
   - 2da421265e79d5f875b8646a66b259eea8d19715
-  commit_sha: ad4a7435cd12181b8a8981512dfed7407f8e7ae5
-  generated_at: '1794178295'
+  commit_sha: 6f6d967275ffcf5c2b3639fd63a74c14e0912487
+  generated_at: '1794245518'
   generator: kuda-template/0.1.2

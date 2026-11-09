@@ -19,15 +19,23 @@ cuora-vault.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
-# The public wire contract — sibling-checkout path dep until
-# pavo-protocol is published (the whole 9aia org lives side-by-side
-# under one parent dir; `version` is the crates.io fallback).
-pavo-protocol = { path = "../../../pavo/crates/pavo-protocol", version = "0.1.0" }
+# The public wire contract — git dep so `cargo install --git` and
+# `cargo xtask install` work without a sibling ../pavo checkout
+# (path deps break workspace resolution on a fresh clone).
+# `version` is the crates.io fallback once pavo-protocol publishes.
+pavo-protocol = { git = "https://github.com/9aia/pavo", version = "0.1.0" }
+# Driver-authoring kit — the ndjson `serve` loop plus the
+# manifest/ViewSpec/QueryBinding/ViewNode builders this crate used to
+# hand-roll. Same git source as pavo-protocol (they resolve to one
+# rev); `version` is the crates.io fallback once it publishes.
+pavo-driver-kit = { git = "https://github.com/9aia/pavo", version = "0.1.0" }
 
 [dev-dependencies]
 # Conformance gate — `cargo test` runs pavo's wire-contract suite
 # against this crate's own `tamias-driver-cuora serve` binary.
-pavo-testkit = { path = "../../../pavo/crates/pavo-testkit" }
+# Git dep to match pavo-protocol above (path deps break
+# `cargo install --git` / fresh-clone resolution).
+pavo-testkit = { git = "https://github.com/9aia/pavo" }
 
 [lints]
 workspace = true

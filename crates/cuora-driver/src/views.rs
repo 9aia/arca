@@ -32,10 +32,8 @@
 //! | `[secrets]` declared surface          | `cuora:declared` table                |
 //! | `cuora ui` itself                     | `tamias-driver-cuora` (this crate)   |
 
-use pavo_protocol::{
-    ColumnNode, Contributes, Contribution, DriverManifest, KvNode, NodeBase, QueryBinding,
-    TableColumn, TableNode, TreeNode, ViewNode, ViewSpec,
-};
+use pavo_driver_kit as kit;
+use pavo_protocol::{DriverManifest, NodeBase, ViewNode, ViewSpec};
 use serde_json::{Map, Value};
 
 use crate::data::{self, Ctx};
@@ -43,66 +41,35 @@ use crate::data::{self, Ctx};
 // ---------------------------------------------------------------- helpers
 
 fn titled(title: &str) -> NodeBase {
-    NodeBase {
-        title: Some(title.to_string()),
-        ..NodeBase::default()
-    }
+    kit::base().title(title).build()
 }
 
 fn bound(title: &str, query: &str) -> NodeBase {
-    NodeBase {
-        title: Some(title.to_string()),
-        query: Some(query.to_string()),
-        ..NodeBase::default()
-    }
+    kit::base().title(title).query(query).build()
 }
 
 fn col(title: &str, children: Vec<ViewNode>) -> ViewNode {
-    ViewNode::Column(ColumnNode {
-        base: titled(title),
-        children,
-        gap: None,
-    })
+    kit::column(titled(title), children)
 }
 
 fn kv(title: &str, query: &str) -> ViewNode {
-    ViewNode::Kv(KvNode {
-        base: bound(title, query),
-        pairs: Vec::new(),
-    })
+    kit::kv(bound(title, query), Vec::new())
 }
 
 fn table(title: &str, query: &str, columns: &[(&str, &str)]) -> ViewNode {
-    ViewNode::Table(TableNode {
-        base: bound(title, query),
-        columns: columns
+    // `sortable_table`: every table this driver declares sorts.
+    kit::sortable_table(
+        bound(title, query),
+        columns
             .iter()
-            .map(|(key, t)| TableColumn {
-                key: (*key).to_string(),
-                title: (*t).to_string(),
-                align: None,
-                width: None,
-            })
+            .map(|(key, t)| kit::table_column(key, t))
             .collect(),
-        rows: Vec::new(),
-        sortable: true,
-    })
+        Vec::new(),
+    )
 }
 
 fn tree(title: &str, query: &str) -> ViewNode {
-    ViewNode::Tree(TreeNode {
-        base: bound(title, query),
-        items: Vec::new(),
-        expandable: true,
-    })
-}
-
-fn binding(name: &str) -> QueryBinding {
-    QueryBinding {
-        name: name.to_string(),
-        op: "query".to_string(),
-        params: Map::new(),
-    }
+    kit::expandable_tree(bound(title, query), Vec::new())
 }
 
 fn spec(
@@ -113,14 +80,11 @@ fn spec(
     queries: &[&str],
     root: ViewNode,
 ) -> ViewSpec {
-    ViewSpec {
-        id: id.to_string(),
-        title: title.to_string(),
-        route: route.to_string(),
-        description: Some(description.to_string()),
-        queries: queries.iter().map(|q| binding(q)).collect(),
-        root,
+    let mut view = kit::view(id, title, route, root).description(description);
+    for q in queries {
+        view = view.query(kit::binding(q, "query"));
     }
+    view.build()
 }
 
 // ---------------------------------------------------------------- manifest
@@ -266,41 +230,28 @@ pub fn specs() -> Vec<ViewSpec> {
 
 /// The `manifest` op result.
 pub fn manifest() -> DriverManifest {
-    DriverManifest {
-        name: "cuora".to_string(),
-        title: "Cuora".to_string(),
-        icon: Some("🐢".to_string()),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        verbs: vec!["manifest".to_string(), "serve".to_string()],
-        capabilities: vec!["pavo".to_string()],
-        contributes: Contributes {
-            navbar: vec![Contribution {
-                id: "refs".to_string(),
-                title: "Cuora".to_string(),
-                route: "/cuora/refs".to_string(),
-                priority: 30,
-                icon: None,
-            }],
-            dashboard: vec![Contribution {
-                id: "status".to_string(),
-                title: "Cuora status".to_string(),
-                route: "/cuora/status".to_string(),
-                priority: 35,
-                icon: None,
-            }],
-            statusbar: vec![Contribution {
-                id: "status".to_string(),
-                title: "Cuora vaults".to_string(),
-                route: "/cuora/status".to_string(),
-                priority: 45,
-                icon: None,
-            }],
-            routes: Vec::new(),
-            extra: Default::default(),
-        },
-        views: specs(),
-        renderers: Vec::new(),
+    // `contribution` defaults priority to 100; the slots below order
+    // explicitly (lower sorts first).
+    let mut navbar = kit::contribution("refs", "Cuora", "/cuora/refs");
+    navbar.priority = 30;
+    let mut dashboard = kit::contribution("status", "Cuora status", "/cuora/status");
+    dashboard.priority = 35;
+    let mut statusbar = kit::contribution("status", "Cuora vaults", "/cuora/status");
+    statusbar.priority = 45;
+
+    // `Manifest::new` already defaults verbs to ["manifest","serve"]
+    // and capabilities to ["pavo"] — the same values the literal
+    // declared by hand.
+    let mut m = kit::Manifest::new("cuora", "Cuora")
+        .version(env!("CARGO_PKG_VERSION"))
+        .icon("🐢")
+        .navbar(navbar)
+        .dashboard(dashboard)
+        .statusbar(statusbar);
+    for v in specs() {
+        m = m.view(v);
     }
+    m.build()
 }
 
 // ---------------------------------------------------------------- queries

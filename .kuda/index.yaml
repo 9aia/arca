@@ -1,5 +1,5 @@
 name: cuora
-root: /home/luis/GitHub/9aia/cuora
+root: /home/luis/GitHub/9aia/workspace/repos/cuora
 purpose: '*Secrets broker for agents — sealed, not spilled.*'
 modules:
 - cuora
@@ -27,7 +27,7 @@ modules:
 commands:
 - cargo check
 - cargo test --workspace
-tree_digest: dfe0fcc02c0e26d96d4e4cb9af4ae759007ea22e
+tree_digest: 978c8c47296d8605014a54f1687accdb89bbbdb8
 files_total: 163
 provenance:
   files:
@@ -62,7 +62,7 @@ provenance:
   - 84f4d48465d7a00aa61152d1261563f5e806c35b
   - 000e41d5840b658bf1370bc0a1f4c10626a91fcb
   - c140ab8aed34d70490289b50e722c42ac084fadd
-  - 4c7f67fb590a050a41c5804027b7184ab9daf775
+  - 33fc0e9d7ad9578ba58211c6d38b3c93764b2c5c
   - 61f701f21c7a5745cc8e5b624533b590af330534
   - 470575d39bfa27414e5acfb96383fa473a62744e
   - f1b047a37b1d9ebf50b0ca5c43cd946617a89ac7
@@ -76,6 +76,6 @@ provenance:
   - df97d7ea0f12c02fec10db53389137ddf5dddcc2
   - 422f52f2ca23213aedb8eb77d63058314f245371
   - 1b2c254cc2d5e144e6ee3eedfdcbb94db8a3dedb
-  commit_sha: ad4a7435cd12181b8a8981512dfed7407f8e7ae5
-  generated_at: '1794178295'
+  commit_sha: 6f6d967275ffcf5c2b3639fd63a74c14e0912487
+  generated_at: '1794245518'
   generator: kuda/0.1.0

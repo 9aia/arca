@@ -339,32 +339,24 @@ fn tree_payload(ctx: &Ctx) -> Value {
             Ok(refs) => {
                 let children: Vec<pavo_protocol::TreeItem> = refs
                     .iter()
-                    .map(|r| pavo_protocol::TreeItem {
-                        id: Some(r.to_string()),
-                        label: r.path(),
-                        detail: None,
-                        icon: None,
-                        children: Vec::new(),
-                        props: Default::default(),
+                    .map(|r| {
+                        let mut item = pavo_driver_kit::tree_item(r.path());
+                        item.id = Some(r.to_string());
+                        item
                     })
                     .collect();
-                items.push(pavo_protocol::TreeItem {
-                    id: Some(env.as_str().to_string()),
-                    label: env.as_str().to_string(),
-                    detail: Some(format!("{} refs", children.len())),
-                    icon: None,
-                    children,
-                    props: Default::default(),
-                });
+                let mut env_item = pavo_driver_kit::tree_item(env.as_str());
+                env_item.id = Some(env.as_str().to_string());
+                env_item.detail = Some(format!("{} refs", children.len()));
+                env_item.children = children;
+                items.push(env_item);
             }
-            Err(e) => items.push(pavo_protocol::TreeItem {
-                id: Some(env.as_str().to_string()),
-                label: env.as_str().to_string(),
-                detail: Some(format!("unreadable: {e}")),
-                icon: None,
-                children: Vec::new(),
-                props: Default::default(),
-            }),
+            Err(e) => {
+                let mut item = pavo_driver_kit::tree_item(env.as_str());
+                item.id = Some(env.as_str().to_string());
+                item.detail = Some(format!("unreadable: {e}"));
+                items.push(item);
+            }
         }
     }
     json!({"items": items})
