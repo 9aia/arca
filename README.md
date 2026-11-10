@@ -139,7 +139,8 @@ cuora = **secret materialization**. Neighbors: **myco** (work
 memory), **sturn** (ephemeral coordination), **kuda** (code
 memory), **peregrin** (orchestration — campaigns consume via
 `cuora run`; audit aggregation + policy are its), **bupha**/**ci-gate**
-(CI gate — bupha retired, gate is peregrin campaigns), **mimus**
+(CI gate — bupha is the CI repo; the org gate is mid-migration back
+from the peregrin `ci-gate` campaign), **mimus**
 (critic — its key resolution migrates to cuora), **sepia** (session
 lifecycle).
 
