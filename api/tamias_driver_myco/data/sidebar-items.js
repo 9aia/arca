@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["CONFIG"],"fn":["config_layered","load","overrides","store_at"],"struct":["HandoffRow","Snapshot"]};

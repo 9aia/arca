@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Claim"],"struct":["Job","KeyPolicy","MemWorkQueue","PersistedQueue"],"trait":["QueueStore","WorkQueue"]};

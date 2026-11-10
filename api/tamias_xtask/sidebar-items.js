@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["DRIVER_TAMIAS_MANIFEST"],"fn":["check","coverage","driver_tamias_available","have","have_cargo_sub","install","main","package","run","run_in","site","smoke","test"]};
