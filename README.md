@@ -1,8 +1,8 @@
 # cuora docs
 
 VitePress + Diátaxis site — served from the `gh-pages` branch at
-`9aia.com/cuora`. Deploys are driven by the CI gate (peregrin
-campaigns; bupha is retired): a push to this
+`9aia.com/cuora`. Deploys are driven by the CI gate (currently the
+peregrin `ci-gate` campaign — migrating back to bupha): a push to this
 branch runs `scripts/deploy-docs.sh` in a detached worktree of
 the pushed sha (gen → `cargo doc` → `vitepress build` →
 `bunx gh-pages`). Pages is a legacy branch deploy — pushing
