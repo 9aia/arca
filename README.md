@@ -138,9 +138,10 @@ ref, different backend per env.
 cuora = **secret materialization**. Neighbors: **myco** (work
 memory), **sturn** (ephemeral coordination), **kuda** (code
 memory), **peregrin** (orchestration — campaigns consume via
-`cuora run`; audit aggregation + policy are its), **bupha** (CI
-gate), **mimus** (critic — its key resolution migrates to cuora),
-**sepia** (session lifecycle).
+`cuora run`; audit aggregation + policy are its), **bupha**/**ci-gate**
+(CI gate — bupha retired, gate is peregrin campaigns), **mimus**
+(critic — its key resolution migrates to cuora), **sepia** (session
+lifecycle).
 
 ## Campaigns
 

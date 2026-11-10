@@ -95,8 +95,9 @@ injection, redaction, audit. Neighbors own theirs:
 - **peregrin** — orchestration; campaigns consume secrets via
   `cuora run`; embedding + the policy-decision wire is `cuora serve`
   (ndjson, ADR-0003) — cuora consults, peregrin decides.
-- **bupha** — CI gate; asserts no plaintext secrets land in
-  pipelines.
+- **bupha** — retired CI gate (was: asserts no plaintext secrets
+  land in pipelines); the gate is now the peregrin `ci-gate`
+  campaign.
 - **mimus** — critic; secrets resolve env → cuora → legacy
   (keyring, `~/.config/mimus/env`) via its `mimus-cuora` adapter
   shelling `cuora` — vaults are canonical, writes land in them.
