@@ -1563,7 +1563,7 @@ kind of memory or authority, it belongs to a neighbor.
 | **sturn** | ephemeral coordination — live claims/ops/topics | not secrets: sturn state is transient, cuora state is sealed |
 | **kuda** | code memory — symbol/index knowledge | cuora refs name *secrets*, not code entities |
 | **peregrin** | orchestration — campaigns, multi-actor arbitration, policy | campaigns consume secrets via `cuora run`; audit aggregation + real policy are peregrin's (`CUORA_ACTOR` is self-claimed inside cuora); `cuora serve` — the ndjson IPC wire + `[serve.pdp]` exec consult (ADR-0003) — is its embedding point |
-| **bupha** | CI gate | asserts no plaintext secrets land in pipelines; `cuora check` in pipeline steps |
+| **bupha / ci-gate** | CI gate | bupha is the CI repo — the org gate is the peregrin `ci-gate` campaign, mid-migration back to bupha (`type: bupha` bundles); it asserted no plaintext secrets land in pipelines, `cuora check` in pipeline steps |
 | **mimus** | critic | secrets resolve env → cuora → legacy (keyring, `~/.config/mimus/env`) via `mimus-cuora` shelling `cuora`; vaults are canonical, writes land in them |
 | **sepia** | session lifecycle | session wrappers can capture cuora's stderr audit stream |
 
