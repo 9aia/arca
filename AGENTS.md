@@ -74,9 +74,9 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/cuora-ops` | Ops I/O — vault open/save, ref resolution, audit events, verb plumbing |
 | `crates/cuora-notice` | Process-wide `cuora:` stderr notices — muted/replayed for terminal-owning surfaces |
 | `crates/cuora-testkit` | Vault conformance suite — every impl passes the same contract tests |
-| `crates/cuora-driver` | `tamias-driver-cuora` — pavo view driver (read-only vault *metadata*; never renders values); replaced the TUI |
+| `crates/cuora-driver` | `tamias-driver-cuora` — pavo view driver (read-only vault *metadata*; never renders values) + engine ops surface (`ops`/`run`/`cli.*`, generated `cli`/`mcp` surfaces feature-gated); replaced the TUI |
 | `crates/cuora-serve` | ndjson IPC surface — thin front-end over cuora-ops; `cuora serve`, the `[serve.pdp]` exec consult (ADR-0003) |
-| `crates/cuora-cli` | The `cuora` binary — clap, `--json` everywhere, `manifest`/`schema` |
+| `crates/cuora-cli` | The `cuora` engine lib + binary — clap, `--json` everywhere, `manifest`/`schema`; drivers consume `cuora::command()`/`parse_from()`/`dispatch()` |
 | `xtask` (pkg `cuora-xtask`) | check / test / worker / coverage / install / site |
 
 `cuora-vault-aws` stays a spike — proved on a local branch that the

@@ -606,6 +606,8 @@ dependencies = [
 name = "cuora-driver"
 version = "0.1.0"
 dependencies = [
+ "clap",
+ "cuora",
  "cuora-core",
  "cuora-ops",
  "cuora-vault",
@@ -614,6 +616,7 @@ dependencies = [
  "pavo-testkit",
  "serde",
  "serde_json",
+ "tempfile",
  "time",
 ]
 
@@ -947,7 +950,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1696,8 +1699,9 @@ dependencies = [
 [[package]]
 name = "pavo-driver-kit"
 version = "0.1.0"
-source = "git+https://github.com/9aia/pavo#090dcb4bde1a158f8c68b1ddbc85dddf191e4abb"
+source = "git+https://github.com/9aia/pavo#1f5e37afdb0b66a1ef908c2cc2448248493399c2"
 dependencies = [
+ "clap",
  "pavo-protocol",
  "serde",
  "serde_json",
@@ -1706,7 +1710,7 @@ dependencies = [
 [[package]]
 name = "pavo-protocol"
 version = "0.1.0"
-source = "git+https://github.com/9aia/pavo#090dcb4bde1a158f8c68b1ddbc85dddf191e4abb"
+source = "git+https://github.com/9aia/pavo#1f5e37afdb0b66a1ef908c2cc2448248493399c2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1716,7 +1720,7 @@ dependencies = [
 [[package]]
 name = "pavo-testkit"
 version = "0.1.0"
-source = "git+https://github.com/9aia/pavo#090dcb4bde1a158f8c68b1ddbc85dddf191e4abb"
+source = "git+https://github.com/9aia/pavo#1f5e37afdb0b66a1ef908c2cc2448248493399c2"
 dependencies = [
  "pavo-protocol",
  "serde",
@@ -2109,7 +2113,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2457,7 +2461,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2781,7 +2785,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

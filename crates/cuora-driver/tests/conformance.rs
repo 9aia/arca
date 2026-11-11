@@ -11,6 +11,18 @@ use std::path::Path;
 
 #[test]
 fn driver_passes_pavo_conformance() {
+    // Isolate the spawned driver from the developer's real cuora
+    // config — it inherits this test's env, and a real
+    // `~/.config/cuora/cuora.toml` can route views at a remote cf
+    // vault whose multi-second ops blow the suite's 10s per-request
+    // timeout (late responses then misalign every later check).
+    // An empty HOME gives the default local vault: fast, offline.
+    let home = tempfile::tempdir().expect("tempdir");
+    std::env::set_var("HOME", home.path());
+    std::env::set_var("XDG_CONFIG_HOME", home.path().join(".config"));
+    std::env::remove_var("CUORA_CONFIG");
+    std::env::remove_var("CUORA_ENV");
+    std::env::remove_var("CUORA_ACTOR");
     let violations = pavo_testkit::conformance::check_driver(Path::new(env!(
         "CARGO_BIN_EXE_tamias-driver-cuora"
     )));
