@@ -540,7 +540,6 @@ dependencies = [
  "cuora-ops",
  "cuora-serve",
  "cuora-shell",
- "cuora-testkit",
  "cuora-vault",
  "rpassword",
  "schemars",
@@ -610,12 +609,14 @@ dependencies = [
  "cuora",
  "cuora-core",
  "cuora-ops",
+ "cuora-testkit",
  "cuora-vault",
  "pavo-driver-kit",
  "pavo-protocol",
  "pavo-testkit",
  "serde",
  "serde_json",
+ "temp-env",
  "tempfile",
  "time",
 ]
@@ -1701,7 +1702,6 @@ name = "pavo-driver-kit"
 version = "0.1.0"
 source = "git+https://github.com/9aia/pavo#1f5e37afdb0b66a1ef908c2cc2448248493399c2"
 dependencies = [
- "clap",
  "pavo-protocol",
  "serde",
  "serde_json",
