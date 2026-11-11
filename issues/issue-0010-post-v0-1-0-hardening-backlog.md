@@ -1,7 +1,7 @@
 +++
 id = "I-010"
 title = "post-v0.1.0 hardening backlog"
-status = "open"
+status = "done"
 created = "2026-11-08"
 priority = "med"
 +++
@@ -19,6 +19,8 @@ What is wrong and steps to reproduce.
 - [ ] Action item
 
 ## Resolution
+
+crates.io publish verified complete 2026-11-11: all publishable crates live (cuora, cuora-core, config, config-toml, deploy, deploy-cf, identity, identity-file, identity-keyring, notice, ops, serve, shell, testkit, vault, vault-age, vault-cached, vault-cf). cuora-driver intentionally unpublished — ships as tamias pack payload. cuora-vault-aws never published — deleted spike per PL-001.
 
 ## Comments
 
