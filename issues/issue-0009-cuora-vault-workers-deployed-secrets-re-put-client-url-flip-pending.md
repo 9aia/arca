@@ -3,7 +3,7 @@ id = "I-009"
 title = "cuora vault workers deployed — secrets re-put + client URL flip pending"
 status = "done"
 created = "2026-11-08"
-priority = "medium"
+priority = "med"
 +++
 
 # cuora vault workers deployed — secrets re-put + client URL flip pending

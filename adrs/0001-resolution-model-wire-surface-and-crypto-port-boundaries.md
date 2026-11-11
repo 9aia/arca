@@ -3,7 +3,7 @@ id = "ADR-0001"
 title = "resolution model, wire surface, and crypto port boundaries"
 status = "open"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 +++
 
 Status: accepted (v1); revisitable per spike results. Amended

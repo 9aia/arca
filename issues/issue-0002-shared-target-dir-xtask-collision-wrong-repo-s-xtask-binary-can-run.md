@@ -3,7 +3,7 @@ id = "I-002"
 title = "shared target-dir xtask collision — wrong repo's xtask binary can run"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 +++
 
 # shared target-dir xtask collision — wrong repo's xtask binary can run

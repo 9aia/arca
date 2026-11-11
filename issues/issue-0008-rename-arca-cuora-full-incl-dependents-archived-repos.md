@@ -3,7 +3,7 @@ id = "I-008"
 title = "rename arca → cuora (full, incl. dependents + archived repos)"
 status = "done"
 created = "2026-11-08"
-priority = "medium"
+priority = "med"
 +++
 
 # rename arca → cuora (full, incl. dependents + archived repos)

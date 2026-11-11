@@ -3,7 +3,7 @@ id = "I-010"
 title = "post-v0.1.0 hardening backlog"
 status = "open"
 created = "2026-11-08"
-priority = "medium"
+priority = "med"
 +++
 
 # post-v0.1.0 hardening backlog

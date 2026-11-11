@@ -4,7 +4,7 @@ title = "identity fallback keyring→file is a silent security downgrade — con
 status = "done"
 created = "2026-11-08"
 owner = "devin"
-priority = "medium"
+priority = "med"
 labels = ["identity", "security"]
 +++
 
