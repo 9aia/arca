@@ -1,7 +1,7 @@
 +++
 id = "ADR-0003"
 title = "cuora serve — the ndjson IPC surface and exec-driven policy-decision wire"
-status = "claimed"
+status = "in-progress"
 created = "2026-11-03"
 priority = "med"
 +++
