@@ -180,7 +180,13 @@ surface + `[serve.pdp]` policy-decision wire for peregrin — is in
 ## Install
 
 The `cuora` command is a tamias pack (`libraries/cuora`) — there is
-no cargo-installed `cuora` binary. From a checkout:
+no cargo-installed `cuora` binary. With `tamias` installed:
+
+```sh
+tamias install 9aia:cuora@0.1.0    # org registry (needs TAMIAS_REGISTRY_TOKEN)
+```
+
+From a checkout:
 
 ```sh
 cargo xtask pack                            # stage the driver payload
