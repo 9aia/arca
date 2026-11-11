@@ -18,7 +18,7 @@
 # payload bin: `cuora serve` is a *surface*, not a second binary —
 # it rides the same shim.
 name: cuora
-version: "0.1.0"
+version: "0.2.0"
 type: files
 description: >-
   Secrets broker for agents — sealed, not spilled. cuora:// refs,

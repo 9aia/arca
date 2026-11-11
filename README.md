@@ -183,7 +183,7 @@ The `cuora` command is a tamias pack (`libraries/cuora`) — there is
 no cargo-installed `cuora` binary. With `tamias` installed:
 
 ```sh
-tamias install 9aia:cuora@0.1.0    # org registry (needs TAMIAS_REGISTRY_TOKEN)
+tamias install 9aia:cuora@0.2.0    # org registry (needs TAMIAS_REGISTRY_TOKEN)
 ```
 
 From a checkout:
