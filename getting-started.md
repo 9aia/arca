@@ -8,7 +8,14 @@ value ever touching your terminal, a file, or an agent's context.
 
 The `cuora` command ships as a tamias pack (`libraries/cuora`) — a
 generated `bins[]` shim over `tamias-driver-cuora`, not a
-cargo-installed binary. From a checkout of this repo:
+cargo-installed binary. With `tamias` installed:
+
+```sh
+tamias install 9aia:cuora@0.1.0    # from the org registry
+                                     # (private registry: set TAMIAS_REGISTRY_TOKEN)
+```
+
+From a checkout of this repo:
 
 ```sh
 cargo xtask pack                            # stage the driver payload
