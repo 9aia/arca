@@ -6,17 +6,17 @@ value ever touching your terminal, a file, or an agent's context.
 
 ## Install
 
-The crates.io name `cuora` belongs to an unrelated project —
-install from the repo:
+The `cuora` command ships as a tamias pack (`libraries/cuora`) — a
+generated `bins[]` shim over `tamias-driver-cuora`, not a
+cargo-installed binary. From a checkout of this repo:
 
 ```sh
-cargo install --git https://github.com/9aia/cuora cuora
+cargo xtask pack                            # stage the driver payload
+tamias install --allow-drivers ./libraries/cuora   # deploys `cuora`
 ```
 
-From a checkout of this repo: `cargo xtask install` builds and
-installs the release binary to `~/.cargo/bin/cuora`. For a lean
-binary without the TUI:
-`cargo install --git https://github.com/9aia/cuora cuora --no-default-features`.
+`cargo xtask install` additionally puts `tamias-driver-cuora`
+itself on `PATH` (`~/.cargo/bin`).
 
 ## Bootstrap
 
