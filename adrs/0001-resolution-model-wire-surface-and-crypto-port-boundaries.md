@@ -1,7 +1,7 @@
 +++
 id = "ADR-0001"
 title = "resolution model, wire surface, and crypto port boundaries"
-status = "open"
+status = "claimed"
 created = "2026-10-31"
 priority = "med"
 +++
