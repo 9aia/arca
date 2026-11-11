@@ -20,7 +20,12 @@ agent ──► cuora run -- cmd ──► resolve refs ──► inject env ─
 ## Quickstart
 
 ```sh
-cargo install --git https://github.com/9aia/cuora cuora
+# the `cuora` command is a tamias pack (libraries/cuora) — a
+generated bins[] shim → tamias-driver-cuora → the engine lib.
+# From a cuora checkout:
+cargo xtask pack                              # stage the driver payload
+tamias install --allow-drivers ./libraries/cuora   # deploys `cuora`
+# (release path: `tamias bundle pack libraries/cuora` → pinned tgz ref)
 
 cuora init                                   # age identity (keyring, fail closed), once
 printf '%s' "$STRIPE_KEY" | cuora put cuora://billing/stripe
@@ -174,9 +179,13 @@ surface + `[serve.pdp]` policy-decision wire for peregrin — is in
 
 ## Install
 
+The `cuora` command is a tamias pack (`libraries/cuora`) — there is
+no cargo-installed `cuora` binary. From a checkout:
+
 ```sh
-cargo install --git https://github.com/9aia/cuora cuora
-cargo xtask install        # from a checkout → ~/.cargo/bin
+cargo xtask pack                            # stage the driver payload
+tamias install --allow-drivers ./libraries/cuora   # deploys `cuora`
+cargo xtask install        # also installs tamias-driver-cuora → ~/.cargo/bin
 ```
 
 ## Docs

@@ -9,7 +9,12 @@
 //!   a bun:sqlite D1 shim (the Rust mock can't catch worker bugs)
 //! - `coverage` — `cargo llvm-cov` (HTML → target/llvm-cov/html);
 //!   extra args pass through, e.g. `--fail-under-lines 100`
-//! - `install`  — release-install `cuora` into ~/.cargo/bin
+//! - `pack`     — stage the tamias pack payload: release-build
+//!   `tamias-driver-cuora` into `libraries/cuora/drivers/bin/<triple>/`
+//!   (gitignored build artifact) for `tamias install ./libraries/cuora`
+//! - `install`  — release-install `tamias-driver-cuora` into
+//!   ~/.cargo/bin (the `cuora` command itself is the tamias pack's
+//!   generated shim — see `pack`)
 //! - `site`     — build the docs site (docs/ worktree, VitePress)
 
 use std::process::{Command, ExitStatus};
@@ -130,10 +135,80 @@ fn coverage(extra: &[String]) -> i32 {
     run(&args).code().unwrap_or(1)
 }
 
+/// Captured stdout of a command — for probes like `rustc -vV`.
+fn run_out(args: &[&str]) -> Option<String> {
+    let (prog, rest) = args.split_first()?;
+    let out = Command::new(prog).args(rest).output().ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// The host target triple — the `drivers/bin/<triple>/` selector
+/// tamias uses for compiled driver payloads.
+fn host_triple() -> String {
+    run_out(&["rustc", "-vV"])
+        .and_then(|v| {
+            v.lines()
+                .find_map(|l| l.strip_prefix("host: ").map(str::to_string))
+        })
+        .unwrap_or_else(|| "x86_64-unknown-linux-gnu".to_string())
+}
+
+/// `pack` — stage the tamias pack payload (P-023): release-build
+/// `tamias-driver-cuora` and drop it under
+/// `libraries/cuora/drivers/bin/<host-triple>/` — the bundled-driver
+/// dir `tamias install` registers into `<tamias-home>/drivers/`.
+/// Gitignored on purpose: the binary is a build artifact; the
+/// committed pack is just `tamias.yaml` + this staging verb.
+fn pack() -> i32 {
+    if run(&["cargo", "build", "--release", "-p", "cuora-driver"]).code() != Some(0) {
+        return 1;
+    }
+    let triple = host_triple();
+    let dest_dir = std::path::PathBuf::from("libraries/cuora/drivers/bin").join(&triple);
+    if let Err(e) = std::fs::create_dir_all(&dest_dir) {
+        eprintln!("xtask: create {}: {e}", dest_dir.display());
+        return 1;
+    }
+    let src = std::path::PathBuf::from("target/release/tamias-driver-cuora");
+    let dest = dest_dir.join("tamias-driver-cuora");
+    if let Err(e) = std::fs::copy(&src, &dest) {
+        eprintln!("xtask: copy {} → {}: {e}", src.display(), dest.display());
+        return 1;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755));
+    }
+    println!("pack staged: {}", dest.display());
+    println!();
+    println!("install the cuora command (generated bins[] shim):");
+    println!("  tamias install --allow-drivers ./libraries/cuora");
+    println!("  # or a pinned tarball: tamias bundle pack libraries/cuora");
+    0
+}
+
 fn install() -> i32 {
-    run(&["cargo", "install", "--path", "crates/cuora-cli", "--force"])
-        .code()
-        .unwrap_or(1)
+    // There is no `cuora` cargo bin anymore — the command ships as a
+    // tamias pack (`cargo xtask pack` + `tamias install
+    // ./libraries/cuora`). This installs the driver binary itself so
+    // `tamias-driver-cuora` resolves on PATH for pavo/driver
+    // discovery even without the pack.
+    let code = run(&[
+        "cargo",
+        "install",
+        "--path",
+        "crates/cuora-driver",
+        "--force",
+    ])
+    .code()
+    .unwrap_or(1);
+    if code == 0 {
+        eprintln!("xtask: tamias-driver-cuora installed — the `cuora` command comes from `cargo xtask pack` + `tamias install ./libraries/cuora`");
+    }
+    code
 }
 
 fn site() -> i32 {
@@ -159,11 +234,12 @@ fn main() {
         "test" => test(),
         "worker" => worker(),
         "coverage" => coverage(&rest),
+        "pack" => pack(),
         "install" => install(),
         "site" => site(),
         other => {
             eprintln!(
-                "usage: cargo xtask <check|test|worker|coverage|install|site>\n  unknown verb: {other:?}"
+                "usage: cargo xtask <check|test|worker|coverage|pack|install|site>\n  unknown verb: {other:?}"
             );
             2
         }

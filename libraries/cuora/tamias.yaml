@@ -1,0 +1,32 @@
+# cuora — the org secrets broker as a tamias package (the P-023
+# pilot: a real product CLI riding `bins[]`, no hand-rolled binary).
+#
+# `cargo xtask pack` release-builds `tamias-driver-cuora` into
+# `drivers/bin/<host-triple>/` (gitignored — a build artifact) and
+# this manifest ships it as a bundled driver. `tamias install
+# ./libraries/cuora` (or the packed `.tgz` / a registry ref)
+# registers the driver into `<tamias-home>/drivers/` and deploys the
+# `cuora` bin below by default.
+#
+# The `cuora` shim is a generated script → `tamias bin exec` →
+# `tamias-driver-cuora cli --dir <pkg> --name cuora <argv>` → the
+# cuora engine lib's `run_from` in-process with inherited stdio.
+# That is full argv parity with the retired `cuora` binary:
+# `--env`/`--config`/`--actor` globals, `--json`, `--version`,
+# `cuora run` exec, stdin-bound `put`/`rotate`, and the unbounded
+# `cuora serve` ndjson loop all stream end-to-end. No `tools/bin/`
+# payload bin: `cuora serve` is a *surface*, not a second binary —
+# it rides the same shim.
+name: cuora
+version: "0.1.0"
+type: files
+description: >-
+  Secrets broker for agents — sealed, not spilled. cuora:// refs,
+  env-injected secrets, audit ndjson; vault backends age/cf with
+  cached + deploy sinks. Every verb rides the tamias-driver-cuora
+  engine passthrough.
+
+bins:
+  - name: cuora
+    shim: cli
+    driver: cuora

@@ -26,10 +26,13 @@ is repo chores.
 
 ## Releasing
 
-No crates.io publish, no git tags — the install path is
-`cargo install --git https://github.com/9aia/cuora cuora`. Keep the
-workspace building under plain `cargo install` (default features
-include the TUI; `--no-default-features` must stay lean).
+No crates.io publish, no git tags — the install path is the tamias
+pack (`libraries/cuora`): `cargo xtask pack` stages the compiled
+`tamias-driver-cuora` payload and `tamias install
+--allow-drivers ./libraries/cuora` deploys the generated `cuora`
+shim. The `cuora`/`tamias-driver-cuora` crates still build under
+plain `cargo build`/`cargo test` — the `mcp` surface stays
+feature-gated and nothing optional is required.
 
 ## Docs
 

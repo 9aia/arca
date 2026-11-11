@@ -29,8 +29,8 @@ process — not in your output, not in logs, not in history.
 ## Bootstrap
 
 ```bash
-command -v cuora   # missing? install from the repo:
-cargo install --git https://github.com/9aia/cuora cuora
+command -v cuora   # missing? it's a tamias pack — from a cuora checkout:
+cargo xtask pack && tamias install --allow-drivers ./libraries/cuora
 cuora init          # generates ~/.config/cuora/identity.txt (0600)
 ```
 

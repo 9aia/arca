@@ -16,8 +16,9 @@ const TOKEN: &str = "fake-token-not-real";
 const TOKEN_ENV: &str = "CUORA_TEST_CF_TOKEN";
 
 fn cuora(home: &Path, args: &[&str]) -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_cuora"));
-    c.args(args)
+    let mut c = Command::new(env!("CARGO_BIN_EXE_tamias-driver-cuora"));
+    c.arg("run")
+        .args(args)
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join("xdg-config"))
         .env("XDG_DATA_HOME", home.join("xdg-data"))

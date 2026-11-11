@@ -11,8 +11,9 @@ use std::process::{Command, Output, Stdio};
 const FAKE: &str = "fake-value-not-a-real-secret";
 
 fn cuora(home: &Path, args: &[&str]) -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_cuora"));
-    c.args(args)
+    let mut c = Command::new(env!("CARGO_BIN_EXE_tamias-driver-cuora"));
+    c.arg("run")
+        .args(args)
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join("xdg-config"))
         .env("XDG_DATA_HOME", home.join("xdg-data"))
@@ -47,7 +48,7 @@ fn run_pty(home: &Path, args: &[&str], input: &[u8]) -> Output {
 }
 
 fn run_pty_prelude(home: &Path, args: &[&str], input: &[u8], prelude: &str) -> Output {
-    let cuora = env!("CARGO_BIN_EXE_cuora");
+    let driver = env!("CARGO_BIN_EXE_tamias-driver-cuora");
     // `env -i` scrubs everything — pass LLVM_PROFILE_FILE through so
     // a coverage build still lands the child's .profraw in llvm-cov's
     // target dir instead of a stray default_*.profraw next to the
@@ -56,12 +57,12 @@ fn run_pty_prelude(home: &Path, args: &[&str], input: &[u8], prelude: &str) -> O
         .map(|v| format!(" LLVM_PROFILE_FILE='{v}'"))
         .unwrap_or_default();
     let cmdline = format!(
-        "{prelude}exec env -i HOME='{}' XDG_CONFIG_HOME='{}' XDG_DATA_HOME='{}' CUORA_IDENTITY_FILE='{}' TERM=xterm{prof} '{}' {}",
+        "{prelude}exec env -i HOME='{}' XDG_CONFIG_HOME='{}' XDG_DATA_HOME='{}' CUORA_IDENTITY_FILE='{}' TERM=xterm{prof} '{}' run {}",
         home.display(),
         home.join("xdg-config").display(),
         home.join("xdg-data").display(),
         home.join("xdg-config/cuora/identity.txt").display(),
-        cuora,
+        driver,
         args.join(" ")
     );
     let mut child = Command::new("script")

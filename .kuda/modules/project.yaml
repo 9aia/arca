@@ -6,22 +6,23 @@ deps: []
 notes: ''
 verify:
 - project/BACKLOG.md
+- project/DONE.md
 - project/TODO.md
 - project/adrs/0001-resolution-model-wire-surface-and-crypto-port-boundaries.md
-- project/adrs/0002-identity-storage-the-arca-identity-port-keyring-preferred-file-fallback.md
-- project/adrs/0003-arca-serve-the-ndjson-ipc-surface-and-exec-driven-policy-decision-wire.md
+- project/adrs/0002-identity-storage-the-cuora-identity-port-keyring-preferred-file-fallback.md
+- project/adrs/0003-cuora-serve-the-ndjson-ipc-surface-and-exec-driven-policy-decision-wire.md
 - project/adrs/0004-identity-backend-selection-fail-closed-keyring-default-explicit-file-opt-out.md
 - project/handoffs/I-002.md
 - project/handoffs/I-004.md
 - project/handoffs/I-008.md
-- project/handoffs/P-001.md
 provenance:
   files:
   - project/BACKLOG.md
+  - project/DONE.md
   - project/TODO.md
   - project/adrs/0001-resolution-model-wire-surface-and-crypto-port-boundaries.md
-  - project/adrs/0002-identity-storage-the-arca-identity-port-keyring-preferred-file-fallback.md
-  - project/adrs/0003-arca-serve-the-ndjson-ipc-surface-and-exec-driven-policy-decision-wire.md
+  - project/adrs/0002-identity-storage-the-cuora-identity-port-keyring-preferred-file-fallback.md
+  - project/adrs/0003-cuora-serve-the-ndjson-ipc-surface-and-exec-driven-policy-decision-wire.md
   - project/adrs/0004-identity-backend-selection-fail-closed-keyring-default-explicit-file-opt-out.md
   - project/handoffs/I-002.md
   - project/handoffs/I-004.md
@@ -57,15 +58,16 @@ provenance:
   - project/proposals/proposal-0002-keychain-backed-identity-storage.md
   - project/proposals/proposal-0003-scoped-tokens-and-hmac-request-signing-for-cf-vault.md
   - project/proposals/proposal-0004-private-ref-metadata-via-hmac-derived-keys.md
-  - project/proposals/proposal-0005-arca-serve-ndjson-policy-decision-wire-for-peregrin.md
+  - project/proposals/proposal-0005-cuora-serve-ndjson-policy-decision-wire-for-peregrin.md
   - project/proposals/proposal-0006-constant-time-bearer-comparison-in-cf-worker.md
   - project/proposals/proposal-0007-cached-remote-vault-read-through-encrypted-local-cache.md
   hashes:
   - 9065e6f6e33503b5f7a4a773acd637396048731c
+  - 043c72083824501be0dd939539075300db2c03eb
   - 50e678358a4d2e79cef1e727f354cc0cf66748b3
-  - e82fea0b0e09636fe2a149dd0884f2be792c6173
-  - ccfaf162d9bc3dc19f912a51272f2952ea8ec882
-  - 882835256374c35eab6878e243082dae60c62328
+  - dce6f94f459722571642fefb54d03e222a7e9abc
+  - a0ebea373c6eb686cf11e8b06a8968182c7b22b1
+  - e06c1fb8e7b63da0841308975b368d2947ccd01d
   - ed9af776485f1d6357cae479f767b35a1a708c8d
   - 96cc1a633a9d4fa71dfca3bf3a444147ab47cff5
   - d9b7ab2096f6775efde4acaacf11f26cf84d4250
@@ -87,23 +89,23 @@ provenance:
   - b04f642e31f84a03e8f9ec26335ec1ceb1d24b01
   - bd0c663a33bc625b41665198e7ff7e74129ad959
   - c485f2120363d37af8c2d8675e92ba2d89c07cd1
-  - be75d2e3c50c12e9ff88091e7ff0896cd59796b6
+  - 7667bd43ad42266f86c6cf94e1295e8ddd05542a
   - 15db5d8611f9f8266d810552d3b5cfaeb3118f48
-  - 66503d88567a5a202b11c498aca49b8c52168fdb
+  - ad0a88e7b458cd13b3f75e4105715f4950d853ff
   - 520be0a4b210b659ceb9416f22637a157364ee6e
   - 150f43341c4050f3714b856778af5609223e903b
-  - 80072e98e0bc30c8d92af71416c8668502c3959d
-  - 93c312d949b0bc411a6d8b61d616146f125138c5
-  - 95356a2d0674667afbbc59e85735fe3fd2dfe48d
-  - 66607f655a0baeadf2f772ee1b89d9e8c8857ecf
+  - d47d2641d41fdb873838c0ffef4309a9db506a18
+  - a5c4193450a8049619917d4f1075354eaff99899
+  - ade83991aa45a0f2a9d04ffdd9d2c56768771109
+  - b44a6006a9626eeb76f2ede17c3972c71a0cd2a0
   - 340095aaf23025189915b88def95ec44ea0f98b5
   - 7d42aba09c0ee8e02a68c32a9778394d9da51823
   - a7fce18d17161e7cd4f7fe28144961ee9daa58d9
-  - 76f2dd4364f224d6c52ad03f20256d7287181932
-  - f5218be7a01c38d287558b6df367d765aec59928
-  - 2f833b5785fcc77ed87a8f1984d0d4bdf58bfa2f
+  - 7bb070bf4b5694bf9e46936fa51b525f7366a10f
+  - 63c2b36f26a4b7bce9b8c5b374209e0a40fb9c9b
+  - 0ec9fb65c273830ae9355b611998bef0161cb019
   - f5ea53eda54409a8922805b45efa218155f2998e
-  - de5bd1df9a072e791a63b86c0c1b4d1914934ef9
-  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
-  generated_at: '1794154232'
+  - 8b93f846e1262c6b19348553a01993d23387dd97
+  commit_sha: e6be3718bfec6ae711625cc41d1e0459f0028d5a
+  generated_at: '1794405394'
   generator: kuda-template/0.1.2

@@ -8,9 +8,10 @@ repository.workspace = true
 keywords = ["secrets", "cuora"]
 categories = ["development-tools"]
 
-[[bin]]
-name = "cuora"
-path = "src/main.rs"
+# No [[bin]] — the `cuora` command ships as a tamias pack
+# (libraries/cuora): a generated shim → `tamias bin exec` →
+# tamias-driver-cuora's `cli` passthrough → this lib's `run_from`.
+# This crate is the engine only.
 
 [dependencies]
 cuora-core = { workspace = true, features = ["schema"] }
@@ -28,8 +29,6 @@ sigpipe.workspace = true
 rpassword.workspace = true
 
 [dev-dependencies]
-cuora-testkit.workspace = true
-serde_json.workspace = true
 tempfile.workspace = true
 temp-env.workspace = true
 

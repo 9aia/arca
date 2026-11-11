@@ -15,7 +15,7 @@ api:
 - name: check
   kind: function
   file: xtask/src/main.rs
-  line: 61
+  line: 66
   module: cuora-xtask
 - name: check_runs_fmt_and_clippy
   kind: function
@@ -30,7 +30,7 @@ api:
 - name: coverage
   kind: function
   file: xtask/src/main.rs
-  line: 113
+  line: 118
   module: cuora-xtask
 - name: coverage_needs_llvm_cov
   kind: function
@@ -45,17 +45,22 @@ api:
 - name: have
   kind: function
   file: xtask/src/main.rs
-  line: 41
+  line: 46
   module: cuora-xtask
 - name: have_cargo_sub
   kind: function
   file: xtask/src/main.rs
-  line: 51
+  line: 56
+  module: cuora-xtask
+- name: host_triple
+  kind: function
+  file: xtask/src/main.rs
+  line: 149
   module: cuora-xtask
 - name: install
   kind: function
   file: xtask/src/main.rs
-  line: 133
+  line: 193
   module: cuora-xtask
 - name: install_delegates_to_cargo_install
   kind: function
@@ -65,17 +70,27 @@ api:
 - name: main
   kind: function
   file: xtask/src/main.rs
-  line: 153
+  line: 228
+  module: cuora-xtask
+- name: pack
+  kind: function
+  file: xtask/src/main.rs
+  line: 164
   module: cuora-xtask
 - name: run
   kind: function
   file: xtask/src/main.rs
-  line: 17
+  line: 22
   module: cuora-xtask
 - name: run_in
   kind: function
   file: xtask/src/main.rs
-  line: 28
+  line: 33
+  module: cuora-xtask
+- name: run_out
+  kind: function
+  file: xtask/src/main.rs
+  line: 139
   module: cuora-xtask
 - name: scratch
   kind: function
@@ -85,7 +100,7 @@ api:
 - name: site
   kind: function
   file: xtask/src/main.rs
-  line: 139
+  line: 214
   module: cuora-xtask
 - name: site_needs_the_docs_worktree
   kind: function
@@ -100,7 +115,7 @@ api:
 - name: test
   kind: function
   file: xtask/src/main.rs
-  line: 80
+  line: 85
   module: cuora-xtask
 - name: test_prefers_nextest_then_falls_back
   kind: function
@@ -115,7 +130,7 @@ api:
 - name: worker
   kind: function
   file: xtask/src/main.rs
-  line: 103
+  line: 108
   module: cuora-xtask
 - name: worker_and_test_wire_the_bun_smoke_test
   kind: function
@@ -140,8 +155,8 @@ provenance:
   - xtask/tests/verbs.rs
   hashes:
   - 1b2c254cc2d5e144e6ee3eedfdcbb94db8a3dedb
-  - 2e27741735f77c7528a145c2dd4d808ef451d4d4
+  - 5f26ca646ca2892949efe103cd2d08ae8025a982
   - 4e95d53c693dd9301eef9183eb83feac9501a8d8
-  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
-  generated_at: '1794154232'
+  commit_sha: e6be3718bfec6ae711625cc41d1e0459f0028d5a
+  generated_at: '1794405394'
   generator: kuda-template/0.1.2

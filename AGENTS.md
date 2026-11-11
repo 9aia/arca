@@ -57,7 +57,11 @@ OTLP spans when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. The skill
 
 Ports-and-adapters, flat `crates/` workspace. `cuora-core` is pure
 domain (no I/O); ports are traits, impls are separate crates;
-`crates/cuora-cli` (package `cuora`) is the composition root.
+`crates/cuora-cli` (package `cuora`) is the engine lib. There is no
+hand-rolled `cuora` binary: the command ships as the tamias pack in
+`libraries/cuora/` — a generated `bins[]` shim →
+`tamias-driver-cuora`'s `cli` passthrough → `cuora::run_from`
+(P-023 pilot).
 
 | Crate | Role |
 | --- | --- |
@@ -74,10 +78,11 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/cuora-ops` | Ops I/O — vault open/save, ref resolution, audit events, verb plumbing |
 | `crates/cuora-notice` | Process-wide `cuora:` stderr notices — muted/replayed for terminal-owning surfaces |
 | `crates/cuora-testkit` | Vault conformance suite — every impl passes the same contract tests |
-| `crates/cuora-driver` | `tamias-driver-cuora` — pavo view driver (read-only vault *metadata*; never renders values) + engine ops surface (`ops`/`run`/`cli.*`, generated `cli`/`mcp` surfaces feature-gated); replaced the TUI |
+| `crates/cuora-driver` | `tamias-driver-cuora` — pavo view driver (read-only vault *metadata*; never renders values) + engine ops surface (`ops`/`run`/`cli.*` wire queries; `cli` = the bins-shim engine passthrough, `mcp` feature-gated); replaced the TUI |
 | `crates/cuora-serve` | ndjson IPC surface — thin front-end over cuora-ops; `cuora serve`, the `[serve.pdp]` exec consult (ADR-0003) |
-| `crates/cuora-cli` | The `cuora` engine lib + binary — clap, `--json` everywhere, `manifest`/`schema`; drivers consume `cuora::command()`/`parse_from()`/`dispatch()` |
-| `xtask` (pkg `cuora-xtask`) | check / test / worker / coverage / install / site |
+| `crates/cuora-cli` | The `cuora` engine lib — clap, `--json` everywhere, `manifest`/`schema`; drivers consume `cuora::command()`/`parse_from()`/`dispatch()`/`run_from()`. No `[[bin]]` — e2e tests live in `cuora-driver/tests/` and spawn `tamias-driver-cuora run` |
+| `libraries/cuora` | The tamias pack — `tamias.yaml` declares `bins: [{name: cuora, shim: cli, driver: cuora}]`; `cargo xtask pack` stages `drivers/bin/<triple>/tamias-driver-cuora` (gitignored) |
+| `xtask` (pkg `cuora-xtask`) | check / test / worker / coverage / pack / install / site |
 
 `cuora-vault-aws` stays a spike — proved on a local branch that the
 `Vault` port fits a second backend family unchanged, then deleted
@@ -114,7 +119,13 @@ cargo xtask test           # whole suite (nextest if present);
                            # + worker smoke test when bun is installed
 cargo xtask worker         # bun test on the real worker/index.js
                            # (bun:sqlite D1 shim)
-cargo xtask install        # release-install cuora → ~/.cargo/bin
+cargo xtask pack           # stage libraries/cuora driver payload
+                           # (release tamias-driver-cuora → drivers/bin/<triple>/)
+cargo xtask install        # release-install tamias-driver-cuora →
+                           # ~/.cargo/bin (the `cuora` command itself is
+                           # the tamias pack's generated bins[] shim —
+                           # `cargo xtask pack` + `tamias install
+                           # --allow-drivers ./libraries/cuora`)
 cargo xtask coverage       # llvm-cov report (HTML → target/llvm-cov/html);
                            # extra args pass through, e.g. --fail-under-lines 100
 cargo xtask site           # build the docs site (needs docs/ worktree)
