@@ -5,12 +5,12 @@ api:
 - name: TomlSource
   kind: type
   file: crates/cuora-config-toml/src/lib.rs
-  line: 9
+  line: 17
   module: cuora-config-toml
 - name: candidates
   kind: function
   file: crates/cuora-config-toml/src/lib.rs
-  line: 16
+  line: 24
   module: cuora-config-toml
 - name: cuora-config-toml
   kind: module
@@ -20,49 +20,51 @@ api:
 - name: default_search_builds_candidates
   kind: function
   file: crates/cuora-config-toml/src/lib.rs
-  line: 117
+  line: 137
   module: cuora-config-toml
 - name: explicit_missing_file_errors
   kind: function
   file: crates/cuora-config-toml/src/lib.rs
-  line: 63
+  line: 83
   module: cuora-config-toml
 - name: load
   kind: function
   file: crates/cuora-config-toml/src/lib.rs
-  line: 42
+  line: 50
   module: cuora-config-toml
 - name: locate
   kind: function
   file: crates/cuora-config-toml/src/lib.rs
-  line: 36
+  line: 44
   module: cuora-config-toml
 - name: located_but_unreadable_errors
   kind: function
   file: crates/cuora-config-toml/src/lib.rs
-  line: 72
+  line: 92
   module: cuora-config-toml
 - name: parses_secrets_table
   kind: function
   file: crates/cuora-config-toml/src/lib.rs
-  line: 88
+  line: 108
   module: cuora-config-toml
 - name: tests
   kind: module
   file: crates/cuora-config-toml/src/lib.rs
-  line: 59
+  line: 79
   module: cuora-config-toml
 - name: unknown_fields_fail_loud
   kind: function
   file: crates/cuora-config-toml/src/lib.rs
-  line: 104
+  line: 124
   module: cuora-config-toml
 deps:
 - cuora-config
 - cuora-core
-- toml
+- scarab-config
+- scarab-config-toml
 - temp-env
 - cuora-config
+- scarab_config
 notes: ''
 verify:
 - crates/cuora-config-toml/Cargo.toml
@@ -72,8 +74,8 @@ provenance:
   - crates/cuora-config-toml/Cargo.toml
   - crates/cuora-config-toml/src/lib.rs
   hashes:
-  - b2eca6beea68ada3630a0f06505f85b69f295997
-  - e8fb8d5cf70f9517fe90cae5feaea3b3e971aadb
-  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
-  generated_at: '1794154232'
-  generator: kuda-template/0.1.2
+  - d74a0a7adfa87f708d75790c09129eaf5a4551d5
+  - c5503d2db7c41c4e1937cfd900bc525424015ffe
+  commit_sha: 9aa078807f3d952dd07e69bd48851e3ce8243869
+  generated_at: '1794488905'
+  generator: kuda-template/0.1.4

@@ -1,6 +1,6 @@
 name: cuora-identity-file
 path: crates/cuora-identity-file/Cargo.toml
-purpose: 'Identity impl: the ~/.config/cuora/identity.txt age keyfile (0600) — the headless/CI default'
+purpose: 'Identity impl: the ~/.config/cuora/identity.txt age keyfile (0600) — the explicit file backend (headless/CI opt-out)'
 api:
 - name: FileIdentity
   kind: type
@@ -166,8 +166,8 @@ provenance:
   - crates/cuora-identity-file/Cargo.toml
   - crates/cuora-identity-file/src/lib.rs
   hashes:
-  - 470575d39bfa27414e5acfb96383fa473a62744e
+  - 091478de063b1735975a918ffc9a17a20efb905c
   - dc1ede4ed693f5c1281f43aff6a729d95450b0e2
-  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
-  generated_at: '1794154232'
-  generator: kuda-template/0.1.2
+  commit_sha: 9aa078807f3d952dd07e69bd48851e3ce8243869
+  generated_at: '1794488905'
+  generator: kuda-template/0.1.4

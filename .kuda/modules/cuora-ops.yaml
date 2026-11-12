@@ -267,9 +267,9 @@ provenance:
   - d422f3d129f7f486ba4c88183f306ec61c92b98e
   - d5db95c9d8705463417acf5e869deadb8d2b092c
   - b43f94e2f8a76773dec34649819652262719a8ba
-  - 03eae01bd0a9f69f1feafff57531b07802ad960d
+  - b0f8caed7b4157feb81326edd95b3e14f292fff2
   - 2e113a624a55c8049273dd1f57cc79c27abfa1e7
   - 1602bd777393acf7d4df6616e08bbfbaf7726157
-  commit_sha: b86e9c2417e026b92763c34d9a3122e7b8306851
-  generated_at: '1794154232'
-  generator: kuda-template/0.1.2
+  commit_sha: 9aa078807f3d952dd07e69bd48851e3ce8243869
+  generated_at: '1794488905'
+  generator: kuda-template/0.1.4

@@ -11,7 +11,8 @@ categories = ["development-tools"]
 [dependencies]
 cuora-config.workspace = true
 cuora-core.workspace = true
-toml.workspace = true
+scarab-config = { git = "ssh://git@github.com/9aia/scarab.git", rev = "9364df88fad0ca46bd838467717a823893f47438", version = "0.1" }
+scarab-config-toml = { git = "ssh://git@github.com/9aia/scarab.git", rev = "9364df88fad0ca46bd838467717a823893f47438", version = "0.1" }
 
 [dev-dependencies]
 temp-env.workspace = true

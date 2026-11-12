@@ -24,11 +24,12 @@ modules:
 - cuora-xtask
 - docs
 - project
+- sturn-wal
 commands:
 - cargo check
 - cargo test --workspace
-tree_digest: 2255459d3a029039594b8ed28be07e8a0423df74
-files_total: 166
+tree_digest: 9b580eee0947a4274e70245d9b0c6787c7145c03
+files_total: 193
 provenance:
   files:
   - Cargo.toml
@@ -54,17 +55,17 @@ provenance:
   - crates/cuora-vault-cf/Cargo.toml
   - xtask/Cargo.toml
   hashes:
-  - 7e21cb7b3d2e40866ff8e170c4db81fb53a7a01b
-  - 15b7b5b243bf5c5293c18bb12faa9bedf8add9ee
+  - eae3382d914576fc346adcd58a6500da959dadb8
+  - a1d09f939ff42ed588003dac91863fb21c688c94
   - 70be355e0ec1f29bc0bedc077f6cecc1b632495b
   - cfc09e62e4451faec3b10a1f95f3e27381c6a419
-  - b2eca6beea68ada3630a0f06505f85b69f295997
+  - d74a0a7adfa87f708d75790c09129eaf5a4551d5
   - 84f4d48465d7a00aa61152d1261563f5e806c35b
   - 000e41d5840b658bf1370bc0a1f4c10626a91fcb
   - c140ab8aed34d70490289b50e722c42ac084fadd
   - 3d5404f29d89d480ac6015c59b99b30f4f5e7ef0
   - 61f701f21c7a5745cc8e5b624533b590af330534
-  - 470575d39bfa27414e5acfb96383fa473a62744e
+  - 091478de063b1735975a918ffc9a17a20efb905c
   - f1b047a37b1d9ebf50b0ca5c43cd946617a89ac7
   - ca24f91ffa63a58ab8099943aba4d2231cf69d74
   - d422f3d129f7f486ba4c88183f306ec61c92b98e
@@ -76,6 +77,6 @@ provenance:
   - df97d7ea0f12c02fec10db53389137ddf5dddcc2
   - 422f52f2ca23213aedb8eb77d63058314f245371
   - 1b2c254cc2d5e144e6ee3eedfdcbb94db8a3dedb
-  commit_sha: e6be3718bfec6ae711625cc41d1e0459f0028d5a
-  generated_at: '1794405394'
+  commit_sha: 9aa078807f3d952dd07e69bd48851e3ce8243869
+  generated_at: '1794488905'
   generator: kuda/0.1.0

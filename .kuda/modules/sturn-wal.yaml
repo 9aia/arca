@@ -1,0 +1,77 @@
+name: sturn-wal
+path: refs/sturn/wal/adversarial-fixes
+purpose: sturn coordination WAL — claims, writes, snaps, review events in refs/sturn/*
+api: []
+deps: []
+notes: ''
+verify:
+- refs/sturn/wal/adversarial-fixes
+- refs/sturn/wal/audit-fixes
+- refs/sturn/wal/cuora
+- refs/sturn/wal/devin
+- refs/sturn/wal/devin-ci-bupha
+- refs/sturn/wal/devin-driver-conformance
+- refs/sturn/wal/devin-driver-kit
+- refs/sturn/wal/devin-otel
+- refs/sturn/wal/devin-t005
+- refs/sturn/wal/docs
+provenance:
+  files:
+  - refs/sturn/wal/adversarial-fixes
+  - refs/sturn/wal/audit-fixes
+  - refs/sturn/wal/cuora
+  - refs/sturn/wal/devin
+  - refs/sturn/wal/devin-ci-bupha
+  - refs/sturn/wal/devin-driver-conformance
+  - refs/sturn/wal/devin-driver-kit
+  - refs/sturn/wal/devin-otel
+  - refs/sturn/wal/devin-t005
+  - refs/sturn/wal/docs
+  - refs/sturn/wal/docs-sweep
+  - refs/sturn/wal/feat-cached-vault
+  - refs/sturn/wal/fix-ledger-xtask
+  - refs/sturn/wal/main
+  - refs/sturn/wal/peregrin-campaign
+  - refs/sturn/wal/serve
+  - refs/sturn/wal/serve-hardening
+  - refs/sturn/wal/t005-coverage
+  - refs/sturn/ws/adversarial-fixes
+  - refs/sturn/ws/audit-fixes
+  - refs/sturn/ws/devin-t005
+  - refs/sturn/ws/feat-cached-vault
+  - refs/sturn/ws/fix-ledger-xtask
+  - refs/sturn/ws/peregrin-campaign
+  - refs/sturn/ws/serve
+  - refs/sturn/ws/serve-hardening
+  - refs/sturn/ws/t005-coverage
+  hashes:
+  - 4823dbd60ab925f782e3ff7b2f2806b344bea609
+  - 30c7062fba86691862aa7d27b828ef1d9dd67d27
+  - ca40ac5b6b5fea8ed995d69a9eeb3d8c0cfa4fb9
+  - f771b3f93e634d96b46aef1c466b905d55d57234
+  - 33b9c7904dc7d1f7d352f6ce1a284ddb99b7d45d
+  - 5ad97b62e78e2a63b7aa795d14a687431a5f3cff
+  - f6c97df43d4c2618769f127b4dec5ae1c166828c
+  - 6b2d0933550a474492e8e5b53be09ee6e905ab57
+  - afb5449ccb7d427f43c6eb4a3ee4448ed99701d0
+  - 3307c69bdf8fc5ca16d39b8bf82e3047f239b737
+  - 9350477e8954246ff72eaafc6e0f17e86e85f610
+  - 92c0b17b66ba8b82ed9b04929545bf1a43ec52b9
+  - e85d03c77b6d23f608a227e5055f9731b136eeb6
+  - 6b251270d1ff9d8a961147b0546b4eb556dc8d8d
+  - 98e2d51e71d0efb2236003cdd4c5c278ff4ca6a9
+  - 709ccd309820fa783ae48c617f87c53e082c9b11
+  - 27f670cf2cf263f9892ca4367ac1eddb10803205
+  - 2350bf659a79c93504ed7b86ca1bf430a78c01a9
+  - dc2c84b28c02f2ab6dfd18d01687a65a7b7305bd
+  - 6a02ac1cf1d63c844346f35bf1f7189ca2f09e32
+  - f2613d3dec5dc565c5c1828d1001c2386e132acb
+  - 547d4650a2944dd574d2f19e24e95aa61a0b370f
+  - 4c15c0b17f665b5c7cc267f6e0db6537c796f3b1
+  - 7ecc17604f0a09b6580d6c64bb65a4240ccb92a0
+  - b9534f3f4438b3abbe66b9e113b195a786147910
+  - 4c15c0b17f665b5c7cc267f6e0db6537c796f3b1
+  - 48e8d19c3ae7c37264451b468a841654a1f7fba3
+  commit_sha: 9aa078807f3d952dd07e69bd48851e3ce8243869
+  generated_at: '1794488905'
+  generator: kuda-template/0.1.4

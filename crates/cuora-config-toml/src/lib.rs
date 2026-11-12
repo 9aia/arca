@@ -1,8 +1,16 @@
 //! TOML impl of `ConfigSource` — explicit path → $CUORA_CONFIG →
 //! $ARCA_CONFIG (legacy) → ./cuora.toml → ./arca.toml (legacy) →
 //! ~/.config/cuora/cuora.toml → ~/.config/arca/arca.toml (legacy).
+//!
+//! Discovery stays local: the legacy `arca.*` aliases and the
+//! dual env vars don't fit scarab's single-basename `Discovery`
+//! spec (P-017 — same call myco made for its two-layer merge).
+//! What *did* move to scarab is the syntax half: parsing rides
+//! `scarab-config-toml`'s `TomlFormat` through the
+//! `scarab_config::ConfigFormat` port.
 
 use cuora_config::ConfigSource;
+use scarab_config::ConfigFormat;
 use std::path::PathBuf;
 
 /// File-backed config source.
@@ -44,7 +52,19 @@ impl ConfigSource for TomlSource {
             Some(p) => {
                 let text = std::fs::read_to_string(&p)
                     .map_err(|e| format!("read {}: {e}", p.display()))?;
-                toml::from_str(&text).map_err(|e| format!("parse {}: {e}", p.display()))
+                // scarab's TomlFormat parses; its "parse toml
+                // config: " prefix is folded back into the
+                // historical "parse <path>: <err>" shape.
+                ConfigFormat::<cuora_core::Config>::parse(
+                    &scarab_config_toml::TomlFormat,
+                    &text,
+                )
+                .map_err(|e| {
+                    let detail = e
+                        .strip_prefix("parse toml config: ")
+                        .unwrap_or(e.as_str());
+                    format!("parse {}: {detail}", p.display())
+                })
             }
             None => Err(
                 "no cuora.toml found (search: $CUORA_CONFIG/$ARCA_CONFIG, ./cuora.toml, ./arca.toml, ~/.config/cuora/, ~/.config/arca/)"
