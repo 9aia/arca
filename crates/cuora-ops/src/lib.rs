@@ -844,8 +844,8 @@ impl Ops {
     }
 
     /// Read a secret in an explicit env — the audited read for
-    /// callers that already know the env (the TUI's reveal, which
-    /// browses envs other than the selected one). Same event
+    /// callers that already know the env (browsing envs other
+    /// than the selected one). Same event
     /// [`get`](Self::get) emits: one materialization per value out.
     pub fn get_in(&self, env: &Env, rref: &Ref) -> Result<Option<SecretRecord>, OpsError> {
         let rec = self.open_vault(env)?.get(env, rref)?;

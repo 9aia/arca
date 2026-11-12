@@ -61,11 +61,12 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Bootstrap: store the age identity in the system keyring
-    /// when a session secret store is reachable — importing an
-    /// existing identity.txt rather than orphaning it — else the
-    /// `~/.config/cuora/identity.txt` keyfile (0600). Verifies the
-    /// vault opens.
+    /// Bootstrap: store the age identity per `[identity] backend`
+    /// / `CUORA_IDENTITY_BACKEND` — `keyring` (default) fails
+    /// closed when no session store is reachable, `auto` falls
+    /// back to the keyfile with a note, `file` never probes.
+    /// Imports an existing identity.txt rather than orphaning
+    /// it. Verifies the vault opens.
     Init {
         /// Force the identity keyfile even when a keyring is
         /// available — the headless/CI mode.
@@ -797,7 +798,7 @@ fn manifest() -> serde_json::Value {
         "protocol": "cuora/1",
         "ops": cuora_core::Op::ALL.iter().map(|o| o.as_str()).collect::<Vec<_>>(),
         "verbs": {
-            "init": "store the age identity in the session keyring when reachable (importing an existing keyfile), else the 0600 keyfile; verify the vault opens",
+            "init": "store the age identity per [identity] backend / CUORA_IDENTITY_BACKEND — keyring (default, fail closed), auto (keyring → keyfile fallback), file (never probe); imports an existing keyfile; verify the vault opens",
             "put": "store a secret — value via stdin or hidden /dev/tty prompt, never args",
             "get": "print a secret's value (the escape hatch — prefer run)",
             "list": "refs stored in the selected env — names only, never values",
@@ -882,7 +883,7 @@ fn manifest() -> serde_json::Value {
         "audit": {
             "wire": "ndjson lines on stderr (default; CUORA_AUDIT_STDERR=0 silences) + OTLP/HTTP JSON spans to $OTEL_EXPORTER_OTLP_ENDPOINT/v1/traces when set — span per event named cuora.<op>, attributes cuora.op/cuora.rref/cuora.env/cuora.actor/cuora.outcome (+cuora.policy.* on serve)",
             "event": {"ts": "rfc3339", "actor": "…", "op": "…", "rref": "…|absent when op-scoped", "env": "…", "outcome": "ok|denied|error", "policy?": "{allow, reason?, obligations?} — serve-path PDP verdicts only"},
-            "shape": "per-ref event per materialized/mutated ref (put/get/rotate/rm/deploy, run/env); op-scoped event for init/list/check; denied on guardrail refusal; error on op failure; manifest/schema emit none; a run child's exit code is not an cuora failure",
+            "shape": "per-ref event per materialized/mutated ref (put/get/rotate/rm/deploy, run/env); op-scoped event for init/list/check/serve; denied on guardrail refusal; error on op failure; manifest/schema emit none; a run child's exit code is not an cuora failure",
             "surfaces": "serve flushes OTLP per request; CLI verbs flush once at exit; export failures warn once, never fail the op",
         },
         "notes": [

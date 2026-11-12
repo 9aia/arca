@@ -1,6 +1,6 @@
 [package]
 name = "cuora-identity-file"
-description = "Identity impl: the ~/.config/cuora/identity.txt age keyfile (0600) — the headless/CI default"
+description = "Identity impl: the ~/.config/cuora/identity.txt age keyfile (0600) — the explicit file backend (headless/CI opt-out)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
