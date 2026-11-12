@@ -9,7 +9,8 @@ the pushed sha (gen → `cargo doc` → `vitepress build` →
 `gh-pages` is the whole deploy; there is no Actions workflow.
 
 The detached worktree has no sibling `main` checkout, so cargo
-work happens in `$CUORA_REPO` (default `~/GitHub/9aia/cuora`) and
+work happens in `$CUORA_REPO` (default
+`~/GitHub/9aia/workspace/repos/cuora`) and
 the `gen-*.py` scripts resolve sources via `CUORA_ROOT` instead of
 `..`. Run `bash scripts/deploy-docs.sh` by hand for the same
 pipeline locally.

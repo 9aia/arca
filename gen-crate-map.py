@@ -10,7 +10,7 @@ ROOT = pathlib.Path(
 WST = (ROOT / "Cargo.toml").read_text()
 
 LAYER = {
-    "cuora": "binary",
+    "cuora": "engine",
     "cuora-core": "domain",
     "cuora-config": "port",
     "cuora-vault": "port",
@@ -37,7 +37,7 @@ for rel in order_dedup:
     desc = desc.replace("<", "&lt;").replace(">", "&gt;")
     rows.append((name, LAYER.get(name, "adapter"), desc))
 
-order = {"domain": 0, "port": 1, "ops": 2, "adapter": 3, "binary": 4}
+order = {"domain": 0, "port": 1, "ops": 2, "engine": 3, "adapter": 4, "binary": 5}
 rows.sort(key=lambda r: (order[r[1]], r[0]))
 print(f"crate map: {len(rows)} crates")
 

@@ -11,9 +11,9 @@ machine-readable self-description.
 
 Serve is a thin front over the same `cuora-ops` plumbing the CLI
 uses: `[envs]` routing, `cuora://<env>/…` pins, and audit events
-are identical. `run`/`env`/`deploy`/`init`/`ui`/`migrate`/`schema`
-stay single-shot CLI verbs — serve covers what an embedder needs
-in-process.
+are identical. `run`/`env`/`deploy`/`init`/`migrate`/`schema`/
+`gen-cli-docs` stay single-shot CLI verbs — serve covers what an
+embedder needs in-process.
 
 ## Requests
 

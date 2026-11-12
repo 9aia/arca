@@ -8,6 +8,7 @@ documented at source (doc comments).
 - [cuora-deploy](/cuora/api/cuora_deploy/index.html) — port
 - [cuora-vault](/cuora/api/cuora_vault/index.html) — port
 - [cuora-ops](/cuora/api/cuora_ops/index.html) — ops
+- [cuora](/cuora/api/cuora/index.html) — engine
 - [cuora-config-toml](/cuora/api/cuora_config_toml/index.html) — adapter
 - [cuora-deploy-cf](/cuora/api/cuora_deploy_cf/index.html) — adapter
 - [cuora-driver](/cuora/api/cuora_driver/index.html) — adapter
@@ -21,4 +22,3 @@ documented at source (doc comments).
 - [cuora-vault-age](/cuora/api/cuora_vault_age/index.html) — adapter
 - [cuora-vault-cached](/cuora/api/cuora_vault_cached/index.html) — adapter
 - [cuora-vault-cf](/cuora/api/cuora_vault_cf/index.html) — adapter
-- [cuora](/cuora/api/cuora/index.html) — binary

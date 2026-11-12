@@ -11,7 +11,7 @@ generated `bins[]` shim over `tamias-driver-cuora`, not a
 cargo-installed binary. With `tamias` installed:
 
 ```sh
-tamias install 9aia:cuora@0.1.0    # from the org registry
+tamias install 9aia:cuora@0.2.0    # from the org registry
                                      # (private registry: set TAMIAS_REGISTRY_TOKEN)
 ```
 

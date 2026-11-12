@@ -10,6 +10,9 @@ values below are fake.
 export HOME="$(mktemp -d)"        # scratch HOME for this tutorial
 export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_DATA_HOME="$HOME/.local/share"
+export CUORA_IDENTITY_BACKEND=file  # keyring is per-session, not
+                                  # per-HOME — opt into the keyfile
+                                  # so nothing touches your real store
 
 cuora init
 ```
