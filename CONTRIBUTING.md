@@ -26,11 +26,17 @@ is repo chores.
 
 ## Releasing
 
-No crates.io publish, no git tags — the install path is the tamias
-pack (`libraries/cuora`): `cargo xtask pack` stages the compiled
+No crates.io publish — the install path is the tamias pack
+(`libraries/cuora`): `cargo xtask pack` stages the compiled
 `tamias-driver-cuora` payload and `tamias install
 --allow-drivers ./libraries/cuora` deploys the generated `cuora`
-shim. The `cuora`/`tamias-driver-cuora` crates still build under
+shim. `scripts/release.sh` is run manually by an operator on
+`main`: one workspace version bump (`cargo set-version
+--workspace`), a sync of the version refs in
+`libraries/cuora/tamias.yaml`/`README.md`, and a `cuora-v<ver>`
+tag. After the tag the operator ships the pack with `tamias
+publish libraries/cuora` (`9aia:cuora@<ver>`). The
+`cuora`/`tamias-driver-cuora` crates still build under
 plain `cargo build`/`cargo test` — the `mcp` surface stays
 feature-gated and nothing optional is required.
 

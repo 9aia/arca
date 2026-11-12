@@ -3,6 +3,14 @@
 # push trigger, is retired; releases are operator-run).
 # The leading sleep is the debounce window: only the last invocation
 # in a quiet window releases. Commits/tags are pushed to main.
+#
+# crates.io publish is retired: every cuora crate is an internal
+# lib-only engine — org policy keeps every repo but tamias off
+# crates.io, and the `cuora` command itself ships as the tamias pack
+# (`libraries/cuora` → `tamias install 9aia:cuora@<ver>`), so a
+# release is one workspace version bump + a `cuora-v<ver>` tag. The
+# operator then publishes the pack itself
+# (`tamias publish libraries/cuora`).
 set -euo pipefail
 # worktree-local secrets (gitignored); the service env file is canonical
 [ -f ./.env ] && { set -a; source ./.env; set +a; }
@@ -11,48 +19,34 @@ sleep "${CUORA_RELEASE_DEBOUNCE:-300}"
 git fetch origin --tags -q
 last="$(git describe --tags --abbrev=0 2>/dev/null || true)"
 if [ -z "$last" ]; then
-    echo "no tags yet — run 'cuora deploy release' to seed the flow"; exit 0
+    echo "no tags yet — tag the first release manually to seed the flow"; exit 0
 fi
 changed="$(git diff --name-only "${last}..HEAD")"
 
-touched=""
-for c in cuora-core cuora-git cuora-config cuora-config-toml \
-         cuora-shell cuora-cli; do
-    grep -q "^crates/$c/" <<<"$changed" && touched="$touched $c"
-done
-# the bin re-publishes whenever any crate changed
-[ -n "$touched" ] && touched="$touched cuora"
-if [ -z "$touched" ]; then echo "no crate changes since $last"; exit 0; fi
+ws_version() { grep -m1 '^version = "' Cargo.toml | cut -d'"' -f2; }
 
-order="cuora-core cuora-config cuora-git cuora-shell cuora-config-toml cuora"
-published=""
-for c in $order; do
-    p="${c}"; [ "$c" = cuora-cli ] && p="cuora"   # cli package name
-    dir="crates/$c"
-    grep -q " ${c} \|^${c} \?$\| ${c}$" <<<" $touched " || continue
-    cargo set-version -p "$p" --bump patch
-    for i in 1 2 3 4 5; do
-        cargo publish -p "$p" --allow-dirty && break || sleep 30
-    done
-    published="$published $p"
-    # Per-crate tag — versions diverge independently in a monorepo.
-    ver_c="$(grep -m1 '^version' "crates/$p/Cargo.toml" | cut -d'"' -f2)"
-    tags="$tags $p-v$ver_c"
-done
+# release-worthy paths: workspace crates, the tamias pack payload,
+# xtask, and the release machinery itself. Docs live on the orphan
+# `docs` worktree branch — they never appear in this diff.
+relevant="$(grep -E '^(crates/|libraries/|xtask/|campaigns/|rules/|Cargo\.(toml|lock)|scripts/release\.sh)' <<<"$changed" || true)"
+if [ -z "$relevant" ]; then echo "no release-relevant changes since $last"; exit 0; fi
 
-git commit -aqm "release: bump crate versions"
-for t in $tags; do git tag "$t"; done
-ver="$(grep -m1 '^version' crates/cuora-cli/Cargo.toml | cut -d'"' -f2)"
+# One shared version: [workspace.package] version is the single
+# source (members inherit `version.workspace = true`).
+# `cargo set-version --workspace` rewrites the workspace.package
+# version, the workspace.dependencies reqs, and Cargo.lock together.
+old="$(ws_version)"
+cargo set-version --workspace --bump patch
+ver="$(ws_version)"
+
+# keep the user-facing version refs in lockstep: the tamias pack
+# manifest and the install example in the README.
+sed -i "s/^version: \"${old}\"/version: \"${ver}\"/" libraries/cuora/tamias.yaml
+sed -i "s|cuora@${old}|cuora@${ver}|g" README.md
+
+git commit -aqm "release: bump cuora to ${ver} — tamias pack release"
+git tag "cuora-v${ver}"
 git push -q origin HEAD:main --tags
 
-# binaries: local dist build (host arch) → GitHub Release.
-# Other arches join when the remote-runner pair lands (TODO).
-if command -v dist >/dev/null && command -v gh >/dev/null; then
-    dist build --output-format=json > /tmp/dist-manifest.json 2>&1 || true
-    gh release create "cuora-v${ver}" --generate-notes \
-        --title "cuora ${ver}" 2>/dev/null || true
-    for f in target/distrib/*; do
-        [ -f "$f" ] && gh release upload "cuora-v${ver}" "$f" --clobber
-    done
-fi
-echo "released:${published} (tags:${tags})"
+echo "released: cuora ${ver} (tag cuora-v${ver})"
+echo "next: tamias publish libraries/cuora  # ship 9aia:cuora@${ver} to the org registry"
