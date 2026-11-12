@@ -1,7 +1,7 @@
 +++
 id = "ADR-0004"
 title = "identity backend selection — fail-closed keyring default, explicit file opt-out"
-status = "in-progress"
+status = "done"
 created = "2026-11-08"
 owner = "devin"
 priority = "high"
