@@ -13,6 +13,9 @@ values below are fake.
 export HOME="$(mktemp -d)"        # scratch HOME for this tutorial
 export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_DATA_HOME="$HOME/.local/share"
+export CUORA_IDENTITY_BACKEND=file  # keyring is per-session, not
+                                  # per-HOME — opt into the keyfile
+                                  # so nothing touches your real store
 
 cuora init
 ```
@@ -547,7 +550,7 @@ allow = ["run", "list", "check", "manifest", "schema"]
   (default `"allow"`).
 * Op names match `cuora manifest`'s `ops` list:
   `init, put, get, list, rm, rotate, run, env, check, deploy,
-  ui, serve, manifest, schema`.
+  migrate, serve, manifest, schema`.
 * `manifest`/`schema`/`gen-cli-docs` run before config load —
   introspection is never gated.
 
@@ -584,7 +587,7 @@ inject-and-run path:
 ```toml
 [guardrails]
 default = "deny"
-allow = ["run", "list", "check", "ui"]
+allow = ["run", "list", "check"]
 ```
 
 The agent can `cuora run` (values materialize inside the child,
@@ -1071,7 +1074,7 @@ breadcrumb.
 | --- | --- |
 | `ts` | RFC 3339, UTC |
 | `actor` | `--actor` → `CUORA_ACTOR` → `$USER`/`$LOGNAME` → `anon`. Self-claimed — attribution, not identity |
-| `op` | the verb: `init put get list rm rotate run env check deploy ui serve manifest schema` |
+| `op` | the verb: `init put get list rm rotate run env check deploy migrate serve manifest schema` |
 | `rref` | the resolved ref path, env pin stripped — same on `denied`/`error` when the arg parses, else the raw arg verbatim. **Absent** on op-scoped events |
 | `env` | the env the op ran under |
 | `outcome` | `ok` | `denied` | `error` |
@@ -1081,8 +1084,8 @@ breadcrumb.
 
 | event | meaning |
 | --- | --- |
-| `ok`, ref-scoped | one **per ref** materialized or mutated — `put`, `get`, `rotate`, `rm`, `deploy`, and per resolved ref inside `run`/`env` |
-| `ok`, op-scoped | ref-less verb completed — `init`, `list`, `check`, `ui`, `serve` |
+| `ok`, ref-scoped | one **per ref** materialized or mutated — `put`, `get`, `rotate`, `rm`, `deploy`, `migrate` (per rewritten ref), and per resolved ref inside `run`/`env` |
+| `ok`, op-scoped | ref-less verb completed — `init`, `list`, `check`, `migrate`, `serve` |
 | `denied` | `[guardrails]` — or a serve-path PDP verdict of `allow: false` (including fail-closed on an unreachable PDP) — refused the op before it touched the vault; `rref` is the requested ref (normalized when parseable) |
 | `error` | the op ran and failed — missing secret, vault i/o, bad ref; a `check` with findings also audits `error` (it exits 1); also emitted when config load itself fails (best-effort actor/env from flags + process env) |
 
@@ -1110,17 +1113,6 @@ allow recorded when `allow_on_error` overrode an unreachable
 PDP. The `serve` verb itself closes with one op-scoped `ok`.
 See [the serve protocol](serve-protocol.md).
 
-## `ui` and the TUI
-
-`cuora ui` emits one op-scoped `ok` when the browser exits cleanly.
-Inside it, browsing is silent — listing refs and metadata is not
-a materialization, and **live stderr audit is muted for the whole
-session** so events can't splatter over the alternate screen;
-everything held replays to stderr after the terminal is restored.
-The `r`→`r` reveal goes through the audited `get` path: a real
-`{"op":"get","rref":…,"outcome":"ok"}` event per value shown —
-held like the rest, replayed on exit.
-
 ## OTLP export
 
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. `http://localhost:4318`)
@@ -1133,8 +1125,7 @@ events; `Outcome::Error` marks the span `STATUS_CODE_ERROR`.
 `service.name` comes from `OTEL_SERVICE_NAME` (default `cuora`).
 
 Flush timing: CLI verbs export once at exit; `cuora serve` flushes
-per request (it's long-running); the TUI flushes at exit like
-any verb.
+per request (it's long-running).
 
 Related env vars: `OTEL_EXPORTER_OTLP_HEADERS` (`k=v` pairs,
 percent-decoded), `OTEL_EXPORTER_OTLP_TIMEOUT` (ms, default
@@ -1151,16 +1142,15 @@ stderr, never fails the op.
 Note: stderr can also carry non-ndjson `cuora:` *notice* lines
 (permission warnings, keyring fallback notes) — UX chatter, not
 audit wire. Consumers parsing stderr as pure ndjson should
-tolerate lines that don't start with `{`. During `cuora ui` both
-audit events and notices are held and replayed after the
-terminal is restored.
+tolerate lines that don't start with `{`.
 
 ## Granularity
 
 Per-ref events fire when a value crosses the store boundary
 toward a caller: `get`, `put`, `rotate`, `rm`, `deploy`, `run`,
-`env`, and serve `get`/`put`/`rotate`/`rm`. Bulk reads — `list`,
-`check`, the TUI reload, serve `list` — emit **op-scoped** events
+`env`, `migrate` (per rewritten ref), and serve
+`get`/`put`/`rotate`/`rm`. Bulk reads —
+`list`, `check`, serve `list` — emit **op-scoped** events
 only: they decrypt records internally to verify or enumerate, but
 no value is returned to the caller, so there is no per-ref
 materialization to attribute. If your threat model counts
@@ -1186,9 +1176,9 @@ machine-readable self-description.
 
 Serve is a thin front over the same `cuora-ops` plumbing the CLI
 uses: `[envs]` routing, `cuora://<env>/…` pins, and audit events
-are identical. `run`/`env`/`deploy`/`init`/`ui`/`migrate`/`schema`
-stay single-shot CLI verbs — serve covers what an embedder needs
-in-process.
+are identical. `run`/`env`/`deploy`/`init`/`migrate`/`schema`/
+`gen-cli-docs` stay single-shot CLI verbs — serve covers what an
+embedder needs in-process.
 
 ## Requests
 
@@ -1377,6 +1367,7 @@ documented at source (doc comments).
 * [cuora-deploy](/cuora/api/cuora_deploy/index.html) — port
 * [cuora-vault](/cuora/api/cuora_vault/index.html) — port
 * [cuora-ops](/cuora/api/cuora_ops/index.html) — ops
+* [cuora](/cuora/api/cuora/index.html) — engine
 * [cuora-config-toml](/cuora/api/cuora_config_toml/index.html) — adapter
 * [cuora-deploy-cf](/cuora/api/cuora_deploy_cf/index.html) — adapter
 * [cuora-driver](/cuora/api/cuora_driver/index.html) — adapter
@@ -1390,7 +1381,6 @@ documented at source (doc comments).
 * [cuora-vault-age](/cuora/api/cuora_vault_age/index.html) — adapter
 * [cuora-vault-cached](/cuora/api/cuora_vault_cached/index.html) — adapter
 * [cuora-vault-cf](/cuora/api/cuora_vault_cf/index.html) — adapter
-* [cuora](/cuora/api/cuora/index.html) — binary
 
 ---
 
@@ -1422,8 +1412,9 @@ Design rules:
   `cuora-vault-cf`): upsert/rotate/list/env-isolation semantics
   can't drift per backend.
 * **One ops shell** — `cuora-ops` owns config load, env→vault
-  routing, the env-pin rule, and audit emission; the CLI and the
-  TUI are both thin front-ends over it and cannot diverge.
+  routing, the env-pin rule, and audit emission; the CLI and
+  `cuora serve` are both thin front-ends over it and cannot
+  diverge.
 
 | crate | layer | purpose |
 |---|---|---|
@@ -1432,11 +1423,12 @@ Design rules:
 | `cuora-deploy` | port | Deploy port: write-only push targets (sinks) for secret values — never a source |
 | `cuora-vault` | port | Vault port: readable secret stores — get/put/rm/list/rotate, per-env; every impl stores opaque ciphertext |
 | `cuora-ops` | ops | cuora ops I/O: config load, env/ref resolution, vault open, verb plumbing, audit emission |
+| `cuora` | engine | cuora — secrets broker for agents: reference URIs, redaction, env-injection CLI |
 | `cuora-config-toml` | adapter | Config impl: cuora.toml file (explicit path, env, ./, ~/.config) |
 | `cuora-deploy-cf` | adapter | Deploy impl: push secret values to a Cloudflare account Secrets Store (write-only sink) via the CF API v4 |
-| `cuora-driver` | adapter | tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values) |
+| `cuora-driver` | adapter | tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values) plus engine ops dispatching to the cuora lib |
 | `cuora-identity` | adapter | Identity port: where the age identity (master key) comes from — file, keyring, later sealed variants |
-| `cuora-identity-file` | adapter | Identity impl: the ~/.config/cuora/identity.txt age keyfile (0600) — the headless/CI default |
+| `cuora-identity-file` | adapter | Identity impl: the ~/.config/cuora/identity.txt age keyfile (0600) — the explicit file backend (headless/CI opt-out) |
 | `cuora-identity-keyring` | adapter | Identity impl: the platform session secret store (secret-service / Keychain / Credential Manager) via keyring-core |
 | `cuora-notice` | adapter | Process-wide UX notices — cuora:-prefixed stderr notes, mutable for terminal-owning surfaces |
 | `cuora-serve` | adapter | cuora serve — the ndjson request/response IPC surface orchestrators embed, with the external policy-decision consult (P-005) |
@@ -1445,14 +1437,17 @@ Design rules:
 | `cuora-vault-age` | adapter | Local vault impl: one age-x25519-encrypted JSON doc — the v1 default backend |
 | `cuora-vault-cached` | adapter | Composite vault impl: read-through age-encrypted local cache in front of any backend (P-007) |
 | `cuora-vault-cf` | adapter | Remote vault impl: self-hosted Cloudflare Worker + D1 holding per-secret age ciphertext — the Worker never sees plaintext |
-| `cuora` | binary | cuora — secrets broker for agents: reference URIs, redaction, env-injection CLI |
 
 ## Front-ends
 
 * **`cuora` (CLI)** — clap verbs + `--json`/`manifest`/`schema` for
-  machines; the agent interface.
-* **`cuora ui` (TUI)** — a read-only ratatui browser over the same
-  ops; feature-gated (`--no-default-features` for a lean binary).
+  machines; the agent interface. There is no standalone binary:
+  the command ships as the `libraries/cuora` tamias pack — a
+  generated `bins[]` shim → `tamias-driver-cuora`'s `cli`
+  passthrough → `cuora::run_from`.
+* **`tamias-driver-cuora`** — the pavo view driver: read-only
+  vault *metadata* (never renders values), plus the engine ops
+  surface (`ops`/`run`/`cli.*` wire queries) that backs the shim.
 * **`cuora serve`** — ndjson IPC over the Vault port with an
   exec-driven `[serve.pdp]` policy-decision hook (ADR-0003);
   peregrin's embedding point.
@@ -1488,8 +1483,8 @@ does not.
   injectable surface so a `run` can't dump the whole vault.
 * **Accidental printing** — `Secret` has no `Display`/`Debug` of
   the value (`.expose()` only), `list` is names + metadata only,
-  and the TUI's posture is browse-never-spill (reveal is a
-  deliberate two-step, audited).
+  and `tamias-driver-cuora`'s pavo view is metadata-only by
+  construction — it never renders secret values.
 * **Ciphertext at rest, everywhere** — every vault impl stores
   age ciphertext. The local file is unreadable without the
   identity; the `cf` remote store holds ciphertext over the wire
@@ -1755,17 +1750,24 @@ value ever touching your terminal, a file, or an agent's context.
 
 ## Install
 
-The crates.io name `cuora` belongs to an unrelated project —
-install from the repo:
+The `cuora` command ships as a tamias pack (`libraries/cuora`) — a
+generated `bins[]` shim over `tamias-driver-cuora`, not a
+cargo-installed binary. With `tamias` installed:
 
 ```sh
-cargo install --git https://github.com/9aia/cuora cuora
+tamias install 9aia:cuora@0.2.0    # from the org registry
+                                     # (private registry: set TAMIAS_REGISTRY_TOKEN)
 ```
 
-From a checkout of this repo: `cargo xtask install` builds and
-installs the release binary to `~/.cargo/bin/cuora`. For a lean
-binary without the TUI:
-`cargo install --git https://github.com/9aia/cuora cuora --no-default-features`.
+From a checkout of this repo:
+
+```sh
+cargo xtask pack                            # stage the driver payload
+tamias install --allow-drivers ./libraries/cuora   # deploys `cuora`
+```
+
+`cargo xtask install` additionally puts `tamias-driver-cuora`
+itself on `PATH` (`~/.cargo/bin`).
 
 ## Bootstrap
 

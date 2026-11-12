@@ -26,8 +26,9 @@ Design rules:
   `cuora-vault-cf`): upsert/rotate/list/env-isolation semantics
   can't drift per backend.
 * **One ops shell** — `cuora-ops` owns config load, env→vault
-  routing, the env-pin rule, and audit emission; the CLI and the
-  TUI are both thin front-ends over it and cannot diverge.
+  routing, the env-pin rule, and audit emission; the CLI and
+  `cuora serve` are both thin front-ends over it and cannot
+  diverge.
 
 | crate | layer | purpose |
 |---|---|---|
@@ -36,11 +37,12 @@ Design rules:
 | `cuora-deploy` | port | Deploy port: write-only push targets (sinks) for secret values — never a source |
 | `cuora-vault` | port | Vault port: readable secret stores — get/put/rm/list/rotate, per-env; every impl stores opaque ciphertext |
 | `cuora-ops` | ops | cuora ops I/O: config load, env/ref resolution, vault open, verb plumbing, audit emission |
+| `cuora` | engine | cuora — secrets broker for agents: reference URIs, redaction, env-injection CLI |
 | `cuora-config-toml` | adapter | Config impl: cuora.toml file (explicit path, env, ./, ~/.config) |
 | `cuora-deploy-cf` | adapter | Deploy impl: push secret values to a Cloudflare account Secrets Store (write-only sink) via the CF API v4 |
-| `cuora-driver` | adapter | tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values) |
+| `cuora-driver` | adapter | tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values) plus engine ops dispatching to the cuora lib |
 | `cuora-identity` | adapter | Identity port: where the age identity (master key) comes from — file, keyring, later sealed variants |
-| `cuora-identity-file` | adapter | Identity impl: the ~/.config/cuora/identity.txt age keyfile (0600) — the headless/CI default |
+| `cuora-identity-file` | adapter | Identity impl: the ~/.config/cuora/identity.txt age keyfile (0600) — the explicit file backend (headless/CI opt-out) |
 | `cuora-identity-keyring` | adapter | Identity impl: the platform session secret store (secret-service / Keychain / Credential Manager) via keyring-core |
 | `cuora-notice` | adapter | Process-wide UX notices — cuora:-prefixed stderr notes, mutable for terminal-owning surfaces |
 | `cuora-serve` | adapter | cuora serve — the ndjson request/response IPC surface orchestrators embed, with the external policy-decision consult (P-005) |
@@ -49,14 +51,17 @@ Design rules:
 | `cuora-vault-age` | adapter | Local vault impl: one age-x25519-encrypted JSON doc — the v1 default backend |
 | `cuora-vault-cached` | adapter | Composite vault impl: read-through age-encrypted local cache in front of any backend (P-007) |
 | `cuora-vault-cf` | adapter | Remote vault impl: self-hosted Cloudflare Worker + D1 holding per-secret age ciphertext — the Worker never sees plaintext |
-| `cuora` | binary | cuora — secrets broker for agents: reference URIs, redaction, env-injection CLI |
 
 ## Front-ends
 
 * **`cuora` (CLI)** — clap verbs + `--json`/`manifest`/`schema` for
-  machines; the agent interface.
-* **`cuora ui` (TUI)** — a read-only ratatui browser over the same
-  ops; feature-gated (`--no-default-features` for a lean binary).
+  machines; the agent interface. There is no standalone binary:
+  the command ships as the `libraries/cuora` tamias pack — a
+  generated `bins[]` shim → `tamias-driver-cuora`'s `cli`
+  passthrough → `cuora::run_from`.
+* **`tamias-driver-cuora`** — the pavo view driver: read-only
+  vault *metadata* (never renders values), plus the engine ops
+  surface (`ops`/`run`/`cli.*` wire queries) that backs the shim.
 * **`cuora serve`** — ndjson IPC over the Vault port with an
   exec-driven `[serve.pdp]` policy-decision hook (ADR-0003);
   peregrin's embedding point.

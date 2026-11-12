@@ -22,7 +22,7 @@ allow = ["run", "list", "check", "manifest", "schema"]
   (default `"allow"`).
 * Op names match `cuora manifest`'s `ops` list:
   `init, put, get, list, rm, rotate, run, env, check, deploy,
-  ui, serve, manifest, schema`.
+  migrate, serve, manifest, schema`.
 * `manifest`/`schema`/`gen-cli-docs` run before config load —
   introspection is never gated.
 
@@ -59,7 +59,7 @@ inject-and-run path:
 ```toml
 [guardrails]
 default = "deny"
-allow = ["run", "list", "check", "ui"]
+allow = ["run", "list", "check"]
 ```
 
 The agent can `cuora run` (values materialize inside the child,

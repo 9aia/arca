@@ -844,8 +844,8 @@
 <a href=#844 id=844 data-nosnippet>844</a>    }
 <a href=#845 id=845 data-nosnippet>845</a>
 <a href=#846 id=846 data-nosnippet>846</a>    <span class="doccomment">/// Read a secret in an explicit env — the audited read for
-<a href=#847 id=847 data-nosnippet>847</a>    /// callers that already know the env (the TUI's reveal, which
-<a href=#848 id=848 data-nosnippet>848</a>    /// browses envs other than the selected one). Same event
+<a href=#847 id=847 data-nosnippet>847</a>    /// callers that already know the env (browsing envs other
+<a href=#848 id=848 data-nosnippet>848</a>    /// than the selected one). Same event
 <a href=#849 id=849 data-nosnippet>849</a>    /// [`get`](Self::get) emits: one materialization per value out.
 <a href=#850 id=850 data-nosnippet>850</a>    </span><span class="kw">pub fn </span>get_in(<span class="kw-2">&amp;</span><span class="self">self</span>, env: <span class="kw-2">&amp;</span>Env, rref: <span class="kw-2">&amp;</span>Ref) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;SecretRecord&gt;, OpsError&gt; {
 <a href=#851 id=851 data-nosnippet>851</a>        <span class="kw">let </span>rec = <span class="self">self</span>.open_vault(env)<span class="question-mark">?</span>.get(env, rref)<span class="question-mark">?</span>;

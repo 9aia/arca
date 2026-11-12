@@ -21,8 +21,8 @@ does not.
   injectable surface so a `run` can't dump the whole vault.
 * **Accidental printing** — `Secret` has no `Display`/`Debug` of
   the value (`.expose()` only), `list` is names + metadata only,
-  and the TUI's posture is browse-never-spill (reveal is a
-  deliberate two-step, audited).
+  and `tamias-driver-cuora`'s pavo view is metadata-only by
+  construction — it never renders secret values.
 * **Ciphertext at rest, everywhere** — every vault impl stores
   age ciphertext. The local file is unreadable without the
   identity; the `cf` remote store holds ciphertext over the wire
