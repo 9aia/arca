@@ -1,7 +1,7 @@
 +++
 id = "P-001"
 title = "cuora v1 — secrets broker for agents, in Rust"
-status = "open"
+status = "done"
 created = "2026-10-31"
 owner = "human:luis"
 priority = "high"
