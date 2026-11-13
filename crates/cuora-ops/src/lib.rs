@@ -47,10 +47,12 @@ use cuora_identity::{IdentityError, IdentitySource};
 use cuora_identity_file::FileIdentity;
 #[cfg(not(coverage))]
 use cuora_identity_keyring::KeyringIdentity;
+use cuora_sealed::PackOpen;
 use cuora_vault::{SecretRecord, Vault};
 use cuora_vault_age::AgeVault;
 use cuora_vault_cached::{CachePolicy, CachedVault};
 use cuora_vault_cf::{Auth as CfAuth, CfVault, CfVaultConfig};
+use time::OffsetDateTime;
 
 /// Knobs for [`Ops::load`] — the global CLI flags, resolved.
 #[derive(Debug, Default)]
@@ -766,13 +768,25 @@ impl Ops {
 
     /// Read a secret (env-pin aware); `None` when absent. Emits a
     /// materialization audit event only when a value comes out.
+    ///
+    /// **Sealed-pack fallback:** a vault miss on an unpinned
+    /// two-segment ref (`cuora://<pack>/<secret>`) is retried
+    /// against installed sealed tamias packs (see
+    /// [`Self::get_from_pack`]). Vault hits always win — packs are
+    /// the migration target, not an override.
     pub fn get(&self, rref: &Ref) -> Result<Option<SecretRecord>, OpsError> {
         let (env, r) = self.resolve(rref);
         let rec = self.open_vault(&env)?.get(&env, &r)?;
         if rec.is_some() {
             self.audit(Op::Get, &r, &env);
+            return Ok(rec);
         }
-        Ok(rec)
+        if self.pack_candidate(rref, &r) {
+            if let Some(secret) = self.get_from_pack(&r, Op::Get)? {
+                return Ok(Some(Self::pack_record(secret)));
+            }
+        }
+        Ok(None)
     }
 
     /// Remove a secret; `true` when something was removed.
@@ -847,12 +861,20 @@ impl Ops {
     /// callers that already know the env (browsing envs other
     /// than the selected one). Same event
     /// [`get`](Self::get) emits: one materialization per value out.
+    /// Sealed-pack fallback applies here too — packs aren't
+    /// env-routed, so the explicit env is ignored on a pack hit.
     pub fn get_in(&self, env: &Env, rref: &Ref) -> Result<Option<SecretRecord>, OpsError> {
         let rec = self.open_vault(env)?.get(env, rref)?;
         if rec.is_some() {
             self.audit(Op::Get, rref, env);
+            return Ok(rec);
         }
-        Ok(rec)
+        if self.pack_candidate(rref, rref) {
+            if let Some(secret) = self.get_from_pack(rref, Op::Get)? {
+                return Ok(Some(Self::pack_record(secret)));
+            }
+        }
+        Ok(None)
     }
 
     /// Refs stored in the selected env (or an explicit one).
@@ -945,12 +967,32 @@ impl Ops {
                 std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),
                 std::collections::btree_map::Entry::Vacant(e) => e.insert(self.open_vault(&env)?),
             };
-            let rec = vault.get(&env, &r)?.ok_or_else(|| OpsError::NotStored {
-                var: var.clone(),
-                rref: rref.to_string(),
-                env: env.as_str().to_string(),
-            })?;
-            self.audit(op, &r, &env);
+            let rec = match vault.get(&env, &r)? {
+                Some(rec) => {
+                    self.audit(op, &r, &env);
+                    rec
+                }
+                None => {
+                    // Vault miss → sealed-pack fallback for
+                    // `cuora://<pack>/<secret>` refs (audited
+                    // inside `get_from_pack` with env "sealed").
+                    let packed = if self.pack_candidate(&rref, &r) {
+                        self.get_from_pack(&r, op)?
+                    } else {
+                        None
+                    };
+                    match packed {
+                        Some(secret) => Self::pack_record(secret),
+                        None => {
+                            return Err(OpsError::NotStored {
+                                var: var.clone(),
+                                rref: rref.to_string(),
+                                env: env.as_str().to_string(),
+                            })
+                        }
+                    }
+                }
+            };
             out.insert(var, rec.value);
         }
         Ok(out)
@@ -1064,11 +1106,14 @@ impl Ops {
         }
 
         // Declared surface: does each VAR's ref resolve in its env?
+        // Vault misses on `cuora://<pack>/<secret>` refs get the
+        // sealed-pack probe — declared, not decrypted (check never
+        // needs the identity).
         let mut secrets = Vec::new();
         for (var, rref) in &self.config.secrets {
             let (env, r) = self.resolve(rref);
             let vault_name = self.config.vault_for(&env);
-            let resolves = match opened.get(vault_name) {
+            let mut resolves = match opened.get(vault_name) {
                 Some(v) => v.get(&env, &r).map(|rec| rec.is_some()).unwrap_or(false),
                 None => {
                     // The vault probe above already tried this name
@@ -1084,6 +1129,15 @@ impl Ops {
                     false
                 }
             };
+            if !resolves && self.pack_candidate(rref, &r) {
+                match cuora_sealed::pack_declares(&r.segments()[0], &r.segments()[1], None) {
+                    Ok(true) => resolves = true,
+                    Ok(false) => {}
+                    Err(e) => {
+                        problems.push(format!("{var} → {rref}: sealed pack lookup failed: {e}"))
+                    }
+                }
+            }
             if !resolves && is_valid_env_var(var) {
                 problems.push(format!("{var} → {rref} is not stored in env {env}"));
             }
@@ -1121,6 +1175,67 @@ impl Ops {
             &AuditEvent::materialized(self.actor.as_str(), op, &rref.path(), env.as_str())
                 .with_policy(self.policy.clone()),
         );
+    }
+
+    // ------------------------------------------------ sealed packs
+
+    /// Is the pin-stripped ref `r` a sealed-pack candidate? Exactly
+    /// two segments (`<pack>/<secret>`) and the *original* ref
+    /// carried no env pin — packs aren't env-routed, so
+    /// `cuora://prod/x` never means a pack even when `prod/x` is
+    /// two segments after the pin strips.
+    fn pack_candidate(&self, rref: &Ref, r: &Ref) -> bool {
+        r.segments().len() == 2 && rref.env_pin(|s| self.config.is_known_env(s)).is_none()
+    }
+
+    /// The sealed-pack fallback read: `r` is already known to be a
+    /// [`Self::pack_candidate`] — `cuora://<pack>/<secret>` against
+    /// the tamias install store. `Ok(None)` means no installed
+    /// sealed pack answers (caller reports its usual miss);
+    /// `Err` surfaces real failures — ambiguous installs, missing
+    /// identity, undecryptable payload — rather than degrading to a
+    /// silent vault miss.
+    ///
+    /// A hit emits the materialization audit event itself: same
+    /// shape as [`Self::audit`] but env `"sealed"` (packs carry no
+    /// env routing) under the caller's `op`, matching the driver's
+    /// `open`/`materialize` events (`Op::Get`, env `sealed`).
+    fn get_from_pack(&self, r: &Ref, op: Op) -> Result<Option<Secret>, OpsError> {
+        let segs = r.segments();
+        debug_assert_eq!(segs.len(), 2, "pack_candidate gates the shape");
+        match cuora_sealed::open_pack_ref(&segs[0], &segs[1], None, None) {
+            Ok(PackOpen::Hit(plain)) => {
+                let text = std::str::from_utf8(&plain).map_err(|_| {
+                    OpsError::Msg(format!(
+                        "sealed secret {}/{} is not UTF-8 — vault secrets are text",
+                        segs[0], segs[1]
+                    ))
+                })?;
+                audit::emit(
+                    &AuditEvent::materialized(self.actor.as_str(), op, &r.path(), "sealed")
+                        .with_policy(self.policy.clone()),
+                );
+                Ok(Some(Secret::new(text)))
+            }
+            Ok(PackOpen::Miss | PackOpen::NoSecret) => Ok(None),
+            Err(e) => Err(OpsError::Msg(format!(
+                "sealed pack {}/{}: {e}",
+                segs[0], segs[1]
+            ))),
+        }
+    }
+
+    /// A [`SecretRecord`] for a pack-opened value — packs carry no
+    /// version/rotation metadata, so the record reports generation
+    /// `1` with `created_at` = now. Read paths (`get`, `env`,
+    /// `run`, serve) never mutate it.
+    fn pack_record(secret: Secret) -> SecretRecord {
+        SecretRecord {
+            value: secret,
+            version: 1,
+            created_at: OffsetDateTime::now_utc(),
+            rotated_at: None,
+        }
     }
 }
 

@@ -625,9 +625,8 @@ dependencies = [
  "clap",
  "cuora",
  "cuora-core",
- "cuora-identity",
- "cuora-identity-file",
  "cuora-ops",
+ "cuora-sealed",
  "cuora-testkit",
  "cuora-vault",
  "pavo-driver-kit",
@@ -639,7 +638,6 @@ dependencies = [
  "temp-env",
  "tempfile",
  "time",
- "zeroize",
 ]
 
 [[package]]
@@ -694,6 +692,7 @@ dependencies = [
  "cuora-identity-file",
  "cuora-identity-keyring",
  "cuora-notice",
+ "cuora-sealed",
  "cuora-testkit",
  "cuora-vault",
  "cuora-vault-age",
@@ -708,6 +707,21 @@ dependencies = [
  "thiserror 2.0.21",
  "time",
  "ureq",
+]
+
+[[package]]
+name = "cuora-sealed"
+version = "0.2.0"
+dependencies = [
+ "age",
+ "cuora-core",
+ "cuora-identity",
+ "cuora-identity-file",
+ "serde_json",
+ "tamias-core",
+ "tempfile",
+ "thiserror 2.0.21",
+ "zeroize",
 ]
 
 [[package]]

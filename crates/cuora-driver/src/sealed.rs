@@ -2,7 +2,7 @@
 //!
 //! Tamias carries age-encrypted payloads **opaquely**: the engine,
 //! store, cache, registry, and logs digest ciphertext and never see
-//! plaintext. This module is the decrypt/seal side — the verbs a
+//! plaintext. This module is the argv-verb side — the verbs a
 //! `type: secrets` (or any `sealed:`-carrying) pack's driver answers:
 //!
 //! - `seal` — author-side: plaintext files → `sealed/` payload
@@ -19,6 +19,11 @@
 //! - `install`/`deploy`/`uninstall` — lifecycle no-ops: a sealed
 //!   pack needs no driver action at install time (tamias dispatches
 //!   them because `capabilities.types` claims `secrets`).
+//!
+//! All pack/store/identity/age machinery lives in `cuora-sealed` —
+//! the same crate `cuora-ops` uses for the engine's
+//! `cuora://<pack>/<secret>` ref fallback, so `cuora get`/`run`/
+//! `env` and these verbs share one resolution + decrypt path.
 //!
 //! **Secrets safety:** plaintext exists only inside decrypt buffers
 //! (`Zeroizing`) between read and write; nothing here logs values —
@@ -45,12 +50,10 @@ use std::str::FromStr;
 
 use age::x25519;
 use cuora_core::Op;
-use cuora_identity::IdentitySource;
-use cuora_identity_file::FileIdentity;
 use cuora_ops::{audit, AuditEvent, Outcome};
+use cuora_sealed::{self, Target};
 use serde_json::json;
-use tamias_core::{is_valid_name, Manifest, Sealed, StoreRecord, RECORD_FILE};
-use zeroize::Zeroizing;
+use tamias_core::{is_valid_name, Manifest, Sealed};
 
 /// Flags every sealed verb understands.
 #[derive(Default)]
@@ -118,168 +121,6 @@ fn parse_flags(args: &[String], known: &[&str]) -> Result<(Flags, Vec<String>), 
     Ok((f, pos))
 }
 
-// ------------------------------------------------------------------ store
-
-/// The tamias install store root — mirrors `tamias-cli`'s
-/// `store_root()` minus the config-file location (the driver has no
-/// tamias config surface; `--store`/`TAMIAS_HOME`/XDG cover it).
-fn store_root(store: Option<&Path>) -> PathBuf {
-    if let Some(s) = store {
-        return s.to_path_buf();
-    }
-    if let Some(root) = std::env::var_os("TAMIAS_HOME") {
-        return PathBuf::from(root).join("store");
-    }
-    std::env::var_os("XDG_DATA_HOME")
-        .map(|d| PathBuf::from(d).join("tamias/store"))
-        .or_else(|| {
-            std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share/tamias/store"))
-        })
-        .unwrap_or_else(|| PathBuf::from(".tamias/store"))
-}
-
-/// One installed store entry — dir + record (manifest loads lazily).
-struct Installed {
-    dir: PathBuf,
-    record: StoreRecord,
-    label: String,
-}
-
-impl Installed {
-    /// `name@version` / `@scope/name@version` — same spelling
-    /// `tamias-store-local`'s `StoreEntry::label` produces.
-    fn label_of(record: &StoreRecord) -> String {
-        let scoped = match &record.scope {
-            Some(scope) => format!("@{scope}/{}", record.name),
-            None => record.name.clone(),
-        };
-        let version = record.version.clone().unwrap_or_else(|| {
-            let sha = record
-                .resolved
-                .strip_prefix("sha256:")
-                .unwrap_or(&record.resolved);
-            sha.chars().take(12).collect()
-        });
-        format!("{scoped}@{version}")
-    }
-
-    fn manifest(&self) -> Result<Manifest, String> {
-        Manifest::load(&self.dir).map_err(|e| format!("{}: {e}", self.dir.display()))
-    }
-}
-
-/// Depth-first walk for dirs carrying `.tamias-store.json` — the
-/// same shape `tamias-store-local`'s `collect` uses (dot-dirs and
-/// symlinked records skipped). Unparsable records warn + skip.
-fn scan_store(root: &Path) -> Vec<Installed> {
-    let mut out = Vec::new();
-    collect_entries(root, &mut out);
-    out.sort_by(|a, b| a.label.cmp(&b.label));
-    out
-}
-
-fn collect_entries(dir: &Path, out: &mut Vec<Installed>) {
-    let Ok(read) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in read.flatten() {
-        let path = entry.path();
-        let Ok(ft) = entry.file_type() else { continue };
-        if !ft.is_dir() {
-            continue;
-        }
-        // `file_type` never follows symlinks — a linked dir isn't
-        // an entry (same rule as the store's own walk).
-        if entry.file_name().to_string_lossy().starts_with('.') {
-            continue;
-        }
-        let record_path = path.join(RECORD_FILE);
-        let is_file = std::fs::symlink_metadata(&record_path)
-            .map(|m| m.is_file())
-            .unwrap_or(false);
-        if is_file {
-            match std::fs::read_to_string(&record_path)
-                .ok()
-                .and_then(|t| serde_json::from_str::<StoreRecord>(&t).ok())
-            {
-                Some(record) => {
-                    let label = Installed::label_of(&record);
-                    out.push(Installed {
-                        dir: path,
-                        record,
-                        label,
-                    });
-                }
-                None => eprintln!(
-                    "cuora sealed: skipping unparsable record {}",
-                    record_path.display()
-                ),
-            }
-        } else {
-            collect_entries(&path, out);
-        }
-    }
-}
-
-/// Resolve a pack spec — bare name, `@scope/name`, `name@version`,
-/// or a full `label()` — to an installed entry. Several same-name
-/// installs are an error listing candidates (mirrors
-/// `Store::find`'s ambiguity rule).
-fn find_pack(root: &Path, spec: &str) -> Result<Installed, String> {
-    let entries = scan_store(root);
-    // Exact label first (`@scope/name@1.0.0`, `name@1.0.0`).
-    if let Some(e) = entries.iter().find(|e| e.label == spec) {
-        return Ok(clone_installed(e));
-    }
-    let scoped = |e: &Installed| match &e.record.scope {
-        Some(s) => format!("@{s}/{}", e.record.name),
-        None => e.record.name.clone(),
-    };
-    let mut matches: Vec<&Installed> = entries
-        .iter()
-        .filter(|e| e.record.name == spec || scoped(e) == spec || e.label == spec)
-        .collect();
-    match matches.len() {
-        0 => Err(format!(
-            "sealed pack '{spec}' is not installed under {}",
-            root.display()
-        )),
-        1 => Ok(clone_installed(matches.swap_remove(0))),
-        _ => Err(format!(
-            "sealed pack '{spec}' has several installs — pick one: {}",
-            matches
-                .iter()
-                .map(|e| e.label.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        )),
-    }
-}
-
-fn clone_installed(e: &Installed) -> Installed {
-    Installed {
-        dir: e.dir.clone(),
-        record: e.record.clone(),
-        label: e.label.clone(),
-    }
-}
-
-// ------------------------------------------------------------- resolution
-
-/// What a verb operates on — a payload dir plus its manifest's
-/// `sealed:` block.
-struct Target {
-    /// Human label for messages (`name@version`, `--name`, or the
-    /// `--dir` path).
-    label: String,
-    /// Bare pack name for audit refs — `record.name` from the store,
-    /// `--name`, or the payload dir's file name.
-    pack: String,
-    /// Payload root (the dir holding `tamias.yaml` + `sealed/`).
-    dir: PathBuf,
-    sealed: Sealed,
-}
-
 /// `--dir` mode: the payload dir is handed to us (driver dispatch).
 /// Otherwise resolve `<pack>` (+ optional secret) from the store.
 fn resolve_target(
@@ -287,168 +128,16 @@ fn resolve_target(
     pack_spec: Option<&str>,
     positional_secret: Option<&str>,
 ) -> Result<(Target, Option<String>), String> {
-    if let Some(dir) = &f.dir {
-        let manifest = Manifest::load(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let sealed = manifest
-            .sealed
-            .clone()
-            .ok_or_else(|| format!("{} carries no sealed: block", dir.display()))?;
-        let label = f.name.clone().unwrap_or_else(|| dir.display().to_string());
-        let pack = f
-            .name
-            .clone()
-            .or_else(|| dir.file_name().map(|n| n.to_string_lossy().into_owned()))
-            .unwrap_or_else(|| "payload".into());
-        return Ok((
-            Target {
-                label,
-                pack,
-                dir: dir.clone(),
-                sealed,
-            },
-            positional_secret.map(str::to_string),
-        ));
-    }
-    let spec =
-        pack_spec.ok_or_else(|| "a pack name (or --dir <payload>) is required".to_string())?;
-    let entry = find_pack(&store_root(f.store.as_deref()), spec)?;
-    let manifest = entry.manifest()?;
-    let sealed = manifest
-        .sealed
-        .clone()
-        .ok_or_else(|| format!("pack '{spec}' carries no sealed: block"))?;
-    Ok((
-        Target {
-            label: entry.label.clone(),
-            pack: entry.record.name.clone(),
-            dir: entry.dir.clone(),
-            sealed,
-        },
-        positional_secret.map(str::to_string),
-    ))
-}
-
-/// Parse `cuora://<pack>/<secret>` — the sealed-pack ref form. The
-/// ref grammar allows deeper paths, but a sealed logical name is a
-/// single `sealed.files` key, so exactly two segments.
-fn parse_pack_ref(arg: &str) -> Result<(String, String), String> {
-    let r = cuora_core::Ref::new(arg).map_err(|e| e.to_string())?;
-    let segs = r.segments();
-    if segs.len() != 2 {
-        return Err(format!(
-            "sealed pack ref '{arg}' must be cuora://<pack>/<secret> (got {})",
-            r.path()
-        ));
-    }
-    Ok((segs[0].clone(), segs[1].clone()))
-}
-
-// ---------------------------------------------------------------- identity
-
-/// The identity keyfile source — `--keyfile` or the default
-/// (`$CUORA_IDENTITY_FILE` → `~/.config/cuora/identity.txt`, mode
-/// 0600, legacy `arca` fallback — all inside `FileIdentity`).
-fn identity_source(keyfile: Option<&Path>) -> FileIdentity {
-    match keyfile {
-        Some(p) => FileIdentity::new(p.to_path_buf()),
-        None => FileIdentity::default(),
-    }
-}
-
-fn load_identity(keyfile: Option<&Path>) -> Result<x25519::Identity, String> {
-    let src = identity_source(keyfile);
-    src.load()
-        .map_err(|e| format!("identity from {}: {e}", src.describe()))?
-        .ok_or_else(|| {
-            format!(
-                "no age identity at {} — run `cuora init --with-file` or set CUORA_IDENTITY_FILE",
-                src.path().display()
-            )
-        })
-}
-
-// ------------------------------------------------------------------ age io
-
-/// Encrypt `plain` to every recipient — fresh file key + nonce per
-/// call (age guarantees; re-sealing never reproduces ciphertext).
-fn encrypt(plain: &[u8], recipients: &[x25519::Recipient]) -> Result<Vec<u8>, String> {
-    let encryptor =
-        age::Encryptor::with_recipients(recipients.iter().map(|r| r as &dyn age::Recipient))
-            .map_err(|e| format!("age encryptor: {e}"))?;
-    let mut cipher = Vec::new();
-    let mut w = encryptor
-        .wrap_output(&mut cipher)
-        .map_err(|e| format!("age wrap: {e}"))?;
-    w.write_all(plain).map_err(|e| format!("age write: {e}"))?;
-    w.finish().map_err(|e| format!("age finish: {e}"))?;
-    Ok(cipher)
-}
-
-/// Decrypt an age file with `identity` — scrypt/passphrase files
-/// are refused (sealed packs are recipient-key only, same rule as
-/// the vault).
-fn decrypt(identity: &x25519::Identity, cipher: &[u8]) -> Result<Zeroizing<Vec<u8>>, String> {
-    let decryptor =
-        age::Decryptor::new_buffered(cipher).map_err(|e| format!("not an age file: {e}"))?;
-    if decryptor.is_scrypt() {
-        return Err("sealed payload is passphrase-encrypted; recipient key required".into());
-    }
-    let mut reader = decryptor
-        .decrypt(std::iter::once(identity as &dyn age::Identity))
-        .map_err(|e| format!("decrypt: {e}"))?;
-    let mut buf = Zeroizing::new(Vec::new());
-    std::io::Read::read_to_end(&mut reader, &mut buf)
-        .map_err(|e| format!("read plaintext: {e}"))?;
-    Ok(buf)
-}
-
-/// Parse a recipients file — one `age1…` per line, `#` comments and
-/// blanks skipped (the same shape `sealed/recipients` ships).
-fn parse_recipient_lines(text: &str) -> Result<Vec<String>, String> {
-    let mut out = Vec::new();
-    for (n, line) in text.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        x25519::Recipient::from_str(line).map_err(|e| format!("recipient line {}: {e}", n + 1))?;
-        out.push(line.to_string());
-    }
-    Ok(out)
-}
-
-/// Write `bytes` to `path` with parent dirs created; on unix the
-/// file lands `0600` at open (no world-readable window) — materialized
-/// secrets are as sensitive as the keyfile.
-fn write_secret_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
-    }
-    let mut opts = std::fs::OpenOptions::new();
-    opts.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.mode(0o600);
-    }
-    let mut f = opts
-        .open(path)
-        .map_err(|e| format!("write {}: {e}", path.display()))?;
-    f.write_all(bytes)
-        .map_err(|e| format!("write {}: {e}", path.display()))?;
-    f.sync_all()
-        .map_err(|e| format!("sync {}: {e}", path.display()))
+    let target = cuora_sealed::resolve_target(
+        f.dir.as_deref(),
+        f.name.as_deref(),
+        f.store.as_deref(),
+        pack_spec,
+    )?;
+    Ok((target, positional_secret.map(str::to_string)))
 }
 
 // ------------------------------------------------------------------ audit
-
-fn actor() -> String {
-    std::env::var("CUORA_ACTOR")
-        .ok()
-        .filter(|v| !v.is_empty())
-        .or_else(|| std::env::var("USER").ok())
-        .unwrap_or_else(|| "anon".into())
-}
 
 /// One audit event per materialized secret — `Op::Get` against a
 /// `cuora://<pack>/<name>` ref, env `sealed` (packs aren't
@@ -456,7 +145,7 @@ fn actor() -> String {
 fn audit_open(target: &Target, name: &str, outcome: Outcome) {
     let rref = format!("cuora://{}/{name}", target.pack);
     audit::emit(&AuditEvent::op(
-        &actor(),
+        &cuora_sealed::actor(),
         Op::Get,
         Some(&rref),
         "sealed",
@@ -552,10 +241,10 @@ fn seal_inner(args: &[String]) -> Result<i32, String> {
     for rf in &f.recipient_files {
         let text =
             std::fs::read_to_string(rf).map_err(|e| format!("read {}: {e}", rf.display()))?;
-        recipients.extend(parse_recipient_lines(&text)?);
+        recipients.extend(cuora_sealed::parse_recipient_lines(&text)?);
     }
     if let Some(kf) = &f.keyfile {
-        let id = load_identity(Some(kf))?;
+        let id = cuora_sealed::load_identity(Some(kf))?;
         recipients.push(id.to_public().to_string());
     }
     recipients.sort();
@@ -580,7 +269,7 @@ fn seal_inner(args: &[String]) -> Result<i32, String> {
     let mut files = BTreeMap::new();
     for (name, path) in &secrets {
         let plain = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-        let cipher = encrypt(&plain, &recips)?;
+        let cipher = cuora_sealed::encrypt(&plain, &recips)?;
         let rel = format!("sealed/{name}.age");
         let dest = out.join(&rel);
         if let Some(parent) = dest.parent() {
@@ -642,7 +331,7 @@ fn open_inner(args: &[String]) -> Result<i32, String> {
         }
     } else if pos.len() == 1 {
         if pos[0].starts_with("cuora://") || pos[0].starts_with("arca://") {
-            parse_pack_ref(&pos[0])?
+            cuora_sealed::parse_pack_ref(&pos[0])?
         } else {
             return Err(format!(
                 "open needs <pack> <name> or cuora://<pack>/<name> (got '{}')",
@@ -672,12 +361,12 @@ fn open_inner(args: &[String]) -> Result<i32, String> {
     let cipher_path = target.dir.join(rel);
     let cipher =
         std::fs::read(&cipher_path).map_err(|e| format!("read {}: {e}", cipher_path.display()))?;
-    let identity = load_identity(f.keyfile.as_deref())?;
-    let plain = decrypt(&identity, &cipher)?;
+    let identity = cuora_sealed::load_identity(f.keyfile.as_deref())?;
+    let plain = cuora_sealed::decrypt(&identity, &cipher)?;
 
     match &f.out {
         Some(out) => {
-            write_secret_file(out, &plain)?;
+            cuora_sealed::write_secret_file(out, &plain)?;
             eprintln!("opened {secret} → {}", out.display());
         }
         None => {
@@ -728,17 +417,17 @@ fn materialize_inner(args: &[String]) -> Result<i32, String> {
         }
     }
     let (target, _) = resolve_target(&f, pack_spec, None)?;
-    let identity = load_identity(f.keyfile.as_deref())?;
+    let identity = cuora_sealed::load_identity(f.keyfile.as_deref())?;
 
     let mut wrote = 0usize;
     for (name, rel) in &target.sealed.files {
         let cipher_path = target.dir.join(rel);
         let cipher = std::fs::read(&cipher_path)
             .map_err(|e| format!("read {}: {e}", cipher_path.display()))?;
-        let plain = decrypt(&identity, &cipher)?;
+        let plain = cuora_sealed::decrypt(&identity, &cipher)?;
         // Logical names are manifest-validated ([A-Za-z0-9._-]) —
         // flat files, no traversal possible.
-        write_secret_file(&out.join(name), &plain)?;
+        cuora_sealed::write_secret_file(&out.join(name), &plain)?;
         audit_open(&target, name, Outcome::Ok);
         wrote += 1;
     }
@@ -768,10 +457,10 @@ fn recipients_inner(args: &[String]) -> Result<i32, String> {
     let recipients_path = target.dir.join(&target.sealed.recipients);
     let text = std::fs::read_to_string(&recipients_path)
         .map_err(|e| format!("read {}: {e}", recipients_path.display()))?;
-    let list = parse_recipient_lines(&text)?;
+    let list = cuora_sealed::parse_recipient_lines(&text)?;
 
     // Local match is best-effort: no keyfile → still list publics.
-    let local = match load_identity(f.keyfile.as_deref()) {
+    let local = match cuora_sealed::load_identity(f.keyfile.as_deref()) {
         Ok(id) => Some(id.to_public().to_string()),
         Err(_) => None,
     };
@@ -810,18 +499,18 @@ fn packs_inner(args: &[String]) -> Result<i32, String> {
     if !pos.is_empty() {
         return Err("packs takes no operands".into());
     }
-    let root = store_root(f.store.as_deref());
+    let root = cuora_sealed::store_root(f.store.as_deref());
     let mut found = 0usize;
-    for e in scan_store(&root) {
+    for e in cuora_sealed::scan_store(&root) {
         let Ok(m) = e.manifest() else { continue };
         let Some(sealed) = &m.sealed else { continue };
         let n = sealed.files.len();
         println!(
             "{}\t{}\t{} secret(s)\t{}",
-            e.label,
+            e.label(),
             m.name,
             n,
-            e.dir.display()
+            e.dir().display()
         );
         found += 1;
     }
@@ -929,45 +618,6 @@ mod tests {
     }
 
     #[test]
-    fn encrypt_decrypt_roundtrip() {
-        let (id, pubkey) = identity();
-        let recip = x25519::Recipient::from_str(&pubkey).unwrap();
-        let cipher = encrypt(b"hunter2", &[recip]).unwrap();
-        assert!(cipher.starts_with(tamias_core::AGE_MAGIC));
-        let plain = decrypt(&id, &cipher).unwrap();
-        assert_eq!(&*plain, b"hunter2");
-    }
-
-    #[test]
-    fn decrypt_rejects_wrong_key_and_scrypt_shape() {
-        let (id, pubkey) = identity();
-        let (other, _) = identity();
-        let recip = x25519::Recipient::from_str(&pubkey).unwrap();
-        let cipher = encrypt(b"x", &[recip]).unwrap();
-        assert!(decrypt(&other, &cipher).is_err());
-        assert!(decrypt(&id, b"not age").is_err());
-    }
-
-    #[test]
-    fn recipient_lines_parse_comments_and_blanks() {
-        let (_, pubkey) = identity();
-        let text = format!("# comment\n\n  {pubkey}  \n");
-        assert_eq!(parse_recipient_lines(&text).unwrap(), vec![pubkey]);
-        assert!(parse_recipient_lines("age1bad").is_err());
-    }
-
-    #[test]
-    fn pack_ref_requires_two_segments() {
-        assert_eq!(
-            parse_pack_ref("cuora://secrets-9aia/db-dsn").unwrap(),
-            ("secrets-9aia".into(), "db-dsn".into())
-        );
-        assert!(parse_pack_ref("cuora://onlypack").is_err());
-        assert!(parse_pack_ref("cuora://a/b/c").is_err());
-        assert!(parse_pack_ref("billing/stripe").is_err());
-    }
-
-    #[test]
     fn flags_parse_both_forms() {
         let args: Vec<String> = [
             "--out=/tmp/x",
@@ -986,40 +636,6 @@ mod tests {
         assert_eq!(pos, vec!["pos1".to_string()]);
         assert!(parse_flags(&["--bogus".into()], SEAL_FLAGS).is_err());
         assert!(parse_flags(&["--out".into()], SEAL_FLAGS).is_err());
-    }
-
-    #[test]
-    fn scan_store_finds_entries_and_skips_junk() {
-        let root = tempfile::tempdir().unwrap();
-        let entry = root.path().join("secrets-9aia@1.0.0");
-        std::fs::create_dir_all(&entry).unwrap();
-        std::fs::write(
-            entry.join(RECORD_FILE),
-            r#"{"name":"secrets-9aia","version":"1.0.0","source_ref":"x","resolved":"sha256:abc","digest":"d","installed_at":0}"#,
-        )
-        .unwrap();
-        std::fs::create_dir_all(root.path().join(".hidden")).unwrap();
-        std::fs::write(root.path().join("stray.txt"), "x").unwrap();
-        let found = scan_store(root.path());
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].label, "secrets-9aia@1.0.0");
-        assert_eq!(found[0].record.name, "secrets-9aia");
-    }
-
-    #[test]
-    fn write_secret_file_lands_0600() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("sub/s.txt");
-        write_secret_file(&path, b"v").unwrap();
-        assert_eq!(std::fs::read(&path).unwrap(), b"v");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            assert_eq!(
-                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-                0o600
-            );
-        }
     }
 
     #[test]

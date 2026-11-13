@@ -19,6 +19,7 @@ cuora-identity.workspace = true
 cuora-identity-file.workspace = true
 cuora-identity-keyring.workspace = true
 cuora-notice.workspace = true
+cuora-sealed.workspace = true
 cuora-vault.workspace = true
 cuora-vault-age.workspace = true
 cuora-vault-cached.workspace = true

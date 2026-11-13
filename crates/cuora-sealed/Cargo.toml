@@ -1,0 +1,28 @@
+[package]
+name = "cuora-sealed"
+description = "cuora sealed packs: tamias store resolution, age identity, encrypt/decrypt, and the cuora://<pack>/<secret> engine read path (tamias ADR-0004)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["cuora", "secrets"]
+categories = ["development-tools"]
+
+[dependencies]
+age.workspace = true
+cuora-core.workspace = true
+cuora-identity.workspace = true
+cuora-identity-file.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+# The sealed-pack manifest/store contract — `Manifest.sealed`,
+# `StoreRecord`, `RECORD_FILE`. Git dep like cuora-driver's (path
+# deps break fresh-clone resolution).
+tamias-core = { git = "https://github.com/9aia/tamias", version = "0.1" }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

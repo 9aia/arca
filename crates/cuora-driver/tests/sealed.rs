@@ -307,3 +307,135 @@ fn seal_rejects_bad_input_and_prints_manifest_block() {
     assert!(block.contains("format: age/v1"));
     assert!(block.contains("a: sealed/a.age"));
 }
+
+// ------------------------------------------------ engine pack refs
+//
+// T-051: `cuora://<pack>/<secret>` resolves against installed
+// sealed packs everywhere vault refs do — `get`, `run -s`,
+// `env`, `check`. Vault-first: a vault hit wins over a pack hit.
+
+/// `run get cuora://<pack>/<secret>` — the escape hatch.
+#[test]
+fn engine_get_resolves_pack_ref() {
+    let env = setup();
+    let payload = sealed_payload(&env, "secrets-engine");
+    store_install(&env, &payload, "secrets-engine");
+
+    let g = run(&env, &["run", "get", "cuora://secrets-engine/token"]);
+    assert!(g.status.success(), "get: {}", stderr(&g));
+    assert_eq!(stdout(&g).trim_end(), FAKE);
+    // pack opens audit with env "sealed", op "get" — same shape
+    // as the driver's `open` verb.
+    assert!(stderr(&g).contains("\"env\":\"sealed\""), "{}", stderr(&g));
+    assert!(stderr(&g).contains("\"op\":\"get\""), "{}", stderr(&g));
+}
+
+/// `run env -s VAR=cuora://<pack>/<secret>` — injection surface.
+#[test]
+fn engine_env_and_run_inject_pack_refs() {
+    let env = setup();
+    let payload = sealed_payload(&env, "secrets-inject");
+    store_install(&env, &payload, "secrets-inject");
+
+    let e = run(
+        &env,
+        &["run", "env", "-s", "TOK=cuora://secrets-inject/token"],
+    );
+    assert!(e.status.success(), "env: {}", stderr(&e));
+    let line = stdout(&e);
+    assert!(line.contains("export TOK="), "{line}");
+    assert!(line.contains(FAKE), "{line}");
+    assert!(stderr(&e).contains("\"env\":\"sealed\""), "{}", stderr(&e));
+
+    // `run --` with the var consumed by the child proves the whole
+    // inject→exec path, not just resolution. (driver `run` verb →
+    // engine argv `run -s … -- sh -c …`.)
+    let r = run(
+        &env,
+        &[
+            "run",
+            "run",
+            "-s",
+            "TOK=cuora://secrets-inject/token",
+            "--",
+            "sh",
+            "-c",
+            "test \"$TOK\" = 'fake-sealed-value-not-real'",
+        ],
+    );
+    assert!(r.status.success(), "run: {}", stderr(&r));
+}
+
+/// Vault-first: a vault record at the same ref path shadows the
+/// pack — packs are the migration target, never an override.
+#[test]
+fn engine_vault_wins_over_pack() {
+    let env = setup();
+    let payload = sealed_payload(&env, "secrets-shadow");
+    store_install(&env, &payload, "secrets-shadow");
+
+    // Store a *different* value in the vault at the same path —
+    // `cuora put` reads the value from stdin.
+    let mut put = driver(&env);
+    put.args(["run", "put", "cuora://secrets-shadow/token"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    {
+        use std::io::Write;
+        let mut child = put.spawn().unwrap();
+        child
+            .stdin
+            .as_mut()
+            .unwrap()
+            .write_all(b"vault-value-wins")
+            .unwrap();
+        assert!(child.wait().unwrap().success());
+    }
+
+    let g = run(&env, &["run", "get", "cuora://secrets-shadow/token"]);
+    assert!(g.status.success(), "get: {}", stderr(&g));
+    assert_eq!(stdout(&g).trim_end(), "vault-value-wins");
+    // the vault hit audits under the real env, not "sealed"
+    assert!(!stderr(&g).contains("\"env\":\"sealed\""), "{}", stderr(&g));
+}
+
+/// Honest misses: undeclared pack secret and unknown pack both
+/// report not-stored; `check` resolves declared pack refs without
+/// decrypting.
+#[test]
+fn engine_pack_ref_misses_and_check() {
+    let env = setup();
+    let payload = sealed_payload(&env, "secrets-miss");
+    store_install(&env, &payload, "secrets-miss");
+
+    let ghost = run(&env, &["run", "get", "cuora://secrets-miss/ghost"]);
+    assert!(!ghost.status.success());
+    assert!(stderr(&ghost).contains("not stored"), "{}", stderr(&ghost));
+
+    let nopack = run(&env, &["run", "get", "cuora://secrets-ghost/token"]);
+    assert!(!nopack.status.success());
+    assert!(
+        stderr(&nopack).contains("not stored"),
+        "{}",
+        stderr(&nopack)
+    );
+
+    // `check` with a declared [secrets] pack ref resolves without
+    // an identity/decrypt — config search is ~/.config/cuora/.
+    let cfg_dir = env.home.path().join("home/.config/cuora");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("cuora.toml"),
+        "[secrets]\nTOK = \"cuora://secrets-miss/token\"\nGHOST = \"cuora://secrets-miss/ghost\"\n",
+    )
+    .unwrap();
+    let c = run(&env, &["run", "check"]);
+    // check exits 1 on the GHOST finding but must mark TOK resolved
+    let out = format!("{}{}", stdout(&c), stderr(&c));
+    assert!(out.contains("TOK"), "{out}");
+    let tok_line = out.lines().find(|l| l.contains("TOK")).unwrap();
+    assert!(tok_line.contains("resolves"), "{tok_line}");
+    let ghost_line = out.lines().find(|l| l.contains("GHOST")).unwrap();
+    assert!(ghost_line.contains("NOT STORED"), "{ghost_line}");
+}

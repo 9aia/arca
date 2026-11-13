@@ -13,6 +13,7 @@ members = [
     "crates/cuora-identity-keyring",
     "crates/cuora-notice",
     "crates/cuora-ops",
+    "crates/cuora-sealed",
     "crates/cuora-serve",
     "crates/cuora-shell",
     "crates/cuora-testkit",
@@ -48,6 +49,7 @@ cuora-identity-file = { path = "crates/cuora-identity-file", version = "0.2.0" }
 cuora-identity-keyring = { path = "crates/cuora-identity-keyring", version = "0.2.0" }
 cuora-notice = { path = "crates/cuora-notice", version = "0.2.0" }
 cuora-ops = { path = "crates/cuora-ops", version = "0.2.0" }
+cuora-sealed = { path = "crates/cuora-sealed", version = "0.2.0" }
 cuora-serve = { path = "crates/cuora-serve", version = "0.2.0" }
 cuora-shell = { path = "crates/cuora-shell", version = "0.2.0" }
 cuora-testkit = { path = "crates/cuora-testkit", version = "0.2.0" }
