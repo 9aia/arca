@@ -856,6 +856,30 @@ packs (`@scope/name`) aren't addressable in refs — the two-segment
 shape has no room for the scope; publish unscoped or pin by the
 bare name.
 
+## Migrate a vault ref onto a pack
+
+When a secret moves from the vault into a sealed pack, consumers
+keep their old refs working through `[aliases]` — a config-level
+remap applied during resolution, before vault and pack lookup:
+
+```toml
+# cuora.toml
+[aliases]
+"tamias" = "cuora://secrets-9aia"   # namespace prefix: every
+                                    # cuora://tamias/* ref lands on
+                                    # the pack's keyspace
+```
+
+Keys are bare ref paths (no `cuora://`); the longest key that
+equals the path or prefixes it at a `/` boundary wins, the target
+path replaces the matched segments, and any tail is appended —
+`cuora://tamias/registry-token` resolves as
+`cuora://secrets-9aia/registry-token`. Aliases chain transitively;
+self-aliases and cycles fail config load. Env pins strip first, so
+`cuora://prod/tamias/x` still resolves under `prod`. Materializations
+through an alias audit normally, with `alias_from` recording the
+requested path. See [config](../reference/config.md).
+
 ## Rotate a sealed secret
 
 Sealed packs are immutable ciphertext — rotation means re-sealing:
@@ -1079,6 +1103,7 @@ url: /cuora/reference/config.md
 | `vaults` | `{name: vault}` | optional | Named vault backends. `local` always exists implicitly (age, default paths); an entry only overrides it or adds more. |
 | `envs` | `{env: vault|{vault}}` | optional | Env → vault routing. Envs not listed route to `local`; `dev`/`staging`/`prod` always exist. |
 | `secrets` | `{VAR: cuora://ref}` | optional | The declared secret surface: env-var name → `cuora://` ref. Bounds what `run`/`env` may inject — least privilege, no ambient vault dump. |
+| `aliases` | `{path: cuora://ref}` | optional | `[aliases]` — ref-path prefix → replacement `cuora://` ref (T-052). Applied during ref resolution, after the env pin strips and before any vault/pack lookup: the longest key that equals the path or prefixes it at a segment boundary wins, the target's path replaces the matched segments, and any unmatched remainder is appended. Aliases resolve transitively — a target path may itself match another key — with cycles and self-aliases rejected by \[`Config::validate_aliases`] at config load. Use case: retired vault names (`"tamias" = "cuora://secrets-9aia"`) and namespace dedupes; the target may be a vault *or* a sealed-pack ref — pack fallback sees the rewritten path. |
 | `deploy` | `{name: target}` | optional | Named deploy targets — write-only sinks (`cuora deploy` pushes a stored value in; nothing ever reads one back). |
 | `guardrails` | `table` | optional | Advisory op guardrails — accident prevention for standalone use, honestly *not* a policy boundary (a locally claimed actor is spoofable by construction). |
 | `serve` | `table` | optional | The `cuora serve` surface — ndjson request/response on stdio plus the optional policy decision point. Absent, serve runs with no PDP — same advisory posture as the single-shot CLI. |
@@ -1188,6 +1213,7 @@ breadcrumb.
 | `op` | the verb: `init put get list rm rotate run env check deploy migrate serve manifest schema` |
 | `rref` | the resolved ref path, env pin stripped — same on `denied`/`error` when the arg parses, else the raw arg verbatim. **Absent** on op-scoped events |
 | `env` | the env the op ran under |
+| `alias_from` | **optional** — the pre-alias ref path when `[aliases]` rewrote the request: `rref` is where the value came from, `alias_from` is what was asked. Absent on direct hits |
 | `outcome` | `ok` | `denied` | `error` |
 | `policy` | **serve-path only, optional** — the PDP verdict `{allow, reason?, obligations?}` behind the outcome; absent on every other path |
 

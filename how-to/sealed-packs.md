@@ -96,6 +96,30 @@ packs (`@scope/name`) aren't addressable in refs — the two-segment
 shape has no room for the scope; publish unscoped or pin by the
 bare name.
 
+## Migrate a vault ref onto a pack
+
+When a secret moves from the vault into a sealed pack, consumers
+keep their old refs working through `[aliases]` — a config-level
+remap applied during resolution, before vault and pack lookup:
+
+```toml
+# cuora.toml
+[aliases]
+"tamias" = "cuora://secrets-9aia"   # namespace prefix: every
+                                    # cuora://tamias/* ref lands on
+                                    # the pack's keyspace
+```
+
+Keys are bare ref paths (no `cuora://`); the longest key that
+equals the path or prefixes it at a `/` boundary wins, the target
+path replaces the matched segments, and any tail is appended —
+`cuora://tamias/registry-token` resolves as
+`cuora://secrets-9aia/registry-token`. Aliases chain transitively;
+self-aliases and cycles fail config load. Env pins strip first, so
+`cuora://prod/tamias/x` still resolves under `prod`. Materializations
+through an alias audit normally, with `alias_from` recording the
+requested path. See [config](../reference/config.md).
+
 ## Rotate a sealed secret
 
 Sealed packs are immutable ciphertext — rotation means re-sealing:

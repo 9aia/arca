@@ -24,6 +24,7 @@ breadcrumb.
 | `op` | the verb: `init put get list rm rotate run env check deploy migrate serve manifest schema` |
 | `rref` | the resolved ref path, env pin stripped — same on `denied`/`error` when the arg parses, else the raw arg verbatim. **Absent** on op-scoped events |
 | `env` | the env the op ran under |
+| `alias_from` | **optional** — the pre-alias ref path when `[aliases]` rewrote the request: `rref` is where the value came from, `alias_from` is what was asked. Absent on direct hits |
 | `outcome` | `ok` | `denied` | `error` |
 | `policy` | **serve-path only, optional** — the PDP verdict `{allow, reason?, obligations?}` behind the outcome; absent on every other path |
 

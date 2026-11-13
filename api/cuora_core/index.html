@@ -8,7 +8,7 @@ sources, and the audit wire live in their own crates.</p>
 the <code>human:</code>/<code>agent:</code>-style prefix is allowed but not required.
 Attribution only — never an identity or policy boundary
 (<code>CUORA_ACTOR</code> is self-claimed and spoofable by construction).</dd><dt><a class="mod" href="config/index.html" title="mod cuora_core::config">config</a></dt><dd>The <code>cuora.toml</code>-shaped config model every <code>cuora-config</code> source
-loads. Six tables:</dd><dt><a class="mod" href="env/index.html" title="mod cuora_core::env">env</a></dt><dd>The env axis — <code>dev</code>/<code>staging</code>/<code>prod</code> plus arbitrary lowercase
+loads. Seven tables:</dd><dt><a class="mod" href="env/index.html" title="mod cuora_core::env">env</a></dt><dd>The env axis — <code>dev</code>/<code>staging</code>/<code>prod</code> plus arbitrary lowercase
 names. Env is <em>resolution context</em> (<code>--env</code>/<code>CUORA_ENV</code>/<code>[envs]</code>),
 not part of a ref’s name — and the routing axis that maps an env
 to a vault backend.</dd><dt><a class="mod" href="op/index.html" title="mod cuora_core::op">op</a></dt><dd>The op vocabulary — the verb names guardrails, audit events, and
