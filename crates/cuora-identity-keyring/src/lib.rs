@@ -17,6 +17,12 @@
 //! `cuora-identity-file` — never a crash. Tests drive any
 //! `keyring-core` store through [`KeyringIdentity::with_store`]
 //! (the mock store needs no daemon).
+//!
+//! Store calls run under a bounded wait ([`bounded`]): a locked
+//! collection's unlock prompt has no client-side deadline on the
+//! dbus store, so an unanswered prompt would hang the caller
+//! forever. `CUORA_KEYRING_TIMEOUT_MS` tunes the bound (`0`
+//! waits forever).
 
 use std::str::FromStr;
 use std::sync::Arc;
@@ -33,6 +39,99 @@ pub const USER: &str = "age-identity";
 /// Pre-rename service name — `load` falls back to it so identities
 /// stored by `arca` keep resolving; `store` always writes `cuora`.
 const LEGACY_SERVICE: &str = "arca";
+
+/// Upper bound on one blocking credential-store call. The dbus
+/// secret-service store connects via `SecretService::connect`,
+/// which waits *indefinitely* for a user to answer an unlock
+/// prompt — after a keyring-daemon restart left the login
+/// collection locked, every `cuora` verb sat on the prompt and
+/// looked hung while long-lived `cuora serve` legs (identity
+/// already in memory) kept working. On timeout the op fails with
+/// a typed error naming the escape hatches; the still-blocked
+/// worker thread is left to die with the process (CLI verbs are
+/// one-shot; `serve` just sees an op error per request).
+const OP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// The effective op bound — `CUORA_KEYRING_TIMEOUT_MS` overrides
+/// [`OP_TIMEOUT`]; `0` disables the bound entirely (the old
+/// block-forever behavior, for a human willing to wait out a
+/// prompt). An unparseable value falls back to the default.
+fn op_timeout() -> Option<std::time::Duration> {
+    match std::env::var("CUORA_KEYRING_TIMEOUT_MS") {
+        Ok(v) => match v.parse::<u64>() {
+            Ok(0) => None,
+            Ok(ms) => Some(std::time::Duration::from_millis(ms)),
+            Err(_) => Some(OP_TIMEOUT),
+        },
+        Err(_) => Some(OP_TIMEOUT),
+    }
+}
+
+/// Run `f` on a worker thread and bound the wait — credential
+/// stores are synchronous and a locked collection's unlock prompt
+/// has no client-side deadline, so the bound lives here, above
+/// every backend (dbus prompt, Keychain dialog, Credential
+/// Manager). `what` names the op in the timeout error.
+fn bounded<T, F>(what: &str, f: F) -> Result<T, IdentityError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, IdentityError> + Send + 'static,
+{
+    let Some(timeout) = op_timeout() else {
+        return f();
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name(format!("cuora-keyring-{what}"))
+        .spawn(move || {
+            // A timed-out caller is gone; a late result has
+            // nowhere to go — dropping the send is fine.
+            let _ = tx.send(f());
+        })
+        .map_err(|e| IdentityError::Store(format!("keyring {what} thread: {e}")))?;
+    match rx.recv_timeout(timeout) {
+        Ok(res) => res,
+        Err(_) => Err(IdentityError::Store(format!(
+            "keyring {what} timed out after {}s — the session store is \
+             waiting on an unlock prompt; unlock it, or set \
+             CUORA_IDENTITY_BACKEND=file|auto (CUORA_KEYRING_TIMEOUT_MS \
+             adjusts the bound, 0 waits forever)",
+            timeout.as_secs()
+        ))),
+    }
+}
+
+/// The `cuora`/`age-identity` entry in `store` — the store-level
+/// twin of [`KeyringIdentity::entry_as`], for calls that run on
+/// the bounded worker thread.
+fn entry_in(store: &CredentialStore, service: &str) -> Result<Entry, IdentityError> {
+    store
+        .build(service, USER, None)
+        .map_err(|e| IdentityError::Store(format!("keyring entry: {e}")))
+}
+
+/// The `load` body, run inside [`bounded`] — `store` is the
+/// `Arc`'d credential store moved onto the worker thread.
+fn load_from(store: &CredentialStore) -> Result<Option<x25519::Identity>, IdentityError> {
+    let entry = entry_in(store, SERVICE)?;
+    let text = match entry.get_password() {
+        Ok(t) => t,
+        Err(keyring_core::Error::NoEntry) => {
+            // Pre-rename `arca/age-identity` entries still
+            // resolve — the identity itself is unchanged.
+            match entry_in(store, LEGACY_SERVICE)?.get_password() {
+                Ok(t) => t,
+                Err(keyring_core::Error::NoEntry) => return Ok(None),
+                Err(e) => return Err(IdentityError::Store(format!("keyring get: {e}"))),
+            }
+        }
+        Err(e) => return Err(IdentityError::Store(format!("keyring get: {e}"))),
+    };
+    let line = text.trim();
+    x25519::Identity::from_str(line)
+        .map(Some)
+        .map_err(|e| IdentityError::Parse(format!("keyring identity {SERVICE}/{USER}: {e}")))
+}
 
 /// An age identity held in a `keyring-core` credential store.
 pub struct KeyringIdentity {
@@ -56,14 +155,13 @@ impl KeyringIdentity {
         KeyringIdentity { store }
     }
 
-    /// The `cuora`/`age-identity` entry in this store.
+    /// The `cuora`/`age-identity` entry in this store — test
+    /// surface only; ops go through [`entry_in`] on the bounded
+    /// worker thread.
+    #[cfg(test)]
     fn entry(&self) -> Result<Entry, IdentityError> {
-        self.entry_as(SERVICE)
-    }
-
-    fn entry_as(&self, service: &str) -> Result<Entry, IdentityError> {
         self.store
-            .build(service, USER, None)
+            .build(SERVICE, USER, None)
             .map_err(|e| IdentityError::Store(format!("keyring entry: {e}")))
     }
 }
@@ -72,33 +170,20 @@ impl IdentitySource for KeyringIdentity {
     /// `Ok(None)` when no identity entry exists in the store;
     /// store failures and unparseable material are `Err`.
     fn load(&self) -> Result<Option<x25519::Identity>, IdentityError> {
-        let entry = self.entry()?;
-        let text = match entry.get_password() {
-            Ok(t) => t,
-            Err(keyring_core::Error::NoEntry) => {
-                // Pre-rename `arca/age-identity` entries still
-                // resolve — the identity itself is unchanged.
-                match self.entry_as(LEGACY_SERVICE)?.get_password() {
-                    Ok(t) => t,
-                    Err(keyring_core::Error::NoEntry) => return Ok(None),
-                    Err(e) => return Err(IdentityError::Store(format!("keyring get: {e}"))),
-                }
-            }
-            Err(e) => return Err(IdentityError::Store(format!("keyring get: {e}"))),
-        };
-        let line = text.trim();
-        x25519::Identity::from_str(line)
-            .map(Some)
-            .map_err(|e| IdentityError::Parse(format!("keyring identity {SERVICE}/{USER}: {e}")))
+        let store = Arc::clone(&self.store);
+        bounded("load", move || load_from(&*store))
     }
 
     /// Write the identity into the store (upsert — the platform
-    /// store owns unlock/prompt policy).
+    /// store owns unlock/prompt policy, bounded by [`bounded`]).
     fn store(&self, identity: &x25519::Identity) -> Result<(), IdentityError> {
+        let store = Arc::clone(&self.store);
         let key = identity.to_string();
-        self.entry()?
-            .set_password(key.expose_secret())
-            .map_err(|e| IdentityError::Store(format!("keyring set: {e}")))
+        bounded("store", move || {
+            entry_in(&*store, SERVICE)?
+                .set_password(key.expose_secret())
+                .map_err(|e| IdentityError::Store(format!("keyring set: {e}")))
+        })
     }
 
     fn kind(&self) -> &'static str {
@@ -313,6 +398,7 @@ mod tests {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod store_error_tests {
     use super::*;
     use keyring_core::{Entry, Error};
@@ -353,5 +439,38 @@ mod store_error_tests {
             "dead"
         );
         let _ = keyring_core::api::CredentialStoreApi::as_any(store.as_ref());
+    }
+
+    /// A store whose `build` never answers — the shape of a
+    /// secret-service unlock prompt: reachable bus, no deadline.
+    struct StuckStore;
+
+    impl keyring_core::api::CredentialStoreApi for StuckStore {
+        fn vendor(&self) -> String {
+            "stuck".into()
+        }
+        fn id(&self) -> String {
+            "stuck".into()
+        }
+        fn build(&self, _: &str, _: &str, _: Option<&HashMap<&str, &str>>) -> Result<Entry, Error> {
+            std::thread::sleep(std::time::Duration::from_secs(30));
+            Err(Error::PlatformFailure("unreachable".into()))
+        }
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    #[test]
+    fn a_blocked_store_call_times_out_instead_of_hanging() {
+        // CUORA_KEYRING_TIMEOUT_MS shrinks the bound for the test;
+        // sibling tests in this binary only drive the in-memory
+        // mock (microseconds), so the tiny window can't flake them.
+        std::env::set_var("CUORA_KEYRING_TIMEOUT_MS", "200");
+        let k = KeyringIdentity::with_store(Arc::new(StuckStore) as Arc<CredentialStore>);
+        let e = k.load().err().unwrap().to_string();
+        std::env::remove_var("CUORA_KEYRING_TIMEOUT_MS");
+        assert!(e.contains("timed out"), "{e}");
+        assert!(e.contains("CUORA_IDENTITY_BACKEND"), "{e}");
     }
 }
