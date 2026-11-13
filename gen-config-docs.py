@@ -40,6 +40,9 @@ SIMPLE = {"String": "string", "PathBuf": "path", "bool": "bool",
           "ServeConfig": "table",
           "PdpConfig": "table"}
 
+# Field-name type overrides — same Rust type, different TOML shape.
+FIELD_LABEL = {"aliases": "{path: cuora://ref}"}
+
 def fields(name):
     m = re.search(rf"pub struct {name} \{{(.*?)\n\}}", SRC[name], re.S)
     if not m: return []
@@ -54,7 +57,7 @@ def fields(name):
         opt = (ty.startswith("Option")
                or "serde(default" in prelude)
         inner = ty[7:-1] if ty.startswith("Option") else ty
-        rows.append((fname, SIMPLE.get(inner, inner),
+        rows.append((fname, FIELD_LABEL.get(fname, SIMPLE.get(inner, inner)),
                      "" if opt else "required", doc or "—"))
     return rows
 
