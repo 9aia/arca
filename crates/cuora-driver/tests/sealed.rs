@@ -308,6 +308,73 @@ fn seal_rejects_bad_input_and_prints_manifest_block() {
     assert!(block.contains("a: sealed/a.age"));
 }
 
+/// `seal --manifest <tamias.yaml>` merges the block in place —
+/// comments and unrelated keys survive, an existing `sealed:` block
+/// is replaced rather than duplicated.
+#[test]
+fn seal_manifest_flag_merges_block() {
+    let env = setup();
+    let work = env.home.path().join("merge-work");
+    let src = work.join("plain");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(src.join("token.txt"), FAKE).unwrap();
+    let manifest = work.join("tamias.yaml");
+    std::fs::write(
+        &manifest,
+        "# authored pack — keep this comment\nname: merge-e2e\nversion: \"1.0.0\"\ntype: secrets\ndescription: stays\n\nsealed:\n  format: age/v1\n  recipients: sealed/recipients\n  files:\n    stale: sealed/stale.age\n",
+    )
+    .unwrap();
+    let out = work.join("payload");
+    let o = run(
+        &env,
+        &[
+            "seal",
+            "--in",
+            src.to_str().unwrap(),
+            "--out",
+            out.to_str().unwrap(),
+            "--keyfile",
+            env.keyfile.to_str().unwrap(),
+            "--manifest",
+            manifest.to_str().unwrap(),
+        ],
+    );
+    assert!(o.status.success(), "seal --manifest: {}", stderr(&o));
+    let after = std::fs::read_to_string(&manifest).unwrap();
+    assert!(after.contains("# authored pack — keep this comment"));
+    assert!(after.contains("description: stays"));
+    assert!(after.contains("token: sealed/token.age"));
+    assert!(!after.contains("stale:"));
+    assert!(!after.contains(
+        "sealed:\n  format: age/v1\n  recipients: sealed/recipients\n  files:\n    stale"
+    ));
+    // the merged manifest still parses as a tamias manifest
+    assert!(out.join("sealed/token.age").is_file());
+
+    // merging into a non-manifest fails and leaves it untouched
+    let bogus = work.join("bogus.yaml");
+    std::fs::write(&bogus, "not: a manifest\n").unwrap();
+    let o = run(
+        &env,
+        &[
+            "seal",
+            "--in",
+            src.to_str().unwrap(),
+            "--out",
+            work.join("payload2").to_str().unwrap(),
+            "--keyfile",
+            env.keyfile.to_str().unwrap(),
+            "--manifest",
+            bogus.to_str().unwrap(),
+        ],
+    );
+    assert!(!o.status.success());
+    assert_eq!(
+        std::fs::read_to_string(&bogus).unwrap(),
+        "not: a manifest\n"
+    );
+}
+
 // ------------------------------------------------ engine pack refs
 //
 // T-051: `cuora://<pack>/<secret>` resolves against installed
@@ -398,6 +465,60 @@ fn engine_vault_wins_over_pack() {
     assert_eq!(stdout(&g).trim_end(), "vault-value-wins");
     // the vault hit audits under the real env, not "sealed"
     assert!(!stderr(&g).contains("\"env\":\"sealed\""), "{}", stderr(&g));
+}
+
+/// Two installs of the same pack name: the unpinned ref is an
+/// ambiguity error that teaches the `name@version` pin, and the
+/// pinned ref opens the right payload.
+#[test]
+fn engine_pack_ref_version_pin() {
+    let env = setup();
+    let payload = sealed_payload(&env, "secrets-pinned");
+    store_install(&env, &payload, "secrets-pinned");
+    // A second install, same name, different version — reuse the
+    // payload bytes (same recipients) under a @2.0.0 entry.
+    let entry2 = env.tamias_home.join("store").join("secrets-pinned@2.0.0");
+    std::fs::create_dir_all(&entry2).unwrap();
+    for f in ["tamias.yaml", "sealed/token.age", "sealed/recipients"] {
+        let to = entry2.join(f);
+        std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+        std::fs::copy(payload.join(f), &to).unwrap();
+    }
+    // retag the copied manifest + record as 2.0.0
+    let m = std::fs::read_to_string(entry2.join("tamias.yaml")).unwrap();
+    std::fs::write(
+        entry2.join("tamias.yaml"),
+        m.replace("version: \"1.0.0\"", "version: \"2.0.0\""),
+    )
+    .unwrap();
+    std::fs::write(
+        entry2.join(".tamias-store.json"),
+        r#"{"name":"secrets-pinned","version":"2.0.0","kind":"secrets","source_ref":"./x","resolved":"sha256:def","digest":"d","installed_at":0}"#,
+    )
+    .unwrap();
+
+    // unpinned → ambiguity error naming the pin syntax
+    let amb = run(&env, &["run", "get", "cuora://secrets-pinned/token"]);
+    assert!(!amb.status.success());
+    assert!(stderr(&amb).contains("@<version>"), "{}", stderr(&amb));
+
+    // pinned → opens (both versions carry the same fake plaintext)
+    let pinned = run(&env, &["run", "get", "cuora://secrets-pinned@2.0.0/token"]);
+    assert!(pinned.status.success(), "pinned get: {}", stderr(&pinned));
+    assert_eq!(stdout(&pinned).trim_end(), FAKE);
+
+    // driver verb accepts the same pin spelling
+    let o = run(
+        &env,
+        &[
+            "open",
+            "cuora://secrets-pinned@1.0.0/token",
+            "--keyfile",
+            env.keyfile.to_str().unwrap(),
+        ],
+    );
+    assert!(o.status.success(), "open pinned: {}", stderr(&o));
+    assert_eq!(stdout(&o).trim_end(), FAKE);
 }
 
 /// Honest misses: undeclared pack secret and unknown pack both

@@ -7,10 +7,16 @@
 //!
 //! - `seal` — author-side: plaintext files → `sealed/` payload
 //!   layout (`sealed/recipients` + `sealed/<name>.age`), plus the
-//!   `sealed:` manifest block to paste into `tamias.yaml`.
+//!   `sealed:` manifest block on stdout — or merged straight into a
+//!   `tamias.yaml` with `--manifest <path>` (surgical text merge:
+//!   comments and unrelated keys survive; the result is validated
+//!   as a manifest before it lands).
 //! - `open <pack> <name>` / `open cuora://<pack>/<name>` — decrypt
 //!   one logical secret to stdout or `--out` (0600). The escape
-//!   hatch, like `cuora get`.
+//!   hatch, like `cuora get`. `<pack>` may pin a version —
+//!   `cuora://<pack>@<version>/<name>` or `<pack@version> <name>` —
+//!   the tamias `name@version` label spelling, which is how
+//!   multi-install ambiguity gets resolved.
 //! - `materialize <pack> --out <dir>` — decrypt every declared
 //!   secret into a fresh dir (0600 files).
 //! - `recipients <pack>` — list the pack's age recipients (public
@@ -74,6 +80,9 @@ struct Flags {
     recipients: Vec<String>,
     /// `--recipients <file>` — repeatable recipients files.
     recipient_files: Vec<PathBuf>,
+    /// `--manifest <path>` — merge the printed `sealed:` block into
+    /// this tamias.yaml instead of leaving it paste-by-hand.
+    manifest: Option<PathBuf>,
 }
 
 /// Parse `--flag value` / `--flag=value`; unknown `--x` is an error,
@@ -114,6 +123,7 @@ fn parse_flags(args: &[String], known: &[&str]) -> Result<(Flags, Vec<String>), 
             "--name" => f.name = Some(value),
             "--recipient" => f.recipients.push(value),
             "--recipients" => f.recipient_files.push(PathBuf::from(value)),
+            "--manifest" => f.manifest = Some(PathBuf::from(value)),
             _ => unreachable!("flag checked above"),
         }
         i += 1;
@@ -165,6 +175,7 @@ const SEAL_FLAGS: &[&str] = &[
     "--name",
     "--recipient",
     "--recipients",
+    "--manifest",
 ];
 
 /// `seal` — plaintext files → `sealed/` payload + the manifest block.
@@ -290,6 +301,15 @@ fn seal_inner(args: &[String]) -> Result<i32, String> {
         block.push_str(&format!("    {name}: {rel}\n"));
     }
     print!("{block}");
+    if let Some(manifest) = &f.manifest {
+        merge_sealed_block(manifest, &block)?;
+        eprintln!("merged the sealed: block into {}", manifest.display());
+    } else if out.join("tamias.yaml").exists() {
+        eprintln!(
+            "hint: {} exists — re-run with --manifest to merge the block",
+            out.join("tamias.yaml").display()
+        );
+    }
     eprintln!(
         "sealed {} secret(s) → {} ({} recipient(s)) — merge the block above into tamias.yaml, then `tamias pack`",
         secrets.len(),
@@ -297,6 +317,127 @@ fn seal_inner(args: &[String]) -> Result<i32, String> {
         recipients.len()
     );
     Ok(0)
+}
+
+// ------------------------------------------------------- manifest merge
+
+/// Merge the generated `sealed:` block into an existing
+/// `tamias.yaml`, preserving everything outside the block — comments,
+/// key order, quoting, unrelated sections all survive byte-for-byte.
+///
+/// This is a *surgical text* merge, not a YAML round-trip: serde_yaml
+/// would drop comments and reflow the file, which is exactly what an
+/// author hand-merging wants to avoid. The trade-off is that block
+/// detection is line-oriented — a top-level `sealed:` key and the
+/// indented lines belonging to it. Anything weirder (a `sealed:` key
+/// hidden inside a literal block scalar is impossible at column 0;
+/// a column-0 comment *inside* the sealed mapping truncates the
+/// replaced region) either merges correctly or fails the post-merge
+/// [`Manifest::load_at`] validation with the file left untouched.
+///
+/// The merge is validated before it lands: the result is written to
+/// a sibling temp file, parsed as a tamias manifest, and only then
+/// renamed over the original (permissions carried over).
+fn merge_sealed_block(path: &Path, block: &str) -> Result<(), String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    // The target must already be a valid package manifest — merging
+    // into a project/deps-only tamias.yaml is out of scope.
+    Manifest::load_at(path).map_err(|e| {
+        format!(
+            "{} is not a valid tamias package manifest ({e}) — --manifest merges into a pack's tamias.yaml",
+            path.display()
+        )
+    })?;
+    let merged = merge_sealed_text(&text, block);
+    commit_manifest(path, &merged)
+}
+
+/// The pure half of [`merge_sealed_block`]: splice `block` (a
+/// `sealed:\n…` YAML fragment) into `text` at the top-level `sealed:`
+/// key, replacing its old block, or appending at EOF when absent.
+fn merge_sealed_text(text: &str, block: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    // Locate the top-level `sealed:` key — column 0, `key:` followed
+    // by end-of-line, whitespace, or a comment.
+    let key_at = lines.iter().position(|l| {
+        l.strip_prefix("sealed:").is_some_and(|rest| {
+            rest.is_empty()
+                || rest.starts_with(' ')
+                || rest.starts_with('\t')
+                || rest.starts_with('#')
+        })
+    });
+    let block_lines: Vec<&str> = block.lines().collect();
+    let mut out: Vec<&str> = Vec::with_capacity(lines.len() + block_lines.len() + 2);
+    match key_at {
+        Some(i) => {
+            out.extend_from_slice(&lines[..i]);
+            out.extend(block_lines.iter().copied());
+            // The old block runs while lines stay inside the mapping:
+            // blank or indented. A column-0 line (next key, comment,
+            // `---`/`...`) ends it — a column-0 comment *inside* the
+            // mapping truncates the splice and the post-merge
+            // validation reports it rather than eating the comment.
+            let mut j = i + 1;
+            while j < lines.len() {
+                let l = lines[j];
+                if l.trim().is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+                    j += 1;
+                } else {
+                    break;
+                }
+            }
+            out.extend_from_slice(&lines[j..]);
+        }
+        None => {
+            out.extend_from_slice(&lines);
+            // Separate the appended block from a non-empty tail.
+            if out.last().is_some_and(|l| !l.trim().is_empty()) {
+                out.push("");
+            }
+            out.extend(block_lines.iter().copied());
+        }
+    }
+    let mut s = out.join("\n");
+    s.push('\n');
+    s
+}
+
+/// Validate `merged` as a tamias manifest, then rename it over
+/// `path`. The temp file keeps the `.yaml` extension so
+/// [`Manifest::load_at`] picks the YAML parser, and inherits the
+/// original's permissions before the rename.
+fn commit_manifest(path: &Path, merged: &str) -> Result<(), String> {
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| format!("{} has no usable file name", path.display()))?;
+    let tmp = path.with_file_name(format!("{file_name}.cuora-merge.yaml"));
+    let write = |p: &Path| -> Result<(), String> {
+        std::fs::write(p, merged).map_err(|e| format!("write {}: {e}", p.display()))
+    };
+    write(&tmp)?;
+    if let Ok(meta) = std::fs::metadata(path) {
+        let _ = std::fs::set_permissions(&tmp, meta.permissions());
+    }
+    let result = Manifest::load_at(&tmp).map_err(|e| {
+        format!(
+            "merged manifest failed validation ({e}) — {} left untouched",
+            path.display()
+        )
+    });
+    match result {
+        Ok(_) => {
+            std::fs::rename(&tmp, path)
+                .map_err(|e| format!("rename {} → {}: {e}", tmp.display(), path.display()))?;
+            Ok(())
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            Err(e)
+        }
+    }
 }
 
 // ------------------------------------------------------- open/materialize
@@ -727,6 +868,68 @@ mod tests {
         .unwrap();
         assert_eq!(lifecycle("install", &args), 0);
         assert_eq!(lifecycle("uninstall", &args), 0);
+    }
+
+    const BLOCK: &str = "sealed:\n  format: age/v1\n  recipients: sealed/recipients\n  files:\n    token: sealed/token.age\n";
+
+    #[test]
+    fn manifest_merge_text_append_and_replace() {
+        // Append: no sealed key — block lands at EOF, comments kept.
+        let src = "# pack header\nname: x\nversion: \"1.0.0\"\ntype: secrets\n";
+        let m = merge_sealed_text(src, BLOCK);
+        assert!(m.starts_with("# pack header\nname: x"));
+        assert!(m.contains("\ntype: secrets\n\nsealed:\n"));
+        assert!(m.trim_end().ends_with("token: sealed/token.age"));
+
+        // Replace: old block swapped, position + neighbors preserved.
+        let src = "name: x\nversion: \"1.0.0\"\n# keep me\ntype: secrets\n\nsealed:\n  format: age/v1\n  recipients: sealed/recipients\n  files:\n    old: sealed/old.age\n\nbins:\n  - name: b\n";
+        let m = merge_sealed_text(src, BLOCK);
+        assert!(m.contains("# keep me"));
+        assert!(m.contains("bins:\n  - name: b\n"));
+        assert!(!m.contains("old: sealed/old.age"));
+        assert!(m.contains("token: sealed/token.age"));
+        assert!(m.find("sealed:").unwrap() < m.find("bins:").unwrap());
+
+        // Inline `sealed: {}` is a one-line block — replaced whole.
+        let m = merge_sealed_text("name: x\nversion: \"1.0.0\"\nsealed: {}\n", BLOCK);
+        assert!(!m.contains("sealed: {}"));
+        assert!(m.contains("files:\n    token: sealed/token.age"));
+
+        // `sealed:` with a trailing comment still counts as the key.
+        let m = merge_sealed_text(
+            "name: x\nversion: \"1.0.0\"\nsealed: # ciphertext only\n  files: {}\n",
+            BLOCK,
+        );
+        assert!(m.contains("format: age/v1"));
+        assert!(!m.contains("ciphertext only"));
+    }
+
+    #[test]
+    fn manifest_merge_block_validates_and_replaces() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = dir.path().join("tamias.yaml");
+        std::fs::write(
+            &manifest,
+            "# authored pack\nname: merge-test\nversion: \"1.0.0\"\ntype: secrets\n\nsealed:\n  format: age/v1\n  recipients: sealed/recipients\n  files:\n    stale: sealed/stale.age\n",
+        )
+        .unwrap();
+        merge_sealed_block(&manifest, BLOCK).unwrap();
+        let after = std::fs::read_to_string(&manifest).unwrap();
+        assert!(after.starts_with("# authored pack\nname: merge-test"));
+        assert!(after.contains("token: sealed/token.age"));
+        assert!(!after.contains("stale:"));
+        // temp merge file is gone
+        assert!(!dir.path().join("tamias.yaml.cuora-merge.yaml").exists());
+        // and the result still loads as a manifest
+        Manifest::load_at(&manifest).unwrap();
+
+        // A non-manifest target fails before touching the file.
+        let bogus = dir.path().join("bogus.yaml");
+        std::fs::write(&bogus, "just: a\nrandom: doc\n").unwrap();
+        let before = std::fs::read_to_string(&bogus).unwrap();
+        assert!(merge_sealed_block(&bogus, BLOCK).is_err());
+        assert_eq!(std::fs::read_to_string(&bogus).unwrap(), before);
+        assert!(!dir.path().join("bogus.yaml.cuora-merge.yaml").exists());
     }
 
     #[test]

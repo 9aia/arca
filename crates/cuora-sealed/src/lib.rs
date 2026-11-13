@@ -14,7 +14,11 @@
 //!   exists only between read and write, never logged;
 //! - [`open_pack_ref`] / [`pack_declares`] — the engine's read
 //!   path: `cuora://<pack>/<secret>` resolves to a decrypted
-//!   value (or a declared-secret probe for `cuora check`).
+//!   value (or a declared-secret probe for `cuora check`). The pack
+//!   segment may carry a `@<version>`/`@<sha>` pin —
+//!   `cuora://secrets-9aia@1.0.0/registry-token` — matching the
+//!   tamias store label spelling; an unpinned name matching several
+//!   installs is an ambiguity error, never a silent pick.
 //!
 //! The argv verbs (`seal`/`open`/`materialize`/`recipients`/
 //! `packs`) live in `cuora-driver`'s `sealed` module and call
@@ -115,8 +119,11 @@ pub enum FindPackError {
         /// The store root searched.
         root: PathBuf,
     },
-    /// Several same-name installs — pick one by label.
-    #[error("sealed pack '{spec}' has several installs — pick one: {candidates}")]
+    /// Several same-name installs — pin one by label
+    /// (`<spec>@<version>`, the tamias `name@version` spelling).
+    #[error(
+        "sealed pack '{spec}' has several installs — pin one as '{spec}@<version>' ({candidates})"
+    )]
     Ambiguous {
         /// The spec that was looked up.
         spec: String,
@@ -287,7 +294,9 @@ pub fn resolve_target(
 
 /// Parse `cuora://<pack>/<secret>` — the sealed-pack ref form. The
 /// ref grammar allows deeper paths, but a sealed logical name is a
-/// single `sealed.files` key, so exactly two segments.
+/// single `sealed.files` key, so exactly two segments. `<pack>` may
+/// itself be a store spec — bare name, `@scope/name`, or a
+/// `name@version`/`name@<sha>` pin (see [`find_pack`]).
 pub fn parse_pack_ref(arg: &str) -> Result<(String, String), String> {
     let r = Ref::new(arg).map_err(|e| e.to_string())?;
     let segs = r.segments();
@@ -589,11 +598,8 @@ mod tests {
         }
     }
 
-    /// Build a fake store entry: `<root>/<label>/` with a store
-    /// record + `tamias.yaml` carrying a `sealed:` block + the
-    /// encrypted payload, all keyed to `keyfile`'s identity.
-    /// Returns nothing — asserts inside on setup failure.
-    fn fake_store(root: &Path, label: &str, name: &str, secret: &str, value: &[u8], kf: &Path) {
+    /// Write a FileIdentity-format keyfile, returning the public key.
+    fn identity_keyfile(kf: &Path) -> String {
         let (id, pubkey) = identity();
         // The keyfile the caller passes must BE this identity —
         // write it here so callers don't duplicate the format.
@@ -610,7 +616,21 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(kf, std::fs::Permissions::from_mode(0o600)).unwrap();
         }
-        let recip = x25519::Recipient::from_str(&pubkey).unwrap();
+        pubkey
+    }
+
+    /// Build a fake store entry sealed TO `pubkey` — the shared
+    /// half of [`fake_store`] for multi-install fixtures.
+    fn fake_store_pub(
+        root: &Path,
+        label: &str,
+        name: &str,
+        version: &str,
+        secret: &str,
+        value: &[u8],
+        pubkey: &str,
+    ) {
+        let recip = x25519::Recipient::from_str(pubkey).unwrap();
         let cipher = encrypt(value, &[recip]).unwrap();
 
         let dir = root.join(label);
@@ -620,17 +640,26 @@ mod tests {
         std::fs::write(
             dir.join("tamias.yaml"),
             format!(
-                "name: {name}\nversion: \"1.0.0\"\ntype: secrets\nsealed:\n  format: age/v1\n  recipients: sealed/recipients\n  files:\n    {secret}: sealed/{secret}.age\n"
+                "name: {name}\nversion: \"{version}\"\ntype: secrets\nsealed:\n  format: age/v1\n  recipients: sealed/recipients\n  files:\n    {secret}: sealed/{secret}.age\n"
             ),
         )
         .unwrap();
         std::fs::write(
             dir.join(RECORD_FILE),
             format!(
-                r#"{{"name":"{name}","version":"1.0.0","source_ref":"x","resolved":"sha256:abc","digest":"d","installed_at":0}}"#
+                r#"{{"name":"{name}","version":"{version}","source_ref":"x","resolved":"sha256:abc","digest":"d","installed_at":0}}"#
             ),
         )
         .unwrap();
+    }
+
+    /// Build a fake store entry: `<root>/<label>/` with a store
+    /// record + `tamias.yaml` carrying a `sealed:` block + the
+    /// encrypted payload, all keyed to `keyfile`'s identity.
+    /// Returns nothing — asserts inside on setup failure.
+    fn fake_store(root: &Path, label: &str, name: &str, secret: &str, value: &[u8], kf: &Path) {
+        let pubkey = identity_keyfile(kf);
+        fake_store_pub(root, label, name, "1.0.0", secret, value, &pubkey);
     }
 
     #[test]
@@ -708,6 +737,64 @@ mod tests {
             Some(&dir.path().join("absent.txt"))
         )
         .is_err());
+    }
+
+    #[test]
+    fn version_pin_resolves_ambiguous_installs() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = dir.path().join("store");
+        std::fs::create_dir_all(&store).unwrap();
+        let kf = dir.path().join("identity.txt");
+        let pubkey = identity_keyfile(&kf);
+        // Two installs of the same pack name, different versions —
+        // sealed to the SAME recipient so one keyfile opens both.
+        fake_store_pub(
+            &store,
+            "secrets-dup@1.0.0",
+            "secrets-dup",
+            "1.0.0",
+            "token",
+            b"value-v1",
+            &pubkey,
+        );
+        fake_store_pub(
+            &store,
+            "secrets-dup@2.0.0",
+            "secrets-dup",
+            "2.0.0",
+            "token",
+            b"value-v2",
+            &pubkey,
+        );
+
+        // Unpinned → Ambiguous, and the message teaches the pin.
+        match find_pack(&store, "secrets-dup") {
+            Err(FindPackError::Ambiguous { spec, candidates }) => {
+                assert_eq!(spec, "secrets-dup");
+                assert!(candidates.contains("secrets-dup@1.0.0"));
+                assert!(candidates.contains("secrets-dup@2.0.0"));
+            }
+            other => panic!("expected Ambiguous, got {other:?}"),
+        }
+        // The pin spelling is the tamias `name@version` label.
+        for (pin, want) in [
+            ("secrets-dup@1.0.0", b"value-v1".as_slice()),
+            ("secrets-dup@2.0.0", b"value-v2".as_slice()),
+        ] {
+            match open_pack_ref(pin, "token", Some(&store), Some(&kf)).unwrap() {
+                PackOpen::Hit(v) => assert_eq!(&*v, want),
+                other => panic!("expected Hit for {pin}, got {}", variant(&other)),
+            }
+            assert!(pack_declares(pin, "token", Some(&store)).unwrap());
+        }
+        // A pin that matches nothing is a plain miss, not ambiguity.
+        assert!(matches!(
+            open_pack_ref("secrets-dup@9.9.9", "token", Some(&store), Some(&kf)).unwrap(),
+            PackOpen::Miss
+        ));
+        // And the engine-facing error for the unpinned ref names the fix.
+        let err = open_pack_ref("secrets-dup", "token", Some(&store), Some(&kf)).unwrap_err();
+        assert!(err.contains("@<version>"), "{err}");
     }
 
     fn variant(o: &PackOpen) -> &'static str {

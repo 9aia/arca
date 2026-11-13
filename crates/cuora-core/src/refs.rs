@@ -86,14 +86,19 @@ impl Ref {
 }
 
 /// Is `s` a valid ref path segment? Non-empty, not `.`/`..`, chars ∈
-/// `[A-Za-z0-9._-]`. Path-safe by construction so segments can never
+/// `[A-Za-z0-9._@-]`. Path-safe by construction so segments can never
 /// escape a vault keyspace onto a filesystem path.
+///
+/// `@` is allowed for one consumer: sealed-pack refs pin a pack
+/// version as `cuora://<pack>@<version>/<secret>` — the same
+/// `name@version` spelling tamias store labels use (see
+/// `cuora-sealed`). For vault refs `@` is just another key char.
 pub fn is_valid_segment(s: &str) -> bool {
     !s.is_empty()
         && s != "."
         && s != ".."
         && s.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'@' | b'-'))
 }
 
 /// Failure to parse an [`Ref`] (see [`Ref::new`]).
@@ -156,6 +161,16 @@ mod tests {
         assert_eq!(r.to_string(), "cuora://billing/stripe");
         let one = Ref::new("cuora://token").unwrap();
         assert_eq!(one.segments(), &["token"]);
+        // `@` rides in segments for sealed-pack version pins —
+        // `cuora://<pack>@<version>/<secret>` (tamias `name@version`
+        // spelling); for vault refs it's just another key char.
+        let pinned = Ref::new("cuora://secrets-9aia@1.0.0/registry-token").unwrap();
+        assert_eq!(pinned.segments(), &["secrets-9aia@1.0.0", "registry-token"]);
+        assert_eq!(pinned.path(), "secrets-9aia@1.0.0/registry-token");
+        assert_eq!(
+            pinned.to_string(),
+            "cuora://secrets-9aia@1.0.0/registry-token"
+        );
     }
 
     #[test]

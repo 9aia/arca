@@ -110,6 +110,17 @@ the resolution context (`dev` default); `cuora://prod/ns/name`
 pins the env explicitly. Envs are also the routing axis — same
 ref, different backend per env.
 
+A two-segment ref can also name a **sealed pack** secret —
+`cuora://<pack>/<secret>` resolves against tamias-installed
+age-ciphertext packs on a vault miss (vault-first; packs are the
+migration target, never an override). `cuora://<pack>@<version>/…`
+pins a pack version when several are installed — the tamias
+`name@version` spelling; unpinned ambiguity is an error, not a
+silent pick. `tamias-driver-cuora` owns the author/consumer verbs
+(`seal`/`open`/`materialize`/`recipients`/`packs`);
+[docs/how-to/sealed-packs.md](docs/how-to/sealed-packs.md) is the
+walkthrough (on the `docs` worktree → `9aia.com/cuora`).
+
 ## Features
 
 - **references, not values** — `cuora://name` URIs in code/config;

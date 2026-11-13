@@ -10,12 +10,12 @@ use cuora_core::{
 };
 use proptest::prelude::*;
 
-/// A valid ref segment: 1–24 chars from `[A-Za-z0-9._-]`, never
+/// A valid ref segment: 1–24 chars from `[A-Za-z0-9._@-]`, never
 /// `.` or `..` — the exact [`is_valid_segment`] contract.
 fn arb_segment() -> impl Strategy<Value = String> {
     prop::collection::vec(
         prop_oneof![prop::sample::select(
-            &b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-"[..]
+            &b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._@-"[..]
         )
         .prop_map(char::from)],
         1..=24,

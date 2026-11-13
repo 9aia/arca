@@ -1190,7 +1190,11 @@ impl Ops {
 
     /// The sealed-pack fallback read: `r` is already known to be a
     /// [`Self::pack_candidate`] — `cuora://<pack>/<secret>` against
-    /// the tamias install store. `Ok(None)` means no installed
+    /// the tamias install store. `<pack>` may carry a
+    /// `@<version>`/`@<sha>` pin (`cuora://secrets-9aia@1.0.0/token`)
+    /// which `cuora-sealed`'s store lookup resolves exactly; an
+    /// unpinned name matching several installs surfaces the
+    /// ambiguity error rather than silently picking. `Ok(None)` means no installed
     /// sealed pack answers (caller reports its usual miss);
     /// `Err` surfaces real failures — ambiguous installs, missing
     /// identity, undecryptable payload — rather than degrading to a

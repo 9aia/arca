@@ -124,10 +124,15 @@ everything that touches keys or plaintext (`src/sealed.rs`):
 - `seal --in <dir>|NAME=PATH… --out <payload> --recipient age1…`
   (or `--recipients <file>` / `--keyfile`) — encrypts files into
   `sealed/` (`recipients` + `<name>.age`) and prints the `sealed:`
-  manifest block to merge into `tamias.yaml`.
+  manifest block; `--manifest <tamias.yaml>` merges it into the pack
+  manifest in place (comments preserved, result validated before it
+  lands).
 - `open <pack> <name>` / `open cuora://<pack>/<name>` — decrypt one
   secret to stdout or `--out` (0600). `--dir <payload>` is the
-  `tamias driver exec` dispatch form.
+  `tamias driver exec` dispatch form. `<pack>` may pin a version —
+  `cuora://<pack>@<version>/<name>` — the tamias `name@version`
+  spelling; several same-name installs without a pin are an
+  ambiguity error, never a silent pick.
 - `materialize <pack> --out <dir>` — decrypt every declared secret
   into a fresh dir (0600 files, refuses a non-empty target).
 - `recipients <pack>` — the pack's public age recipients, marking
