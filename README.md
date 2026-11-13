@@ -97,6 +97,10 @@ prod = { vault = "cloud" }
 [secrets]                     # the declared surface run/env may inject
 STRIPE_KEY = "cuora://billing/stripe"
 
+[aliases]                     # ref-path prefix → replacement ref —
+"tamias" = "cuora://secrets-9aia"   # retired names / namespace moves,
+                              # applied at resolve time before lookup
+
 [guardrails]                  # advisory op table — accident prevention,
 deny = ["get"]                # not policy (CUORA_ACTOR is self-claimed)
 
@@ -109,6 +113,18 @@ Refs: `cuora://ns/name` names the secret; `--env`/`CUORA_ENV` picks
 the resolution context (`dev` default); `cuora://prod/ns/name`
 pins the env explicitly. Envs are also the routing axis — same
 ref, different backend per env.
+
+`[aliases]` remaps ref paths at resolution time: keys are bare ref
+paths (quoted in TOML when they contain `/`), values are `cuora://`
+refs. The longest key that equals the path or prefixes it at a `/`
+boundary wins; the target's path replaces the matched segments and
+any tail is appended — `"tamias" = "cuora://secrets-9aia"` sends
+`cuora://tamias/registry-token` to `cuora://secrets-9aia/registry-token`,
+vault *or* sealed pack. Aliases chain transitively; self-aliases and
+cycles fail config load. Env pins strip first, so
+`cuora://prod/tamias/x` still resolves under `prod`, and alias
+materializations audit with an `alias_from` field naming the
+requested path.
 
 A two-segment ref can also name a **sealed pack** secret —
 `cuora://<pack>/<secret>` resolves against tamias-installed

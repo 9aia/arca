@@ -278,15 +278,19 @@ fn declared_rows(ctx: &Ctx) -> Value {
         .config()
         .secrets
         .iter()
-        .map(|(var, rref)| {
-            let (env, stripped) = ops.resolve(rref);
-            json!({
+        .map(|(var, rref)| match ops.resolve(rref) {
+            Ok((env, stripped)) => json!({
                 "var": var,
                 "ref": rref.to_string(),
                 "resolved_ref": stripped.to_string(),
                 "env": env.as_str(),
                 "vault": ops.config().vault_for(&env),
-            })
+            }),
+            Err(e) => json!({
+                "var": var,
+                "ref": rref.to_string(),
+                "error": e.to_string(),
+            }),
         })
         .collect();
     Value::Array(rows)
@@ -384,7 +388,10 @@ fn secret_payload(ctx: &Ctx, params: &Map<String, Value>) -> Value {
         Ok(o) => o,
         Err(e) => return error_payload(e),
     };
-    let (env, stripped) = ops.resolve(&rref);
+    let (env, stripped) = match ops.resolve(&rref) {
+        Ok(pair) => pair,
+        Err(e) => return error_payload(e.to_string()),
+    };
     let vault_name = ops.config().vault_for(&env).to_string();
     let mut out = Map::new();
     out.insert("ref".into(), json!(rref.to_string()));

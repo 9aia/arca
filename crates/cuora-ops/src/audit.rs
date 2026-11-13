@@ -133,6 +133,11 @@ pub struct AuditEvent {
     pub rref: Option<String>,
     /// The env the op ran under.
     pub env: String,
+    /// The pre-alias ref path when `[aliases]` rewrote the request
+    /// (T-052) — `rref` shows where the value came from, this shows
+    /// what was asked. Absent on direct hits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alias_from: Option<String>,
     /// How it ended.
     pub outcome: Outcome,
     /// The PDP verdict behind this event — serve-path only.
@@ -160,9 +165,17 @@ impl AuditEvent {
             op,
             rref: rref.map(str::to_string),
             env: env.to_string(),
+            alias_from: None,
             outcome,
             policy: None,
         }
+    }
+
+    /// Record the pre-alias path a `[aliases]` rewrite replaced —
+    /// serve/CLI paths set it when resolution went through a remap.
+    pub fn with_alias_from(mut self, from: Option<&str>) -> Self {
+        self.alias_from = from.map(str::to_string);
+        self
     }
 
     /// Attach the PDP verdict that gated this event (serve path).

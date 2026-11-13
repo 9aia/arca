@@ -66,6 +66,22 @@
 # STRIPE_API_KEY = "cuora://billing/stripe"
 # DATABASE_URL = "cuora://db/url"
 
+# Ref aliases — retired names and namespace moves, applied during
+# resolution before any vault/pack lookup. Keys are bare ref paths
+# (quote them — `/` isn't a bare-key char); values are cuora:// refs.
+# The longest key that equals the path or prefixes it at a `/`
+# boundary wins; the target path replaces the matched segments and
+# any tail appends — "tamias" below sends cuora://tamias/x to
+# cuora://secrets-9aia/x (a vault hit or a sealed-pack fallback —
+# the target can be either). Chains resolve transitively;
+# self-aliases and cycles fail config load. Env pins strip first:
+# cuora://prod/tamias/x aliases the path but still resolves under
+# prod. Aliased materializations audit with `alias_from` set.
+#
+# [aliases]
+# "tamias" = "cuora://secrets-9aia"
+# "bupha/registry-token" = "cuora://peregrin/registry-token"
+
 # Guardrails — advisory, deny-listed ops always lose. Accident
 # prevention for standalone use, NOT a policy boundary (CUORA_ACTOR
 # is self-claimed; real enforcement is peregrin's).

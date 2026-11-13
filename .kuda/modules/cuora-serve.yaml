@@ -90,7 +90,7 @@ api:
 - name: a_doomed_request_never_consults_the_pdp
   kind: function
   file: crates/cuora-serve/src/lib.rs
-  line: 1126
+  line: 1134
   module: cuora-serve
 - name: a_flooding_pdp_stays_bounded_and_dies
   kind: function
@@ -120,22 +120,22 @@ api:
 - name: allow_on_error_runs_with_a_degraded_verdict
   kind: function
   file: crates/cuora-serve/src/lib.rs
-  line: 1157
+  line: 1165
   module: cuora-serve
 - name: check_json
   kind: function
   file: crates/cuora-serve/src/lib.rs
-  line: 708
+  line: 716
   module: cuora-serve
 - name: check_manifest_shutdown_and_unknown_ops
   kind: function
   file: crates/cuora-serve/src/lib.rs
-  line: 996
+  line: 1004
   module: cuora-serve
 - name: consult
   kind: function
   file: crates/cuora-serve/src/lib.rs
-  line: 476
+  line: 481
   module: cuora-serve
 - name: cuora-serve
   kind: module
@@ -160,7 +160,7 @@ api:
 - name: eof_is_a_clean_exit
   kind: function
   file: crates/cuora-serve/src/lib.rs
-  line: 1243
+  line: 1251
   module: cuora-serve
 - name: err_reply
   kind: function
@@ -175,22 +175,22 @@ api:
 - name: execute
   kind: function
   file: crates/cuora-serve/src/lib.rs
-  line: 625
+  line: 633
   module: cuora-serve
 - name: field_caps_are_bad_request
   kind: function
   file: crates/cuora-serve/src/lib.rs
-  line: 1211
+  line: 1219
   module: cuora-serve
 - name: field_validation_is_bad_request
   kind: function
   file: crates/cuora-serve/src/lib.rs
-  line: 924
+  line: 932
   module: cuora-serve
 - name: fixture
   kind: function
   file: crates/cuora-serve/src/lib.rs
-  line: 834
+  line: 842
   module: cuora-serve
 - name: guardrail_reply
   kind: function
@@ -200,7 +200,7 @@ api:
 - name: guardrails_still_deny_advisory
   kind: function
   file: crates/cuora-serve/src/lib.rs
-  line: 1177
+  line: 1185
   module: cuora-serve
 api_omitted: 31
 deps:
@@ -234,8 +234,8 @@ provenance:
   - crates/cuora-serve/src/pdp.rs
   hashes:
   - 874e99d5adec58f0aa1b68fab12d8bd79bbbf622
-  - 019c55fd8352b092c095cd1dbe2236915423719c
+  - eb18e8e881035eef9061e055a055c9e84798bcfc
   - 0f2aaea9d9ecb66f87a1caff2e56d57d4d272b92
-  commit_sha: 9aa078807f3d952dd07e69bd48851e3ce8243869
-  generated_at: '1794488905'
+  commit_sha: 7edd027d33c573ea9fd5ad1dbb15d75a768548a7
+  generated_at: '1794601469'
   generator: kuda-template/0.1.4

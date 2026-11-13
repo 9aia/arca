@@ -55,6 +55,14 @@ impl Ref {
         Ok(Ref { segments })
     }
 
+    /// Build from already-validated segments — `pub(crate)` for
+    /// `config`'s alias rewriting, which splices valid ref
+    /// segments back together. Not a public constructor: callers
+    /// go through [`Ref::new`]/[`Ref::from_path`].
+    pub(crate) fn from_segments(segments: Vec<String>) -> Self {
+        Ref { segments }
+    }
+
     /// The path segments, `["billing", "stripe"]`.
     pub fn segments(&self) -> &[String] {
         &self.segments

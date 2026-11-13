@@ -14,6 +14,7 @@ modules:
 - cuora-identity-keyring
 - cuora-notice
 - cuora-ops
+- cuora-sealed
 - cuora-serve
 - cuora-shell
 - cuora-testkit
@@ -28,8 +29,8 @@ modules:
 commands:
 - cargo check
 - cargo test --workspace
-tree_digest: 7d2348f9e97132ea451f26f8697739ae926ec0fc
-files_total: 197
+tree_digest: 4fcd7bd3f885362fe0318558379ac10182a87cdc
+files_total: 202
 provenance:
   files:
   - Cargo.toml
@@ -46,6 +47,7 @@ provenance:
   - crates/cuora-identity-keyring/Cargo.toml
   - crates/cuora-notice/Cargo.toml
   - crates/cuora-ops/Cargo.toml
+  - crates/cuora-sealed/Cargo.toml
   - crates/cuora-serve/Cargo.toml
   - crates/cuora-shell/Cargo.toml
   - crates/cuora-testkit/Cargo.toml
@@ -55,20 +57,21 @@ provenance:
   - crates/cuora-vault-cf/Cargo.toml
   - xtask/Cargo.toml
   hashes:
-  - eae3382d914576fc346adcd58a6500da959dadb8
-  - a1d09f939ff42ed588003dac91863fb21c688c94
+  - b79c2233503c0d873b0a8a1a2003289f7e83466a
+  - b46f2dd35c146677973cfcfd5a25f7e1e2789a2a
   - 70be355e0ec1f29bc0bedc077f6cecc1b632495b
   - cfc09e62e4451faec3b10a1f95f3e27381c6a419
   - d74a0a7adfa87f708d75790c09129eaf5a4551d5
   - 84f4d48465d7a00aa61152d1261563f5e806c35b
   - 000e41d5840b658bf1370bc0a1f4c10626a91fcb
   - c140ab8aed34d70490289b50e722c42ac084fadd
-  - e2965096bbf2050221498c7b1016aff14fc81866
+  - 4a83471cbe8e2efd6c5582efba8e72e4ace5411c
   - 61f701f21c7a5745cc8e5b624533b590af330534
   - 091478de063b1735975a918ffc9a17a20efb905c
   - f1b047a37b1d9ebf50b0ca5c43cd946617a89ac7
   - ca24f91ffa63a58ab8099943aba4d2231cf69d74
-  - d422f3d129f7f486ba4c88183f306ec61c92b98e
+  - b80c210a0026bc5f405e7a28836317ba83de9ff2
+  - c8103e1f04004173f751e6d8dbc799775dd04a71
   - 874e99d5adec58f0aa1b68fab12d8bd79bbbf622
   - 85700da84b4e3dbeef45489b31a713b1cd9a2271
   - be58afb0cde0c39560e013b419a0dfdc476e21b2
@@ -77,6 +80,6 @@ provenance:
   - df97d7ea0f12c02fec10db53389137ddf5dddcc2
   - 422f52f2ca23213aedb8eb77d63058314f245371
   - 1b2c254cc2d5e144e6ee3eedfdcbb94db8a3dedb
-  commit_sha: dbfe05134ed0ad7e9bdc134af06bec4bd17c9d3e
-  generated_at: '1794583335'
+  commit_sha: 7edd027d33c573ea9fd5ad1dbb15d75a768548a7
+  generated_at: '1794601469'
   generator: kuda/0.1.0

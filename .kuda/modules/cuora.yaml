@@ -15,7 +15,7 @@ api:
 - name: audit_fallback
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 335
+  line: 337
   module: cuora
 - name: cmd_op
   kind: function
@@ -25,7 +25,7 @@ api:
 - name: cmd_op_maps_every_variant
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 940
+  line: 946
   module: cuora
 - name: cmd_rref
   kind: function
@@ -55,22 +55,22 @@ api:
 - name: fail
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 925
+  line: 931
   module: cuora
 - name: json_out
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 911
+  line: 917
   module: cuora
 - name: load
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 355
+  line: 357
   module: cuora
 - name: manifest
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 792
+  line: 798
   module: cuora
 - name: norm_rref
   kind: function
@@ -80,7 +80,7 @@ api:
 - name: out
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 903
+  line: 909
   module: cuora
 - name: parse
   kind: function
@@ -95,22 +95,22 @@ api:
 - name: parse_pairs
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 732
+  line: 736
   module: cuora
 - name: parse_ref
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 727
+  line: 731
   module: cuora
 - name: read_secret
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 746
+  line: 750
   module: cuora
 - name: record_json
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 778
+  line: 782
   module: cuora
 - name: run
   kind: function
@@ -120,12 +120,12 @@ api:
 - name: run_cmd
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 363
+  line: 365
   module: cuora
 - name: run_cmd_folded_arm_covers_introspection_verbs
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 1000
+  line: 1006
   module: cuora
 - name: run_from
   kind: function
@@ -135,17 +135,17 @@ api:
 - name: schema_json
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 918
+  line: 924
   module: cuora
 - name: sh_escape
   kind: function
   file: crates/cuora-cli/src/lib.rs
-  line: 771
+  line: 775
   module: cuora
 - name: tests
   kind: module
   file: crates/cuora-cli/src/lib.rs
-  line: 936
+  line: 942
   module: cuora
 deps:
 - clap
@@ -224,9 +224,9 @@ provenance:
   - e58c70bea39d5b252a1e819f242bbdcdf20e8b87
   - 30a263d674ef19de11c756d6f7537f91a421909e
   - 51b6a07dd57174197a937034b7eecebd5768ff8a
-  - eae3382d914576fc346adcd58a6500da959dadb8
+  - b79c2233503c0d873b0a8a1a2003289f7e83466a
   - 70be355e0ec1f29bc0bedc077f6cecc1b632495b
-  - c8fea8efbe0b1f415dfca5772013fcaa751b0f55
-  commit_sha: 9aa078807f3d952dd07e69bd48851e3ce8243869
-  generated_at: '1794488905'
+  - 6d31ec3408b32333e6a91b605ecd0b08fd5d9ab4
+  commit_sha: 7edd027d33c573ea9fd5ad1dbb15d75a768548a7
+  generated_at: '1794601469'
   generator: kuda-template/0.1.4

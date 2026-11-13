@@ -3,7 +3,10 @@
 //! `cuora-core` is pure domain; this crate is everything that touches
 //! the outside world: config loading + env/vault resolution
 //! (`--env`/`CUORA_ENV` → `[envs]` routing → a concrete
-//! [`cuora_vault::Vault`]), the env-pin override on refs, the verb
+//! [`cuora_vault::Vault`]), the env-pin override on refs plus the
+//! `[aliases]` path remap (validated at [`Ops::load`], applied in
+//! [`Ops::resolve`] after the pin strips — audit events carry the
+//! pre-alias path as `alias_from`), the verb
 //! operations the CLI calls, and the audit emission — ndjson on
 //! stderr plus OTLP span export when `OTEL_EXPORTER_OTLP_ENDPOINT`
 //! is set. `cuora` (CLI) is a thin clap shell over this; front-ends
@@ -206,6 +209,9 @@ impl Ops {
             }
             None => Config::default(),
         };
+        // `[aliases]` is validated at load — a self-alias or cycle
+        // fails the config here, not mid-verb (T-052).
+        config.validate_aliases().map_err(OpsError::Config)?;
         let env = resolve_env(opts.env.as_deref())?;
         let actor = resolve_actor(opts.actor.as_deref())?;
         Ok(Ops {
@@ -263,14 +269,33 @@ impl Ops {
         self.policy = policy;
     }
 
-    /// Apply the env-pin rule: `cuora://prod/x` resolves under `prod`
-    /// regardless of context; anything else uses the selected env.
-    /// Returns `(env, ref-with-pin-stripped)`.
-    pub fn resolve(&self, rref: &Ref) -> (Env, Ref) {
-        match rref.env_pin(|s| self.config.is_known_env(s)) {
+    /// Canonicalize a requested ref for lookup: apply the env-pin
+    /// rule (`cuora://prod/x` resolves under `prod` regardless of
+    /// context), then rewrite the pin-stripped path through
+    /// `[aliases]` (T-052) — the alias sees `x`, not `prod/x`, so an
+    /// env pin stays orthogonal to namespace migrations; the pin's
+    /// env still selects the vault. Returns
+    /// `(env, resolved-ref)`; the resolved ref is what vault and
+    /// sealed-pack lookups use.
+    pub fn resolve(&self, rref: &Ref) -> Result<(Env, Ref), OpsError> {
+        let (env, rest) = match rref.env_pin(|s| self.config.is_known_env(s)) {
             Some((env, rest)) => (env, rest),
             None => (self.env.clone(), rref.clone()),
-        }
+        };
+        let aliased = self.config.resolve_alias(&rest).map_err(OpsError::Config)?;
+        Ok((env, aliased))
+    }
+
+    /// The pre-alias path when `[aliases]` rewrote the request —
+    /// `rref` pin-stripped, when it differs from resolved `r`.
+    /// Feeds the audit event's `alias_from` field so a materialized
+    /// value shows both what was asked and where it came from.
+    fn alias_from(&self, rref: &Ref, r: &Ref) -> Option<String> {
+        let stripped = rref
+            .env_pin(|s| self.config.is_known_env(s))
+            .map(|(_, rest)| rest)
+            .unwrap_or_else(|| rref.clone());
+        (stripped.path() != r.path()).then(|| stripped.path())
     }
 
     /// Open the vault an env routes to. `local` (the implicit
@@ -435,7 +460,10 @@ impl Ops {
                      in the local vault env {env}"
                 ))
             })?;
-            self.audit(Op::Get, &bare, env);
+            // Token refs are wire identifiers (`token_id` is the
+            // ref path) — `[aliases]` deliberately does not rewrite
+            // them, so no `alias_from` either.
+            self.audit(Op::Get, &bare, env, None);
             out.insert(
                 env.as_str().to_string(),
                 CfAuth::Hmac {
@@ -468,7 +496,7 @@ impl Ops {
             let vault = self.open_cf_vault(name, cfg)?;
             let rep = vault.migrate_private_refs(env)?;
             for r in &rep.rewritten {
-                self.audit(Op::Migrate, r, env);
+                self.audit(Op::Migrate, r, env, None);
             }
             reports.push(MigrateReport {
                 vault: name.to_string(),
@@ -758,16 +786,18 @@ impl Ops {
         })
     }
 
-    /// Store a secret (env-pin aware); emits an audit event.
+    /// Store a secret (env-pin + alias aware); emits an audit event.
     pub fn put(&self, rref: &Ref, value: Secret) -> Result<SecretRecord, OpsError> {
-        let (env, r) = self.resolve(rref);
+        let (env, r) = self.resolve(rref)?;
         let rec = self.open_vault(&env)?.put(&env, &r, value)?;
-        self.audit(Op::Put, &r, &env);
+        self.audit(Op::Put, &r, &env, self.alias_from(rref, &r).as_deref());
         Ok(rec)
     }
 
-    /// Read a secret (env-pin aware); `None` when absent. Emits a
-    /// materialization audit event only when a value comes out.
+    /// Read a secret (env-pin + alias aware); `None` when absent.
+    /// Emits a materialization audit event only when a value comes
+    /// out — through an alias the event carries `alias_from` with
+    /// the pre-alias path.
     ///
     /// **Sealed-pack fallback:** a vault miss on an unpinned
     /// two-segment ref (`cuora://<pack>/<secret>`) is retried
@@ -775,14 +805,15 @@ impl Ops {
     /// [`Self::get_from_pack`]). Vault hits always win — packs are
     /// the migration target, not an override.
     pub fn get(&self, rref: &Ref) -> Result<Option<SecretRecord>, OpsError> {
-        let (env, r) = self.resolve(rref);
+        let (env, r) = self.resolve(rref)?;
+        let via = self.alias_from(rref, &r);
         let rec = self.open_vault(&env)?.get(&env, &r)?;
         if rec.is_some() {
-            self.audit(Op::Get, &r, &env);
+            self.audit(Op::Get, &r, &env, via.as_deref());
             return Ok(rec);
         }
         if self.pack_candidate(rref, &r) {
-            if let Some(secret) = self.get_from_pack(&r, Op::Get)? {
+            if let Some(secret) = self.get_from_pack(&r, Op::Get, via.as_deref())? {
                 return Ok(Some(Self::pack_record(secret)));
             }
         }
@@ -791,19 +822,19 @@ impl Ops {
 
     /// Remove a secret; `true` when something was removed.
     pub fn rm(&self, rref: &Ref) -> Result<bool, OpsError> {
-        let (env, r) = self.resolve(rref);
+        let (env, r) = self.resolve(rref)?;
         let gone = self.open_vault(&env)?.rm(&env, &r)?;
         if gone {
-            self.audit(Op::Rm, &r, &env);
+            self.audit(Op::Rm, &r, &env, self.alias_from(rref, &r).as_deref());
         }
         Ok(gone)
     }
 
-    /// Rotate a secret to a new value (env-pin aware).
+    /// Rotate a secret to a new value (env-pin + alias aware).
     pub fn rotate(&self, rref: &Ref, value: Secret) -> Result<SecretRecord, OpsError> {
-        let (env, r) = self.resolve(rref);
+        let (env, r) = self.resolve(rref)?;
         let rec = self.open_vault(&env)?.rotate(&env, &r, value)?;
-        self.audit(Op::Rotate, &r, &env);
+        self.audit(Op::Rotate, &r, &env, self.alias_from(rref, &r).as_deref());
         Ok(rec)
     }
 
@@ -836,7 +867,7 @@ impl Ops {
                 }
             },
         };
-        let (env, r) = self.resolve(rref);
+        let (env, r) = self.resolve(rref)?;
         let rec = self
             .open_vault(&env)?
             .get(&env, &r)?
@@ -847,7 +878,7 @@ impl Ops {
             })?;
         let sink = self.open_deploy_named(&name)?;
         let report = sink.push(&env, &r, &rec.value)?;
-        self.audit(Op::Deploy, &r, &env);
+        self.audit(Op::Deploy, &r, &env, self.alias_from(rref, &r).as_deref());
         Ok(DeployReport {
             target: name,
             env,
@@ -863,14 +894,18 @@ impl Ops {
     /// [`get`](Self::get) emits: one materialization per value out.
     /// Sealed-pack fallback applies here too — packs aren't
     /// env-routed, so the explicit env is ignored on a pack hit.
+    /// `[aliases]` rewrite the path (no env pin is stripped — the
+    /// env is explicit).
     pub fn get_in(&self, env: &Env, rref: &Ref) -> Result<Option<SecretRecord>, OpsError> {
-        let rec = self.open_vault(env)?.get(env, rref)?;
+        let r = self.config.resolve_alias(rref).map_err(OpsError::Config)?;
+        let via = (r.path() != rref.path()).then(|| rref.path());
+        let rec = self.open_vault(env)?.get(env, &r)?;
         if rec.is_some() {
-            self.audit(Op::Get, rref, env);
+            self.audit(Op::Get, &r, env, via.as_deref());
             return Ok(rec);
         }
-        if self.pack_candidate(rref, rref) {
-            if let Some(secret) = self.get_from_pack(rref, Op::Get)? {
+        if self.pack_candidate(rref, &r) {
+            if let Some(secret) = self.get_from_pack(&r, Op::Get, via.as_deref())? {
                 return Ok(Some(Self::pack_record(secret)));
             }
         }
@@ -962,14 +997,15 @@ impl Ops {
                     "[secrets] key {var:?} is not a valid env var name"
                 )));
             }
-            let (env, r) = self.resolve(&rref);
+            let (env, r) = self.resolve(&rref)?;
+            let via = self.alias_from(&rref, &r);
             let vault = match vaults.entry(env.as_str().to_string()) {
                 std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),
                 std::collections::btree_map::Entry::Vacant(e) => e.insert(self.open_vault(&env)?),
             };
             let rec = match vault.get(&env, &r)? {
                 Some(rec) => {
-                    self.audit(op, &r, &env);
+                    self.audit(op, &r, &env, via.as_deref());
                     rec
                 }
                 None => {
@@ -977,7 +1013,7 @@ impl Ops {
                     // `cuora://<pack>/<secret>` refs (audited
                     // inside `get_from_pack` with env "sealed").
                     let packed = if self.pack_candidate(&rref, &r) {
-                        self.get_from_pack(&r, op)?
+                        self.get_from_pack(&r, op, via.as_deref())?
                     } else {
                         None
                     };
@@ -1111,7 +1147,19 @@ impl Ops {
         // needs the identity).
         let mut secrets = Vec::new();
         for (var, rref) in &self.config.secrets {
-            let (env, r) = self.resolve(rref);
+            let (env, r) = match self.resolve(rref) {
+                Ok(pair) => pair,
+                Err(e) => {
+                    problems.push(format!("{var} → {rref}: {e}"));
+                    secrets.push(SecretCheck {
+                        var: var.clone(),
+                        rref: rref.to_string(),
+                        env: self.env.as_str().to_string(),
+                        resolves: false,
+                    });
+                    continue;
+                }
+            };
             let vault_name = self.config.vault_for(&env);
             let mut resolves = match opened.get(vault_name) {
                 Some(v) => v.get(&env, &r).map(|rec| rec.is_some()).unwrap_or(false),
@@ -1170,9 +1218,10 @@ impl Ops {
         );
     }
 
-    fn audit(&self, op: Op, rref: &Ref, env: &Env) {
+    fn audit(&self, op: Op, rref: &Ref, env: &Env, alias_from: Option<&str>) {
         audit::emit(
             &AuditEvent::materialized(self.actor.as_str(), op, &rref.path(), env.as_str())
+                .with_alias_from(alias_from)
                 .with_policy(self.policy.clone()),
         );
     }
@@ -1204,7 +1253,14 @@ impl Ops {
     /// shape as [`Self::audit`] but env `"sealed"` (packs carry no
     /// env routing) under the caller's `op`, matching the driver's
     /// `open`/`materialize` events (`Op::Get`, env `sealed`).
-    fn get_from_pack(&self, r: &Ref, op: Op) -> Result<Option<Secret>, OpsError> {
+    /// `via` carries the pre-alias path when `[aliases]` rewrote the
+    /// request — same `alias_from` field vault hits get.
+    fn get_from_pack(
+        &self,
+        r: &Ref,
+        op: Op,
+        via: Option<&str>,
+    ) -> Result<Option<Secret>, OpsError> {
         let segs = r.segments();
         debug_assert_eq!(segs.len(), 2, "pack_candidate gates the shape");
         match cuora_sealed::open_pack_ref(&segs[0], &segs[1], None, None) {
@@ -1217,6 +1273,7 @@ impl Ops {
                 })?;
                 audit::emit(
                     &AuditEvent::materialized(self.actor.as_str(), op, &r.path(), "sealed")
+                        .with_alias_from(via)
                         .with_policy(self.policy.clone()),
                 );
                 Ok(Some(Secret::new(text)))
@@ -1417,18 +1474,57 @@ mod tests {
             actor: Actor::new("devin").unwrap(),
             policy: None,
         };
-        let (env, r) = ops.resolve(&Ref::new("cuora://prod/billing/stripe").unwrap());
+        let (env, r) = ops
+            .resolve(&Ref::new("cuora://prod/billing/stripe").unwrap())
+            .unwrap();
         assert_eq!(env.as_str(), "prod");
         assert_eq!(r.path(), "billing/stripe");
-        let (env, r) = ops.resolve(&Ref::new("cuora://billing/stripe").unwrap());
+        let (env, r) = ops
+            .resolve(&Ref::new("cuora://billing/stripe").unwrap())
+            .unwrap();
         assert_eq!(env.as_str(), "dev");
         assert_eq!(r.path(), "billing/stripe");
         // custom envs count when configured
         let mut config = Config::default();
         config.envs.insert(Env::new("ci").unwrap(), "local".into());
         let ops = Ops { config, ..ops };
-        let (env, _) = ops.resolve(&Ref::new("cuora://ci/token").unwrap());
+        let (env, _) = ops.resolve(&Ref::new("cuora://ci/token").unwrap()).unwrap();
         assert_eq!(env.as_str(), "ci");
+    }
+
+    #[test]
+    fn aliases_rewrite_after_env_pin() {
+        let mut config = Config::default();
+        config
+            .aliases
+            .insert("tamias".into(), Ref::new("cuora://secrets-9aia").unwrap());
+        config.validate_aliases().unwrap();
+        let ops = mk_ops(config);
+        // unpinned: context env + aliased path
+        let (env, r) = ops
+            .resolve(&Ref::new("cuora://tamias/registry-token").unwrap())
+            .unwrap();
+        assert_eq!(env.as_str(), "dev");
+        assert_eq!(r.path(), "secrets-9aia/registry-token");
+        // pinned: the pin strips first — the alias sees the bare
+        // path and the pin's env still routes the lookup
+        let (env, r) = ops
+            .resolve(&Ref::new("cuora://prod/tamias/registry-token").unwrap())
+            .unwrap();
+        assert_eq!(env.as_str(), "prod");
+        assert_eq!(r.path(), "secrets-9aia/registry-token");
+        // alias_from reports the pre-alias path for audit
+        assert_eq!(
+            ops.alias_from(&Ref::new("cuora://prod/tamias/registry-token").unwrap(), &r)
+                .as_deref(),
+            Some("tamias/registry-token")
+        );
+        assert!(ops
+            .alias_from(
+                &Ref::new("cuora://secrets-9aia/registry-token").unwrap(),
+                &r
+            )
+            .is_none());
     }
 
     #[test]
@@ -1549,7 +1645,7 @@ mod tests {
         assert_eq!(scoped.actor().as_str(), "agent:peregrin");
         assert_eq!(scoped.env().as_str(), "prod");
         // resolution honors the scoped env; a pin still wins
-        let (env, _) = scoped.resolve(&Ref::new("cuora://a/b").unwrap());
+        let (env, _) = scoped.resolve(&Ref::new("cuora://a/b").unwrap()).unwrap();
         assert_eq!(env.as_str(), "prod");
         // None keeps the loaded values
         let same = ops.scoped(None, None, None);

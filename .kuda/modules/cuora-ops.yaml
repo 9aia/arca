@@ -15,22 +15,22 @@ api:
 - name: CheckReport
   kind: type
   file: crates/cuora-ops/src/lib.rs
-  line: 156
+  line: 161
   module: cuora-ops
 - name: Dead
   kind: type
   file: crates/cuora-ops/src/audit.rs
-  line: 336
+  line: 349
   module: cuora-ops
 - name: DeployReport
   kind: type
   file: crates/cuora-ops/src/lib.rs
-  line: 115
+  line: 120
   module: cuora-ops
 - name: EMITTED
   kind: const
   file: crates/cuora-ops/src/lib.rs
-  line: 1255
+  line: 1431
   module: cuora-ops
 - name: ENABLED
   kind: const
@@ -40,7 +40,7 @@ api:
 - name: EXACT
   kind: const
   file: crates/cuora-ops/src/lib.rs
-  line: 1231
+  line: 1407
   module: cuora-ops
 - name: EXPORT_WARNED
   kind: const
@@ -50,27 +50,27 @@ api:
 - name: InitInfo
   kind: type
   file: crates/cuora-ops/src/lib.rs
-  line: 76
+  line: 81
   module: cuora-ops
 - name: InitOpts
   kind: type
   file: crates/cuora-ops/src/lib.rs
-  line: 68
+  line: 73
   module: cuora-ops
 - name: LoadOpts
   kind: type
   file: crates/cuora-ops/src/lib.rs
-  line: 57
+  line: 62
   module: cuora-ops
 - name: MigrateReport
   kind: type
   file: crates/cuora-ops/src/lib.rs
-  line: 130
+  line: 135
   module: cuora-ops
 - name: Ops
   kind: type
   file: crates/cuora-ops/src/lib.rs
-  line: 174
+  line: 179
   module: cuora-ops
 - name: OpsError
   kind: type
@@ -90,7 +90,7 @@ api:
 - name: PREFIX
   kind: const
   file: crates/cuora-ops/src/lib.rs
-  line: 1247
+  line: 1423
   module: cuora-ops
 - name: PolicyVerdict
   kind: type
@@ -105,7 +105,7 @@ api:
 - name: SecretCheck
   kind: type
   file: crates/cuora-ops/src/lib.rs
-  line: 143
+  line: 148
   module: cuora-ops
 - name: Sink
   kind: type
@@ -115,94 +115,94 @@ api:
 - name: StubSource
   kind: type
   file: crates/cuora-ops/src/lib.rs
-  line: 2121
+  line: 2336
   module: cuora-ops
 - name: VaultCheck
   kind: type
   file: crates/cuora-ops/src/lib.rs
-  line: 99
+  line: 104
   module: cuora-ops
 - name: a_failing_writer_propagates_the_io_error
   kind: function
   file: crates/cuora-ops/src/audit.rs
-  line: 335
+  line: 348
   module: cuora-ops
 - name: actor
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 234
+  line: 242
+  module: cuora-ops
+- name: alias_from
+  kind: function
+  file: crates/cuora-ops/src/lib.rs
+  line: 293
+  module: cuora-ops
+- name: aliases_rewrite_after_env_pin
+  kind: function
+  file: crates/cuora-ops/src/lib.rs
+  line: 1496
   module: cuora-ops
 - name: audit
   kind: module
   file: crates/cuora-ops/src/lib.rs
-  line: 13
+  line: 16
   module: cuora-ops
 - name: audit
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 1119
+  line: 1221
   module: cuora-ops
 - name: auto_keyring_probe
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 1166
+  line: 1342
   module: cuora-ops
 - name: backend_file_never_probes_the_store
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 2419
+  line: 2634
   module: cuora-ops
 - name: cache_scope_keeps_unlisted_envs_off_the_disk
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 2811
+  line: 3026
   module: cuora-ops
 - name: cached_cf_env
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 2744
+  line: 2959
   module: cuora-ops
 - name: cached_cf_vault_reads_through_and_serves_offline
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 2758
+  line: 2973
   module: cuora-ops
 - name: cf_backend_errors_propagate_through_verbs
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 2033
+  line: 2248
   module: cuora-ops
 - name: cf_tokens_cant_resolve_against_a_cf_local
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 2685
+  line: 2900
   module: cuora-ops
 - name: check
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 963
+  line: 1041
   module: cuora-ops
 - name: check_flags_bad_var_names_and_routes
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 1316
+  line: 1531
   module: cuora-ops
 - name: check_flags_cf_only_fields_on_other_kinds
   kind: function
   file: crates/cuora-ops/src/lib.rs
-  line: 2702
+  line: 2917
   module: cuora-ops
-- name: check_flags_kind_and_deploy_problems
-  kind: function
-  file: crates/cuora-ops/src/lib.rs
-  line: 1961
-  module: cuora-ops
-- name: check_flags_orphaned_cache_ttl
-  kind: function
-  file: crates/cuora-ops/src/lib.rs
-  line: 2722
-  module: cuora-ops
-api_omitted: 133
+api_omitted: 139
 deps:
 - age
 - cuora-config
@@ -214,6 +214,7 @@ deps:
 - cuora-identity-file
 - cuora-identity-keyring
 - cuora-notice
+- cuora-sealed
 - cuora-vault
 - cuora-vault-age
 - cuora-vault-cached
@@ -243,6 +244,7 @@ deps:
 - cuora-identity
 - cuora-identity-file
 - cuora-identity-keyring
+- cuora-sealed
 - cuora-vault-age
 - cuora-vault-cached
 - cuora-vault-cf
@@ -264,12 +266,12 @@ provenance:
   - crates/cuora-ops/src/otel.rs
   - crates/cuora-ops/tests/props.rs
   hashes:
-  - d422f3d129f7f486ba4c88183f306ec61c92b98e
-  - d5db95c9d8705463417acf5e869deadb8d2b092c
+  - b80c210a0026bc5f405e7a28836317ba83de9ff2
+  - 657dbec33a47edbd13bffb7a3e12c1059a85f751
   - b43f94e2f8a76773dec34649819652262719a8ba
-  - b0f8caed7b4157feb81326edd95b3e14f292fff2
+  - 90152599e7dd8a8b54aeabeef55b03688fecb4d2
   - 2e113a624a55c8049273dd1f57cc79c27abfa1e7
   - 1602bd777393acf7d4df6616e08bbfbaf7726157
-  commit_sha: 9aa078807f3d952dd07e69bd48851e3ce8243869
-  generated_at: '1794488905'
+  commit_sha: 7edd027d33c573ea9fd5ad1dbb15d75a768548a7
+  generated_at: '1794601469'
   generator: kuda-template/0.1.4

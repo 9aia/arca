@@ -324,8 +324,10 @@ fn cmd_rref(cmd: &Cmd) -> Option<&str> {
 fn norm_rref(ops: &Ops, raw: Option<&str>) -> Option<String> {
     raw.map(|s| {
         Ref::new(s)
-            .map(|r| ops.resolve(&r).1.path().to_string())
-            .unwrap_or_else(|_| s.to_string())
+            .ok()
+            .and_then(|r| ops.resolve(&r).ok())
+            .map(|(_, r)| r.path().to_string())
+            .unwrap_or_else(|| s.to_string())
     })
 }
 
@@ -433,7 +435,9 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<i32, OpsError> {
                 }
                 None => Err(OpsError::Msg(format!(
                     "{rref} is not stored in env {}",
-                    ops.resolve(&parsed).0
+                    ops.resolve(&parsed)
+                        .map(|(e, _)| e.as_str().to_string())
+                        .unwrap_or_else(|_| ops.env().as_str().to_string())
                 ))),
             }
         }
@@ -463,7 +467,7 @@ fn run_cmd(cmd: &Cmd, cli: &Cli, ops: &Ops) -> Result<i32, OpsError> {
         }
         Cmd::Rm { rref } => {
             let parsed = parse_ref(rref)?;
-            let (env, _) = ops.resolve(&parsed);
+            let (env, _) = ops.resolve(&parsed)?;
             if !ops.rm(&parsed)? {
                 return Err(OpsError::Msg(format!("{rref} is not stored in env {env}")));
             }
@@ -776,7 +780,9 @@ fn sh_escape(v: &str) -> String {
 /// metadata. Callers add `value`/`ok` as needed — never by
 /// default.
 fn record_json(ops: &Ops, parsed: &Ref, rec: &cuora_vault::SecretRecord) -> serde_json::Value {
-    let (env, r) = ops.resolve(parsed);
+    let (env, r) = ops
+        .resolve(parsed)
+        .unwrap_or_else(|_| (ops.env().clone(), parsed.clone()));
     serde_json::json!({
         "ref": r.to_string(),
         "env": env.as_str(),

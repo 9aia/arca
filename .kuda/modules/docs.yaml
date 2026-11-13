@@ -36,6 +36,7 @@ provenance:
   - docs/how-to/inject-into-a-process.md
   - docs/how-to/rotate-a-secret.md
   - docs/how-to/route-envs-to-vaults.md
+  - docs/how-to/sealed-packs.md
   - docs/index.md
   - docs/package.json
   - docs/public/api/static.files/SourceSerif4-LICENSE-a2cfd9d5.md
@@ -55,7 +56,7 @@ provenance:
   - dc21de1f8acfcb179081ea3c188adf7d0ce0d80d
   - f54808e08ec28d73f117e5763421765d064099db
   - c61b3a9ae5bf6b6027e30e2ff6026044d75f413c
-  - d600009dc4e13e952ea3c05b9ff7c348758d6476
+  - c552f853ea290b3ebd07082a9eb67941cc76fabb
   - 9adeaa01170703097e99fcb5cf7c64f6970b32a2
   - f3183ea1c08d65782de1320d20372b413d4f962a
   - e041a2233afe66d20531af9c4a093d9c6d032bf8
@@ -66,16 +67,17 @@ provenance:
   - e5a9cce080703ddbc30a25c13de47d95a91756de
   - 670cb0090984c21c3431482011958034474e2621
   - 378a3b81a727e8633afc94b495a2cec78754aec6
+  - 0cbb4bcce72b27d45986abfaf063ee26247cd499
   - 0dd953ee7ef517251f9e046f4d1ecc0fe4bafcb9
   - 6881805656a7de5071bacbd97d7390d8a5430abb
   - 175fa4f47aecdc02e902d243a1c29914eb2ee258
-  - e32972363b5c20747f8d352c128f03f0434486da
+  - 2d2c338c5cf64fed52f38b46edae1d7303f53cba
   - c8af532ab828e58c08ad896c972e1c11dee252c4
-  - 51f4818d00a9c2de1052661aca268fd1bebd49a5
+  - a4f2c6c297107b4c19341f55a6cc39ea7f8299e2
   - c0dc83f68d18ea758c19d1194df8b25abf95fb1e
   - 7732226fa9f5893e4e87f8da152eefc89269cca7
   - c4d9cab3100d66a41396388efec1629e7a12c587
   - e99cb8872128f852e1d35ddd6966fa09d5c82170
-  commit_sha: 9aa078807f3d952dd07e69bd48851e3ce8243869
-  generated_at: '1794488905'
+  commit_sha: 7edd027d33c573ea9fd5ad1dbb15d75a768548a7
+  generated_at: '1794601469'
   generator: kuda-template/0.1.4

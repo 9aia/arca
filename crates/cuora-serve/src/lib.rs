@@ -457,7 +457,12 @@ fn guardrail_reply(
     if g.allows(op) {
         return None;
     }
-    let norm = rref.and_then(|s| s.parse::<Ref>().ok().map(|r| scoped.resolve(&r).1.path()));
+    let norm = rref.and_then(|s| {
+        s.parse::<Ref>()
+            .ok()
+            .and_then(|r| scoped.resolve(&r).ok())
+            .map(|(_, r)| r.path())
+    });
     scoped.emit(op, norm.as_deref().or(rref), Outcome::Denied);
     Some(err_reply(
         id.clone(),
@@ -586,7 +591,10 @@ fn vault_op(ops: &Ops, pdp: Option<&ExecPdp>, ctx: Ctx<'_>, req: &Request) -> Re
     if let Some(reply) = guardrail_reply(&scoped, ctx.id, op, Some(raw)) {
         return reply;
     }
-    let (resolved_env, resolved_ref) = scoped.resolve(&parsed);
+    let (resolved_env, resolved_ref) = match scoped.resolve(&parsed) {
+        Ok(pair) => pair,
+        Err(e) => return err_reply(ctx.id.clone(), "bad_request", e.to_string()),
+    };
     let resolved_path = resolved_ref.path();
     let verdict = match consult(
         pdp,

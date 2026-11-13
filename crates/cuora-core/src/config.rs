@@ -1,5 +1,5 @@
 //! The `cuora.toml`-shaped config model every `cuora-config` source
-//! loads. Six tables:
+//! loads. Seven tables:
 //!
 //! ```toml
 //! [vaults.local]                 # named vault backends ("local" is
@@ -10,6 +10,11 @@
 //!
 //! [secrets]                      # the declared surface run may
 //! STRIPE_KEY = "cuora://billing/stripe"   #   inject: VAR → ref
+//!
+//! [aliases]                      # ref-path prefix → replacement
+//! "tamias" = "cuora://secrets-9aia"       #   ref — retired-name
+//!                                         #   remap, resolved
+//!                                         #   before vault lookup
 //!
 //! [deploy.prod]                  # write-only push targets (sinks)
 //! kind = "cf-secrets-store"
@@ -60,6 +65,20 @@ pub struct Config {
     /// ambient vault dump.
     #[serde(default)]
     pub secrets: BTreeMap<String, Ref>,
+    /// `[aliases]` — ref-path prefix → replacement `cuora://` ref
+    /// (T-052). Applied during ref resolution, after the env pin
+    /// strips and before any vault/pack lookup: the longest key
+    /// that equals the path or prefixes it at a segment boundary
+    /// wins, the target's path replaces the matched segments, and
+    /// any unmatched remainder is appended. Aliases resolve
+    /// transitively — a target path may itself match another key —
+    /// with cycles and self-aliases rejected by
+    /// [`Config::validate_aliases`] at config load. Use case:
+    /// retired vault names (`"tamias" = "cuora://secrets-9aia"`)
+    /// and namespace dedupes; the target may be a vault *or* a
+    /// sealed-pack ref — pack fallback sees the rewritten path.
+    #[serde(default)]
+    pub aliases: BTreeMap<String, Ref>,
     /// Named deploy targets — write-only sinks (`cuora deploy`
     /// pushes a stored value in; nothing ever reads one back).
     #[serde(default)]
@@ -104,6 +123,84 @@ impl Config {
     /// The [`DeployConfig`] for a deploy target name.
     pub fn deploy_config(&self, name: &str) -> Option<&DeployConfig> {
         self.deploy.get(name)
+    }
+
+    /// The `[aliases]` entry covering `path`: the longest key that
+    /// equals `path` or prefixes it at a `/` segment boundary —
+    /// `"tamias"` covers `tamias` and `tamias/x/y` but never
+    /// `tamiascope/x`. `None` when no key matches. Keys are matched
+    /// as raw segment lists so an unvalidated key can't panic here.
+    fn alias_entry(&self, path: &str) -> Option<(&str, &Ref)> {
+        let segs: Vec<&str> = path.split('/').collect();
+        self.aliases
+            .iter()
+            .filter(|(key, _)| {
+                let ks: Vec<&str> = key.split('/').collect();
+                ks.len() <= segs.len() && ks.iter().zip(segs.iter()).all(|(a, b)| a == b)
+            })
+            .max_by_key(|(key, _)| key.split('/').count())
+            .map(|(k, r)| (k.as_str(), r))
+    }
+
+    /// Rewrite `r`'s path through `[aliases]` — transitive: each
+    /// hop re-matches the new head against the keys, so a target
+    /// path that itself matches keeps resolving. The matched key's
+    /// segments are replaced by the target's; the unmatched tail is
+    /// appended verbatim. Segment-boundary prefix match, longest
+    /// key wins — see [`Self::alias_entry`].
+    ///
+    /// The result is a plain path ref: env pins inside an alias
+    /// *target* are not re-evaluated (the caller already resolved
+    /// the env — `cuora-ops` strips pins before calling this).
+    ///
+    /// `Err` on a detected cycle or a non-converging chain —
+    /// [`Self::validate_aliases`] rejects both at config load, so a
+    /// loaded config can't reach it; the bound is defensive for
+    /// hand-built `Config`s.
+    pub fn resolve_alias(&self, r: &Ref) -> Result<Ref, String> {
+        let mut cur = r.clone();
+        // Paths already visited — a repeat is a cycle. The hard cap
+        // is belt-and-braces: reachable path space is finite, so
+        // `seen` alone would terminate, but a pathological config
+        // must never hang a resolve.
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..256 {
+            let path = cur.path();
+            let Some((key, target)) = self.alias_entry(&path) else {
+                return Ok(cur);
+            };
+            if !seen.insert(path.clone()) {
+                return Err(format!(
+                    "alias cycle — {path:?} rewrites to itself transitively"
+                ));
+            }
+            let key_segs = key.split('/').count();
+            let mut segs = target.segments().to_vec();
+            segs.extend(cur.segments()[key_segs..].iter().cloned());
+            cur = Ref::from_path(&segs.join("/"))
+                .map_err(|e| format!("alias target for {key:?}: {e}"))?;
+        }
+        Err("alias resolution did not converge in 256 hops".into())
+    }
+
+    /// Load-time `[aliases]` validation — every key must be a valid
+    /// bare ref path, and resolution must terminate when seeded from
+    /// each key *and* each target path (self-aliases and cycles
+    /// surface here as resolution errors). `cuora-ops` calls this
+    /// from `Ops::load`; a bad table fails the config, not the verb.
+    pub fn validate_aliases(&self) -> Result<(), String> {
+        for (key, target) in &self.aliases {
+            let seed = Ref::from_path(key)
+                .map_err(|e| format!("[aliases] key {key:?} is not a valid ref path: {e}"))?;
+            self.resolve_alias(&seed)
+                .map_err(|e| format!("[aliases] {key:?}: {e}"))?;
+            // Seed from the target path too — a cycle reachable only
+            // through a target+remainder still fails the load.
+            let tseed = Ref::from_segments(target.segments().to_vec());
+            self.resolve_alias(&tseed)
+                .map_err(|e| format!("[aliases] target of {key:?}: {e}"))?;
+        }
+        Ok(())
     }
 }
 
@@ -627,6 +724,130 @@ mod tests {
         assert!(toml::from_str::<Config>("[serve.pdp]\nallow_on_error = true\n").is_err());
         // unknown keys fail loud here too
         assert!(toml::from_str::<Config>("[serve.pdp]\nexec = \"x\"\nurl = \"y\"\n").is_err());
+    }
+
+    #[test]
+    fn aliases_parse_and_resolve_prefix() {
+        let cfg: Config = toml::from_str(
+            r#"
+            [aliases]
+            "tamias" = "cuora://secrets-9aia"
+            "legacy/old-name" = "cuora://vaults/new-name"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(cfg.aliases.len(), 2);
+        // exact + nested prefix, remainder appended
+        let r = cfg
+            .resolve_alias(&Ref::new("cuora://tamias/registry-token").unwrap())
+            .unwrap();
+        assert_eq!(r.path(), "secrets-9aia/registry-token");
+        let r = cfg
+            .resolve_alias(&Ref::new("cuora://tamias").unwrap())
+            .unwrap();
+        assert_eq!(r.path(), "secrets-9aia");
+        // deeper tail rides along
+        let r = cfg
+            .resolve_alias(&Ref::new("cuora://tamias/a/b/c").unwrap())
+            .unwrap();
+        assert_eq!(r.path(), "secrets-9aia/a/b/c");
+        // multi-segment key + longest-prefix wins over a shorter one
+        let cfg: Config = toml::from_str(
+            r#"
+            [aliases]
+            "a" = "cuora://x"
+            "a/b" = "cuora://y"
+            "#,
+        )
+        .unwrap();
+        let r = cfg
+            .resolve_alias(&Ref::new("cuora://a/b/c").unwrap())
+            .unwrap();
+        assert_eq!(r.path(), "y/c");
+        let r = cfg
+            .resolve_alias(&Ref::new("cuora://a/d").unwrap())
+            .unwrap();
+        assert_eq!(r.path(), "x/d");
+        // segment boundary: "tamiascope" is not "tamias"
+        let cfg: Config =
+            toml::from_str("[aliases]\n\"tamias\" = \"cuora://secrets-9aia\"\n").unwrap();
+        let r = cfg
+            .resolve_alias(&Ref::new("cuora://tamiascope/x").unwrap())
+            .unwrap();
+        assert_eq!(r.path(), "tamiascope/x");
+        // no match → the ref passes through unchanged
+        let r = cfg
+            .resolve_alias(&Ref::new("cuora://other/x").unwrap())
+            .unwrap();
+        assert_eq!(r.path(), "other/x");
+    }
+
+    #[test]
+    fn aliases_chain_transitively() {
+        // a → b, b/c → d: `a/x` hits `b/x` next hop, which doesn't
+        // match `b/c`… craft one that does: a → "b", "b" → "c/d".
+        let cfg: Config = toml::from_str(
+            r#"
+            [aliases]
+            "a" = "cuora://b"
+            "b" = "cuora://c/d"
+            "#,
+        )
+        .unwrap();
+        cfg.validate_aliases().unwrap();
+        let r = cfg
+            .resolve_alias(&Ref::new("cuora://a/x").unwrap())
+            .unwrap();
+        assert_eq!(r.path(), "c/d/x");
+        // target-side remainder participates in the next match:
+        // "p" → "q/r", "q/r/s" → "z" sends p/s/t → q/r/s/t → z/t.
+        let cfg: Config = toml::from_str(
+            r#"
+            [aliases]
+            "p" = "cuora://q/r"
+            "q/r/s" = "cuora://z"
+            "#,
+        )
+        .unwrap();
+        cfg.validate_aliases().unwrap();
+        let r = cfg
+            .resolve_alias(&Ref::new("cuora://p/s/t").unwrap())
+            .unwrap();
+        assert_eq!(r.path(), "z/t");
+    }
+
+    #[test]
+    fn aliases_reject_self_and_cycles_at_validation() {
+        // self-alias
+        let cfg: Config = toml::from_str("[aliases]\n\"a\" = \"cuora://a\"\n").unwrap();
+        assert!(cfg.validate_aliases().is_err());
+        // two-hop cycle
+        let cfg: Config =
+            toml::from_str("[aliases]\n\"a\" = \"cuora://b\"\n\"b\" = \"cuora://a\"\n").unwrap();
+        let err = cfg.validate_aliases().unwrap_err();
+        assert!(err.contains("cycle"), "{err}");
+        // cycle through a remainder: `a/d` → `b/c/d` → `a/d` — the
+        // looping path only exists once a tail rides along, which is
+        // why validation seeds from target paths too.
+        let cfg: Config =
+            toml::from_str("[aliases]\n\"a\" = \"cuora://b/c\"\n\"b/c/d\" = \"cuora://a/d\"\n")
+                .unwrap();
+        let err = cfg.validate_aliases().unwrap_err();
+        assert!(err.contains("cycle"), "{err}");
+        // non-converging chain (path grows every hop) — rejected by
+        // the hop bound, not silently looped forever.
+        let cfg: Config =
+            toml::from_str("[aliases]\n\"a\" = \"cuora://b/a\"\n\"b/a\" = \"cuora://a/b\"\n")
+                .unwrap();
+        assert!(cfg.validate_aliases().is_err());
+        // invalid key path fails loud
+        let cfg: Config = toml::from_str("[aliases]\n\"a//b\" = \"cuora://x\"\n").unwrap();
+        assert!(cfg.validate_aliases().is_err());
+        // unparseable target fails at TOML parse (Ref deserialize)
+        assert!(toml::from_str::<Config>("[aliases]\n\"a\" = \"not-a-ref\"\n").is_err());
+        // a clean table validates
+        let cfg: Config = toml::from_str("[aliases]\n\"a\" = \"cuora://b\"\n").unwrap();
+        cfg.validate_aliases().unwrap();
     }
 
     #[test]
