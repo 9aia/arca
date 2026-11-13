@@ -33,7 +33,7 @@ Refs name logical secrets (`cuora://billing/stripe`); `--env` picks the resoluti
 
 ###### **Subcommands:**
 
-* `init` — Bootstrap: store the age identity in the system keyring when a session secret store is reachable — importing an existing identity.txt rather than orphaning it — else the `~/.config/cuora/identity.txt` keyfile (0600). Verifies the vault opens
+* `init` — Bootstrap: store the age identity per `[identity] backend` / `CUORA_IDENTITY_BACKEND` — `keyring` (default) fails closed when no session store is reachable, `auto` falls back to the keyfile with a note, `file` never probes. Imports an existing identity.txt rather than orphaning it. Verifies the vault opens
 * `put` — Store a secret. The value comes from stdin (`printf … | cuora put cuora://ns/name`) or a hidden terminal prompt — never args, which land in shell history and `/proc`
 * `get` — Print a secret's value to stdout — the escape hatch. Prefer `cuora run` so values never enter agent context; guardrails can deny this op
 * `list` — List the refs stored in the selected env — names only, never values
@@ -57,7 +57,7 @@ Refs name logical secrets (`cuora://billing/stripe`); `--env` picks the resoluti
 
 ## `cuora init`
 
-Bootstrap: store the age identity in the system keyring when a session secret store is reachable — importing an existing identity.txt rather than orphaning it — else the `~/.config/cuora/identity.txt` keyfile (0600). Verifies the vault opens
+Bootstrap: store the age identity per `[identity] backend` / `CUORA_IDENTITY_BACKEND` — `keyring` (default) fails closed when no session store is reachable, `auto` falls back to the keyfile with a note, `file` never probes. Imports an existing identity.txt rather than orphaning it. Verifies the vault opens
 
 **Usage:** `cuora init [OPTIONS]`
 

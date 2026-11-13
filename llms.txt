@@ -20,6 +20,7 @@ cuora:// references in code, env vars at runtime, an audit trail for every mater
 - [Deploy a secret to a sink](/cuora/how-to/deploy-to-a-sink.md)
 - [Guardrails for agents](/cuora/how-to/guardrails-for-agents.md)
 - [Cloudflare Worker setup](/cuora/how-to/cloudflare-worker-setup.md)
+- [Ship secrets as a sealed pack](/cuora/how-to/sealed-packs.md)
 
 ### Reference
 

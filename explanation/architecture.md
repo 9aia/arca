@@ -40,11 +40,12 @@ Design rules:
 | `cuora` | engine | cuora — secrets broker for agents: reference URIs, redaction, env-injection CLI |
 | `cuora-config-toml` | adapter | Config impl: cuora.toml file (explicit path, env, ./, ~/.config) |
 | `cuora-deploy-cf` | adapter | Deploy impl: push secret values to a Cloudflare account Secrets Store (write-only sink) via the CF API v4 |
-| `cuora-driver` | adapter | tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values) plus engine ops dispatching to the cuora lib |
+| `cuora-driver` | adapter | tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values), engine ops dispatching to the cuora lib, and the sealed-pack surface (seal/open/materialize/recipients over tamias ADR-0004 ciphertext-only packs) |
 | `cuora-identity` | adapter | Identity port: where the age identity (master key) comes from — file, keyring, later sealed variants |
 | `cuora-identity-file` | adapter | Identity impl: the ~/.config/cuora/identity.txt age keyfile (0600) — the explicit file backend (headless/CI opt-out) |
 | `cuora-identity-keyring` | adapter | Identity impl: the platform session secret store (secret-service / Keychain / Credential Manager) via keyring-core |
 | `cuora-notice` | adapter | Process-wide UX notices — cuora:-prefixed stderr notes, mutable for terminal-owning surfaces |
+| `cuora-sealed` | adapter | cuora sealed packs: tamias store resolution, age identity, encrypt/decrypt, and the cuora://\<pack>/\<secret> engine read path (tamias ADR-0004) |
 | `cuora-serve` | adapter | cuora serve — the ndjson request/response IPC surface orchestrators embed, with the external policy-decision consult (P-005) |
 | `cuora-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
 | `cuora-testkit` | adapter | Vault conformance suite — every cuora-vault impl passes the same contract tests (fake values only) |

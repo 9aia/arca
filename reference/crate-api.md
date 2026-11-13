@@ -19,6 +19,7 @@ documented at source (doc comments).
 * [cuora-identity-file](/cuora/api/cuora_identity_file/index.html) — adapter
 * [cuora-identity-keyring](/cuora/api/cuora_identity_keyring/index.html) — adapter
 * [cuora-notice](/cuora/api/cuora_notice/index.html) — adapter
+* [cuora-sealed](/cuora/api/cuora_sealed/index.html) — adapter
 * [cuora-serve](/cuora/api/cuora_serve/index.html) — adapter
 * [cuora-shell](/cuora/api/cuora_shell/index.html) — adapter
 * [cuora-testkit](/cuora/api/cuora_testkit/index.html) — adapter
