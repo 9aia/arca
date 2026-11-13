@@ -15,6 +15,16 @@ tag_format = "{unit}-v{version}"
 
 [release.unit_overrides.cuora-xtask]
 skip = true
+# Pack-ref sync (T-039): the tamias pack manifest version + README
+# install ref are rewritten to the new version inside the release
+# commit, so the tagged tree is self-consistent — replaces the
+# release.sh plan+sed pre-step.
+[release.sync_refs]
+rules = [
+  { files = ["libraries/cuora/tamias.yaml"], find = "(?m)^version: \"{old}\"", replace = "version: \"{new}\"" },
+  { files = ["README.md"], find = "cuora@{old}", replace = "cuora@{new}" },
+]
+
 [publish.crates]
 enabled = false   # ADR-0004: crates.io publishing is tamias-only
 
