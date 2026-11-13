@@ -1,0 +1,45 @@
+# secrets-9aia — the 9aia org-domain sealed secrets pack (tamias
+# ADR-0004 / org P-027 / PL-017 task 4, the dogfood).
+#
+# Every payload file under sealed/ is age ciphertext — tamias carries,
+# digests, verifies, and signs it opaquely and has NO decrypt path.
+# Opening is cuora's job, consumer-side, with the recipient private
+# key (~/.config/cuora/identity.txt, mode 0600):
+#
+#   tamias-driver-cuora open secrets-9aia registry-token   # → stdout
+#   tamias-driver-cuora materialize secrets-9aia --out <dir>
+#   tamias-driver-cuora recipients secrets-9aia            # public keys
+#
+# Refs: `cuora://secrets-9aia/registry-token` resolves through the
+# installed pack once `cuora://` pack-ref resolution lands; until then
+# the driver verbs above are the consumption path.
+#
+# Sealed secrets (logical name → vault origin):
+#   registry-token — the tamias org-registry bearer
+#     (was `cuora://tamias/registry-token` in vault `nine`, seeded
+#     identically under all four envs — env-agnostic, so one sealed
+#     copy retires the vault/env ambiguity; see tamias/tamias.yml
+#     T-037 note). Consumers inject it as TAMIAS_REGISTRY_TOKEN.
+#
+# Recipients: sealed TO the operator age identity
+# (age15m8lntktl0cdva9y0ww44jgkq4epzuy5v0klgdg0d0jkh55nu4kq3ghjnc).
+# Adding org members = re-seal to their pubkeys + publish a new
+# version (ADR-0004 §4 rotation).
+#
+# Authoring: `tamias-driver-cuora seal --in <plaintext-dir> --out
+# <this dir> --recipient age1…` writes sealed/*.age + recipients and
+# prints the sealed: block merged below. NEVER commit plaintext —
+# the publish/install ciphertext gate rejects non-.age payloads.
+name: secrets-9aia
+version: "1.0.0"
+type: secrets
+description: >-
+  9aia org-domain secrets, age-sealed (ADR-0004). Carries the tamias
+  org-registry bearer token; consumable only by recipient keyholders
+  via tamias-driver-cuora open/materialize.
+
+sealed:
+  format: age/v1
+  recipients: sealed/recipients
+  files:
+    registry-token: sealed/registry-token.age
