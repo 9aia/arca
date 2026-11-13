@@ -115,3 +115,33 @@ answers a `ViewResult` with all bindings populated, every binding
 answers a `QueryResult`, malformed lines get `ok:false`, and the
 session survives. Unit tests additionally assert the
 no-value-bearing-query invariant structurally.
+
+## Sealed packs (tamias ADR-0004)
+
+Tamias carries `sealed:` packs as ciphertext only — this driver owns
+everything that touches keys or plaintext (`src/sealed.rs`):
+
+- `seal --in <dir>|NAME=PATH… --out <payload> --recipient age1…`
+  (or `--recipients <file>` / `--keyfile`) — encrypts files into
+  `sealed/` (`recipients` + `<name>.age`) and prints the `sealed:`
+  manifest block to merge into `tamias.yaml`.
+- `open <pack> <name>` / `open cuora://<pack>/<name>` — decrypt one
+  secret to stdout or `--out` (0600). `--dir <payload>` is the
+  `tamias driver exec` dispatch form.
+- `materialize <pack> --out <dir>` — decrypt every declared secret
+  into a fresh dir (0600 files, refuses a non-empty target).
+- `recipients <pack>` — the pack's public age recipients, marking
+  the local keyfile's match.
+- `packs` — installed sealed packs in the tamias store.
+- `install`/`deploy`/`uninstall` — lifecycle no-ops for `type:
+  secrets` packs (`capabilities.types` claims the kind); a
+  non-sealed payload is refused loudly.
+
+Identity is the cuora age keyfile (`~/.config/cuora/identity.txt`,
+0600, `$CUORA_IDENTITY_FILE` / `--keyfile` override) — the same file
+`cuora init` manages. Store resolution mirrors tamias:
+`$TAMIAS_HOME/store` → XDG → `~/.local/share/tamias/store` →
+`./.tamias/store` (`--store` overrides). Every open/materialize
+emits an `Op::Get` audit event (`env: "sealed"`); plaintext lives
+only in `Zeroizing` buffers between read and write — nothing logs
+values.

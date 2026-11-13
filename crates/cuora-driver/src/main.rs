@@ -47,6 +47,7 @@
 
 mod data;
 mod ops;
+mod sealed;
 #[cfg(feature = "mcp")]
 mod surface;
 mod views;
@@ -61,6 +62,19 @@ fn capabilities_json() -> Value {
     // advertises.
     let mut v = kit::capabilities_value(&m);
     v["views"] = json!(m.views.len());
+    // Sealed-pack surface (tamias ADR-0004): the content kinds this
+    // driver claims (`find_driver`'s capabilities fallback maps
+    // `type: secrets` packs here) and the extra argv verbs
+    // `tamias driver exec` may dispatch.
+    v["types"] = json!(sealed::types());
+    let mut verbs = m.verbs.clone();
+    verbs.extend(sealed::verbs().iter().map(|s| s.to_string()));
+    verbs.extend([
+        "install".to_string(),
+        "deploy".to_string(),
+        "uninstall".to_string(),
+    ]);
+    v["verbs"] = json!(verbs);
     v
 }
 
@@ -188,6 +202,17 @@ fn main() {
             let argv = engine_argv(&args[1..]);
             std::process::exit(cuora::run_from(argv));
         }
+        // Sealed packs (tamias ADR-0004): author-side `seal`, and
+        // consumer-side `open`/`materialize`/`recipients`/`packs`
+        // over installed packs — plus the `install`/`deploy`/
+        // `uninstall` lifecycle no-ops tamias dispatches for
+        // `type: secrets` packs.
+        Some(verb @ ("seal" | "open" | "materialize" | "recipients" | "packs")) => {
+            std::process::exit(sealed::run(verb, &args[1..]));
+        }
+        Some(verb @ ("install" | "deploy" | "uninstall")) => {
+            std::process::exit(sealed::run(verb, &args[1..]));
+        }
         // Optional embedded surface (feature-gated): the
         // pavo-driver-kit surface layer renders this driver's own
         // ops manifest as MCP tools over stdio — the same ops the
@@ -207,7 +232,7 @@ fn main() {
         Some("serve") | None => serve(),
         _ => {
             eprintln!(
-                "usage: tamias-driver-cuora manifest|capabilities|ops|run <argv>|cli <cuora argv>|serve\n       (feature `mcp` adds `mcp`)"
+                "usage: tamias-driver-cuora manifest|capabilities|ops|run <argv>|cli <cuora argv>|serve\n       sealed: seal|open|materialize|recipients|packs (+ install|deploy|uninstall no-ops)\n       (feature `mcp` adds `mcp`)"
             );
             1
         }

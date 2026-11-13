@@ -1,6 +1,6 @@
 name: cuora-driver
 path: crates/cuora-driver/Cargo.toml
-purpose: tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values) plus engine ops dispatching to the cuora lib
+purpose: tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values), engine ops dispatching to the cuora lib, and the sealed-pack surface (seal/open/materialize/recipients over tamias ADR-0004 ciphertext-only packs)
 api:
 - name: Ctx
   kind: type
@@ -11,6 +11,11 @@ api:
   kind: type
   file: crates/cuora-driver/src/surface.rs
   line: 22
+  module: cuora-driver
+- name: Env
+  kind: type
+  file: crates/cuora-driver/tests/sealed.rs
+  line: 16
   module: cuora-driver
 - name: FAKE
   kind: const
@@ -24,6 +29,11 @@ api:
   module: cuora-driver
 - name: FAKE
   kind: const
+  file: crates/cuora-driver/tests/sealed.rs
+  line: 14
+  module: cuora-driver
+- name: FAKE
+  kind: const
   file: crates/cuora-driver/tests/smoke.rs
   line: 11
   module: cuora-driver
@@ -32,10 +42,45 @@ api:
   file: crates/cuora-driver/tests/verbs.rs
   line: 11
   module: cuora-driver
+- name: Flags
+  kind: type
+  file: crates/cuora-driver/src/sealed.rs
+  line: 57
+  module: cuora-driver
+- name: Installed
+  kind: type
+  file: crates/cuora-driver/src/sealed.rs
+  line: 142
+  module: cuora-driver
+- name: MATERIALIZE_FLAGS
+  kind: const
+  file: crates/cuora-driver/src/sealed.rs
+  line: 616
+  module: cuora-driver
 - name: MUTATES
   kind: const
   file: crates/cuora-driver/src/ops.rs
   line: 55
+  module: cuora-driver
+- name: OPEN_FLAGS
+  kind: const
+  file: crates/cuora-driver/src/sealed.rs
+  line: 615
+  module: cuora-driver
+- name: PACKS_FLAGS
+  kind: const
+  file: crates/cuora-driver/src/sealed.rs
+  line: 618
+  module: cuora-driver
+- name: RECIPIENTS_FLAGS
+  kind: const
+  file: crates/cuora-driver/src/sealed.rs
+  line: 617
+  module: cuora-driver
+- name: SEAL_FLAGS
+  kind: const
+  file: crates/cuora-driver/src/sealed.rs
+  line: 470
   module: cuora-driver
 - name: SKIP_PARAMS
   kind: const
@@ -57,35 +102,50 @@ api:
   file: crates/cuora-driver/tests/cloud.rs
   line: 16
   module: cuora-driver
+- name: Target
+  kind: type
+  file: crates/cuora-driver/src/sealed.rs
+  line: 271
+  module: cuora-driver
 - name: a_deleted_cwd_is_a_clean_error_not_a_panic
   kind: function
   file: crates/cuora-driver/tests/edges.rs
   line: 317
   module: cuora-driver
+- name: actor
+  kind: function
+  file: crates/cuora-driver/src/sealed.rs
+  line: 445
+  module: cuora-driver
 - name: argv
   kind: function
   file: crates/cuora-driver/src/ops.rs
-  line: 198
+  line: 206
   module: cuora-driver
 - name: argv_maps_params_to_cuora_flags
   kind: function
   file: crates/cuora-driver/src/ops.rs
-  line: 359
+  line: 367
   module: cuora-driver
 - name: argv_omits_globals_when_absent
   kind: function
   file: crates/cuora-driver/src/ops.rs
-  line: 408
+  line: 416
   module: cuora-driver
 - name: argv_run_flattens_secret_pairs_and_cmd
   kind: function
   file: crates/cuora-driver/src/ops.rs
-  line: 387
+  line: 395
   module: cuora-driver
 - name: audit_fallback_covers_every_actor_and_ref_arm
   kind: function
   file: crates/cuora-driver/tests/edges.rs
   line: 448
+  module: cuora-driver
+- name: audit_open
+  kind: function
+  file: crates/cuora-driver/src/sealed.rs
+  line: 456
   module: cuora-driver
 - name: bad_ref_args_fail_before_touching_the_vault
   kind: function
@@ -105,7 +165,7 @@ api:
 - name: capabilities_json
   kind: function
   file: crates/cuora-driver/src/main.rs
-  line: 58
+  line: 59
   module: cuora-driver
 - name: cf_resolution_without_an_explicit_file_notes_the_missing_keyring
   kind: function
@@ -142,78 +202,23 @@ api:
   file: crates/cuora-driver/tests/verbs.rs
   line: 333
   module: cuora-driver
-- name: check_reports_unreachable_cf_vault_not_panic
-  kind: function
-  file: crates/cuora-driver/tests/cloud.rs
-  line: 283
-  module: cuora-driver
-- name: check_secrets_rows
-  kind: function
-  file: crates/cuora-driver/src/data.rs
-  line: 459
-  module: cuora-driver
-- name: check_vaults_rows
-  kind: function
-  file: crates/cuora-driver/src/data.rs
-  line: 435
-  module: cuora-driver
-- name: col
-  kind: function
-  file: crates/cuora-driver/src/views.rs
-  line: 51
-  module: cuora-driver
-- name: config
-  kind: function
-  file: crates/cuora-driver/tests/cloud.rs
-  line: 64
-  module: cuora-driver
-- name: config
-  kind: function
-  file: crates/cuora-driver/tests/edges.rs
-  line: 90
-  module: cuora-driver
-- name: config
-  kind: function
-  file: crates/cuora-driver/tests/verbs.rs
-  line: 71
-  module: cuora-driver
-- name: config_named
-  kind: function
-  file: crates/cuora-driver/tests/verbs.rs
-  line: 64
-  module: cuora-driver
-- name: cuora
-  kind: function
-  file: crates/cuora-driver/tests/cloud.rs
-  line: 18
-  module: cuora-driver
-- name: cuora
-  kind: function
-  file: crates/cuora-driver/tests/edges.rs
-  line: 13
-  module: cuora-driver
-- name: cuora
-  kind: function
-  file: crates/cuora-driver/tests/smoke.rs
-  line: 13
-  module: cuora-driver
-- name: cuora
-  kind: function
-  file: crates/cuora-driver/tests/verbs.rs
-  line: 13
-  module: cuora-driver
-api_omitted: 112
+api_omitted: 179
 deps:
+- age
 - clap
 - cuora
 - cuora-core
+- cuora-identity
+- cuora-identity-file
 - cuora-ops
 - cuora-vault
 - pavo-driver-kit
 - pavo-protocol
 - serde
 - serde_json
+- tamias-core
 - time
+- zeroize
 - cuora-testkit
 - pavo-testkit
 - temp-env
@@ -223,6 +228,11 @@ deps:
 - serde_json
 - cuora-core
 - cuora-ops
+- age
+- cuora-identity
+- cuora-identity-file
+- tamias_core
+- zeroize
 - pavo_protocol
 notes: ''
 verify:
@@ -230,37 +240,41 @@ verify:
 - crates/cuora-driver/src/main.rs
 - crates/cuora-driver/src/data.rs
 - crates/cuora-driver/src/ops.rs
+- crates/cuora-driver/src/sealed.rs
 - crates/cuora-driver/src/surface.rs
 - crates/cuora-driver/src/views.rs
 - crates/cuora-driver/tests/cloud.rs
 - crates/cuora-driver/tests/conformance.rs
 - crates/cuora-driver/tests/edges.rs
-- crates/cuora-driver/tests/smoke.rs
 provenance:
   files:
   - crates/cuora-driver/Cargo.toml
   - crates/cuora-driver/src/data.rs
   - crates/cuora-driver/src/main.rs
   - crates/cuora-driver/src/ops.rs
+  - crates/cuora-driver/src/sealed.rs
   - crates/cuora-driver/src/surface.rs
   - crates/cuora-driver/src/views.rs
   - crates/cuora-driver/tests/cloud.rs
   - crates/cuora-driver/tests/conformance.rs
   - crates/cuora-driver/tests/edges.rs
+  - crates/cuora-driver/tests/sealed.rs
   - crates/cuora-driver/tests/smoke.rs
   - crates/cuora-driver/tests/verbs.rs
   hashes:
-  - 3d5404f29d89d480ac6015c59b99b30f4f5e7ef0
+  - e2965096bbf2050221498c7b1016aff14fc81866
   - 30179227737243cf39cc488c7a7a58561314310f
-  - 67b4478a8d29c124bcf06f659cf6b74b88145bb1
-  - 81917da45bc78a8196ab2686f50a68f2ef0ffcdd
+  - deda2f1008631984ca79cdc71c6db704919aa7c0
+  - f2f8af240ad39f65a5442a2fc81d336f8171a394
+  - 878da9ea1b196817c4e55adc7beb363286d9640e
   - bbbf269e671b5a963663f9714ca655fff7523c0c
   - f540ce8f022cad65a59b22765437395be652d2e7
   - a77bcc051dfbc40a486aa73edbe90599dc23f4ff
   - 813ded7870fb5b58571c0d442840489ffce57261
   - 8c9e31df6ac343eeb1355b64c7d06baaec25f226
+  - 06ac7e2809f1b6b00c09b33732904c23e7cf8748
   - 6ab878eb2c227e551b37dedb8af8eea2dc046289
   - eb98cd23a9bc3a8d9a23d5859c5d69428e81889c
-  commit_sha: 9aa078807f3d952dd07e69bd48851e3ce8243869
-  generated_at: '1794488905'
+  commit_sha: dbfe05134ed0ad7e9bdc134af06bec4bd17c9d3e
+  generated_at: '1794583335'
   generator: kuda-template/0.1.4

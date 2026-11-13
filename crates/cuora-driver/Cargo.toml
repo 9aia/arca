@@ -1,6 +1,6 @@
 [package]
 name = "cuora-driver"
-description = "tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values) plus engine ops dispatching to the cuora lib"
+description = "tamias-driver-cuora — pavo view driver over cuora vault metadata (read-only; never renders secret values), engine ops dispatching to the cuora lib, and the sealed-pack surface (seal/open/materialize/recipients over tamias ADR-0004 ciphertext-only packs)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -24,12 +24,22 @@ mcp = ["pavo-driver-kit/mcp"]
 [dependencies]
 cuora.workspace = true
 cuora-core.workspace = true
+cuora-identity.workspace = true
+cuora-identity-file.workspace = true
 cuora-ops.workspace = true
 cuora-vault.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
+# Sealed packs (tamias ADR-0004): age file encryption for
+# seal/open/materialize + Zeroizing plaintext buffers.
+age.workspace = true
+zeroize.workspace = true
+# The sealed-pack manifest/store contract — `Manifest.sealed`,
+# `StoreRecord`, `RECORD_FILE`, the ciphertext gate helpers. Git dep
+# like pavo-protocol above (path deps break fresh-clone resolution).
+tamias-core = { git = "https://github.com/9aia/tamias", version = "0.1" }
 # The public wire contract — git dep so `cargo install --git` and
 # `cargo xtask install` work without a sibling ../pavo checkout
 # (path deps break workspace resolution on a fresh clone).

@@ -159,6 +159,14 @@ pub fn manifest() -> Value {
             }))
             .collect::<Vec<_>>(),
         "surfaces": SURFACES,
+        // Sealed packs (tamias ADR-0004) are argv verbs on this
+        // binary, not engine ops — they never ride `cli.*`. Listed
+        // here so hosts discover them from the same manifest.
+        "sealed": {
+            "invoke": "tamias-driver-cuora <verb> [args] (or `tamias driver exec <pkg> <verb>` for --dir dispatch)",
+            "verbs": crate::sealed::verbs(),
+            "lifecycle": ["install", "deploy", "uninstall"],
+        },
     })
 }
 
