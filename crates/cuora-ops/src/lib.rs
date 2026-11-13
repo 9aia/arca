@@ -802,22 +802,14 @@ impl Ops {
     /// **Sealed-pack fallback:** a vault miss on an unpinned
     /// two-segment ref (`cuora://<pack>/<secret>`) is retried
     /// against installed sealed tamias packs (see
-    /// [`Self::get_from_pack`]). Vault hits always win — packs are
-    /// the migration target, not an override.
+    /// [`Self::get_from_pack`]) — and so is a vault that can't even
+    /// *open* (no creds, unreachable), since the ref names a pack
+    /// outright (T-053: packs are the vault-less path). Vault hits
+    /// always win — packs are the migration target, not an override.
     pub fn get(&self, rref: &Ref) -> Result<Option<SecretRecord>, OpsError> {
         let (env, r) = self.resolve(rref)?;
         let via = self.alias_from(rref, &r);
-        let rec = self.open_vault(&env)?.get(&env, &r)?;
-        if rec.is_some() {
-            self.audit(Op::Get, &r, &env, via.as_deref());
-            return Ok(rec);
-        }
-        if self.pack_candidate(rref, &r) {
-            if let Some(secret) = self.get_from_pack(&r, Op::Get, via.as_deref())? {
-                return Ok(Some(Self::pack_record(secret)));
-            }
-        }
-        Ok(None)
+        self.read_secret(&env, rref, &r, Op::Get, via.as_deref())
     }
 
     /// Remove a secret; `true` when something was removed.
@@ -893,23 +885,14 @@ impl Ops {
     /// than the selected one). Same event
     /// [`get`](Self::get) emits: one materialization per value out.
     /// Sealed-pack fallback applies here too — packs aren't
-    /// env-routed, so the explicit env is ignored on a pack hit.
+    /// env-routed, so the explicit env is ignored on a pack hit,
+    /// and a vault that can't open doesn't mask the pack either.
     /// `[aliases]` rewrite the path (no env pin is stripped — the
     /// env is explicit).
     pub fn get_in(&self, env: &Env, rref: &Ref) -> Result<Option<SecretRecord>, OpsError> {
         let r = self.config.resolve_alias(rref).map_err(OpsError::Config)?;
         let via = (r.path() != rref.path()).then(|| rref.path());
-        let rec = self.open_vault(env)?.get(env, &r)?;
-        if rec.is_some() {
-            self.audit(Op::Get, &r, env, via.as_deref());
-            return Ok(rec);
-        }
-        if self.pack_candidate(rref, &r) {
-            if let Some(secret) = self.get_from_pack(&r, Op::Get, via.as_deref())? {
-                return Ok(Some(Self::pack_record(secret)));
-            }
-        }
-        Ok(None)
+        self.read_secret(env, rref, &r, Op::Get, via.as_deref())
     }
 
     /// Refs stored in the selected env (or an explicit one).
@@ -999,10 +982,30 @@ impl Ops {
             }
             let (env, r) = self.resolve(&rref)?;
             let via = self.alias_from(&rref, &r);
-            let vault = match vaults.entry(env.as_str().to_string()) {
-                std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),
-                std::collections::btree_map::Entry::Vacant(e) => e.insert(self.open_vault(&env)?),
-            };
+            // The env's vault opens once per env — but a vault that
+            // can't open only fails refs that can't fall back to a
+            // sealed pack: `cuora://<pack>/<secret>` names a pack
+            // outright, so missing vault creds don't mask it (T-053).
+            if !vaults.contains_key(env.as_str()) {
+                match self.open_vault(&env) {
+                    Ok(vault) => {
+                        vaults.insert(env.as_str().to_string(), vault);
+                    }
+                    Err(e) => {
+                        if self.pack_candidate(&rref, &r) {
+                            if let Some(secret) = self.get_from_pack(&r, op, via.as_deref())? {
+                                out.insert(var, secret);
+                                continue;
+                            }
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+            // The key was inserted above — `env` borrows `wanted`'s
+            // iteration, not `vaults`, so this can't race the insert.
+            #[allow(clippy::unwrap_used)]
+            let vault = vaults.get_mut(env.as_str()).unwrap();
             let rec = match vault.get(&env, &r)? {
                 Some(rec) => {
                     self.audit(op, &r, &env, via.as_deref());
@@ -1161,6 +1164,12 @@ impl Ops {
                 }
             };
             let vault_name = self.config.vault_for(&env);
+            // A vault that can't be read is a finding only when the
+            // ref can't fall back to a sealed pack — `cuora://
+            // <pack>/<secret>` names a pack outright, so packs are
+            // the vault-less path (T-053). Defer the problem until
+            // the pack lookup below has answered.
+            let mut vault_problem = None;
             let mut resolves = match opened.get(vault_name) {
                 Some(v) => v.get(&env, &r).map(|rec| rec.is_some()).unwrap_or(false),
                 None => {
@@ -1171,7 +1180,7 @@ impl Ops {
                         .get(vault_name)
                         .map(String::as_str)
                         .unwrap_or("unknown error");
-                    problems.push(format!(
+                    vault_problem = Some(format!(
                         "{var} → {rref}: env {env} vault {vault_name:?} not readable: {err}"
                     ));
                     false
@@ -1186,8 +1195,14 @@ impl Ops {
                     }
                 }
             }
-            if !resolves && is_valid_env_var(var) {
-                problems.push(format!("{var} → {rref} is not stored in env {env}"));
+            if !resolves {
+                match vault_problem {
+                    Some(p) => problems.push(p),
+                    None if is_valid_env_var(var) => {
+                        problems.push(format!("{var} → {rref} is not stored in env {env}"))
+                    }
+                    None => {}
+                }
             }
             secrets.push(SecretCheck {
                 var: var.clone(),
@@ -1284,6 +1299,48 @@ impl Ops {
                 segs[0], segs[1]
             ))),
         }
+    }
+
+    /// The shared read path behind [`Self::get`] and
+    /// [`Self::get_in`]: vault hit wins; a vault *miss* on an
+    /// unpinned two-segment ref retries against installed sealed
+    /// packs; and a vault that can't even *open* still lets a
+    /// pack-shaped ref answer, because `cuora://<pack>/<secret>`
+    /// names a pack outright — sealed packs are the vault-less
+    /// path (T-053). A non-pack ref on an unopenable vault keeps
+    /// the vault's own error, as does a pack ref the pack doesn't
+    /// answer.
+    fn read_secret(
+        &self,
+        env: &Env,
+        rref: &Ref,
+        r: &Ref,
+        op: Op,
+        via: Option<&str>,
+    ) -> Result<Option<SecretRecord>, OpsError> {
+        match self.open_vault(env) {
+            Ok(vault) => {
+                let rec = vault.get(env, r)?;
+                if rec.is_some() {
+                    self.audit(op, r, env, via);
+                    return Ok(rec);
+                }
+            }
+            Err(e) => {
+                if self.pack_candidate(rref, r) {
+                    if let Some(secret) = self.get_from_pack(r, op, via)? {
+                        return Ok(Some(Self::pack_record(secret)));
+                    }
+                }
+                return Err(e);
+            }
+        }
+        if self.pack_candidate(rref, r) {
+            if let Some(secret) = self.get_from_pack(r, op, via)? {
+                return Ok(Some(Self::pack_record(secret)));
+            }
+        }
+        Ok(None)
     }
 
     /// A [`SecretRecord`] for a pack-opened value — packs carry no

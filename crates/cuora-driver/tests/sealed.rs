@@ -560,3 +560,55 @@ fn engine_pack_ref_misses_and_check() {
     let ghost_line = out.lines().find(|l| l.contains("GHOST")).unwrap();
     assert!(ghost_line.contains("NOT STORED"), "{ghost_line}");
 }
+
+// ------------------------------------------- vault-open failure (T-053)
+//
+// `cuora://<pack>/<secret>` names a pack outright, so a vault that
+// can't even *open* (here: an unknown `kind`, which fails before
+// any identity/network work) must not mask a pack hit — packs are
+// the vault-less path. Non-pack refs keep the vault's own error.
+
+/// Point every env at a vault whose `kind` is bogus — `open_vault`
+/// fails deterministically, no network or identity needed.
+fn route_envs_to_bogus_vault(env: &Env) {
+    let cfg_dir = env.home.path().join("home/.config/cuora");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("cuora.toml"),
+        "[envs]\ndev = { vault = \"bogus\" }\n\n[vaults.bogus]\nkind = \"no-such-kind\"\n",
+    )
+    .unwrap();
+}
+
+#[test]
+fn engine_pack_ref_answers_when_vault_cannot_open() {
+    let env = setup();
+    let payload = sealed_payload(&env, "secrets-novault");
+    store_install(&env, &payload, "secrets-novault");
+    route_envs_to_bogus_vault(&env);
+
+    // pack ref → the sealed value, audited under env "sealed"
+    let g = run(&env, &["run", "get", "cuora://secrets-novault/token"]);
+    assert!(g.status.success(), "get: {}", stderr(&g));
+    assert_eq!(stdout(&g).trim_end(), FAKE);
+    assert!(stderr(&g).contains("\"env\":\"sealed\""), "{}", stderr(&g));
+
+    // a vault-shaped ref still reports the vault's own error
+    let v = run(&env, &["run", "get", "cuora://vaultscope/plain"]);
+    assert!(!v.status.success());
+    assert!(stderr(&v).contains("no-such-kind"), "{}", stderr(&v));
+
+    // a pack ref the pack doesn't declare ALSO surfaces the vault
+    // error — the pack miss doesn't invent a "not stored"
+    let m = run(&env, &["run", "get", "cuora://secrets-novault/ghost"]);
+    assert!(!m.status.success());
+    assert!(stderr(&m).contains("no-such-kind"), "{}", stderr(&m));
+
+    // `env -s` injection resolves the pack ref with no vault at all
+    let e = run(
+        &env,
+        &["run", "env", "-s", "TOK=cuora://secrets-novault/token"],
+    );
+    assert!(e.status.success(), "env: {}", stderr(&e));
+    assert!(stdout(&e).contains(FAKE), "{}", stdout(&e));
+}

@@ -28,6 +28,7 @@ provenance:
   - refs/sturn/wal/devin-otel
   - refs/sturn/wal/devin-pl014-e1
   - refs/sturn/wal/devin-t005
+  - refs/sturn/wal/devin-t053
   - refs/sturn/wal/docs
   - refs/sturn/wal/docs-sweep
   - refs/sturn/wal/feat-cached-vault
@@ -51,7 +52,7 @@ provenance:
   - 4823dbd60ab925f782e3ff7b2f2806b344bea609
   - 30c7062fba86691862aa7d27b828ef1d9dd67d27
   - 0e1c7a0e26fb921c6545b2e091cf82131404d731
-  - 510ebddd8a76301fc1894684fb8eb18bd1ab1566
+  - 3543e5590fbb66fdeda146325525c4289771ec90
   - f771b3f93e634d96b46aef1c466b905d55d57234
   - 33b9c7904dc7d1f7d352f6ce1a284ddb99b7d45d
   - 5ad97b62e78e2a63b7aa795d14a687431a5f3cff
@@ -59,6 +60,7 @@ provenance:
   - 6b2d0933550a474492e8e5b53be09ee6e905ab57
   - 599c6442af7654347d3e0c6d5893ffa9c9b747d5
   - afb5449ccb7d427f43c6eb4a3ee4448ed99701d0
+  - 1ddd6326f3bd9045bf76557da945a28528c85dc8
   - 3307c69bdf8fc5ca16d39b8bf82e3047f239b737
   - 9350477e8954246ff72eaafc6e0f17e86e85f610
   - 92c0b17b66ba8b82ed9b04929545bf1a43ec52b9
@@ -78,6 +80,6 @@ provenance:
   - b9534f3f4438b3abbe66b9e113b195a786147910
   - 4c15c0b17f665b5c7cc267f6e0db6537c796f3b1
   - 48e8d19c3ae7c37264451b468a841654a1f7fba3
-  commit_sha: 7edd027d33c573ea9fd5ad1dbb15d75a768548a7
-  generated_at: '1794601469'
+  commit_sha: 3486d41e00334bb9f8e39d9b4885253979c55872
+  generated_at: '1794609706'
   generator: kuda-template/0.1.4
