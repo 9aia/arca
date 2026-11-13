@@ -41,6 +41,7 @@ export default defineConfig({
           { text: "Deploy to a sink", link: "/how-to/deploy-to-a-sink" },
           { text: "Guardrails for agents", link: "/how-to/guardrails-for-agents" },
           { text: "Cloudflare Worker setup", link: "/how-to/cloudflare-worker-setup" },
+          { text: "Ship secrets as a sealed pack", link: "/how-to/sealed-packs" },
         ],
       },
       {
