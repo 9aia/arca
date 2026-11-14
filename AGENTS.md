@@ -161,6 +161,10 @@ commit their contents to `main`.
   surfaces can mute live stderr and replay on exit.
 - Secrets never enter via CLI args (args land in shell history and
   `/proc`) — stdin, prompt, or keychain only.
+- Env-agnostic secrets have a convention: read-only consumer secrets
+  go in sealed packs (no env axis); secrets needing vault writes live
+  in `prod` only; per-env values replicate deliberately. See
+  `docs/how-to/add-a-secret.md`.
 - Agents never hand-edit `project/` when a `myco` verb exists.
 - `.agents/skills/` is the canonical skill location;
   `skills-lock.json` pins upstream skills.
