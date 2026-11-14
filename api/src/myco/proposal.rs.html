@@ -64,33 +64,34 @@
 <a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">let </span><span class="kw-2">mut </span>file = items::item_for_edit(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
 <a href=#65 id=65 data-nosnippet>65</a>    <span class="kw">let </span>from = file.meta.status;
 <a href=#66 id=66 data-nosnippet>66</a>    items::walk_to(<span class="kw-2">&amp;mut </span>file.meta, to)<span class="question-mark">?</span>;
-<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">let </span>item = file.meta.clone();
-<a href=#68 id=68 data-nosnippet>68</a>    store.save_item(<span class="kw-2">&amp;</span>file).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">let </span>committed = items::commit(
-<a href=#70 id=70 data-nosnippet>70</a>        <span class="kw-2">&amp;</span>proj.worktree,
-<a href=#71 id=71 data-nosnippet>71</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: proposal {id} → {to}"</span>),
-<a href=#72 id=72 data-nosnippet>72</a>        <span class="prelude-val">None</span>,
-<a href=#73 id=73 data-nosnippet>73</a>        ctx.no_commit,
-<a href=#74 id=74 data-nosnippet>74</a>    )<span class="question-mark">?</span>;
-<a href=#75 id=75 data-nosnippet>75</a>    items::report(
-<a href=#76 id=76 data-nosnippet>76</a>        <span class="macro">json!</span>({<span class="string">"item"</span>: item, <span class="string">"from"</span>: from.token(), <span class="string">"to"</span>: to.token()}),
-<a href=#77 id=77 data-nosnippet>77</a>        committed,
-<a href=#78 id=78 data-nosnippet>78</a>        ctx.json,
-<a href=#79 id=79 data-nosnippet>79</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{id}: {from} → {to}"</span>),
-<a href=#80 id=80 data-nosnippet>80</a>    )
-<a href=#81 id=81 data-nosnippet>81</a>}
-<a href=#82 id=82 data-nosnippet>82</a>
-<a href=#83 id=83 data-nosnippet>83</a><span class="attr">#[cfg(test)]
-<a href=#84 id=84 data-nosnippet>84</a></span><span class="kw">mod </span>tests {
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#86 id=86 data-nosnippet>86</a>
-<a href=#87 id=87 data-nosnippet>87</a>    <span class="attr">#[test]
-<a href=#88 id=88 data-nosnippet>88</a>    </span><span class="kw">fn </span>proposal_status_mapping() {
-<a href=#89 id=89 data-nosnippet>89</a>        <span class="macro">assert_eq!</span>(proposal_status(<span class="string">"draft"</span>), <span class="prelude-val">Ok</span>(Status::Open));
-<a href=#90 id=90 data-nosnippet>90</a>        <span class="macro">assert_eq!</span>(proposal_status(<span class="string">"accepted"</span>), <span class="prelude-val">Ok</span>(Status::Done));
-<a href=#91 id=91 data-nosnippet>91</a>        <span class="macro">assert_eq!</span>(proposal_status(<span class="string">"rejected"</span>), <span class="prelude-val">Ok</span>(Status::Deferred));
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="macro">assert_eq!</span>(proposal_status(<span class="string">"blocked"</span>), <span class="prelude-val">Ok</span>(Status::Blocked));
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="macro">assert!</span>(proposal_status(<span class="string">"wip"</span>).is_err());
-<a href=#94 id=94 data-nosnippet>94</a>    }
-<a href=#95 id=95 data-nosnippet>95</a>}
+<a href=#67 id=67 data-nosnippet>67</a>    items::stamp_done(<span class="kw-2">&amp;mut </span>file.meta);
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">let </span>item = file.meta.clone();
+<a href=#69 id=69 data-nosnippet>69</a>    store.save_item(<span class="kw-2">&amp;</span>file).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">let </span>committed = items::commit(
+<a href=#71 id=71 data-nosnippet>71</a>        <span class="kw-2">&amp;</span>proj.worktree,
+<a href=#72 id=72 data-nosnippet>72</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: proposal {id} → {to}"</span>),
+<a href=#73 id=73 data-nosnippet>73</a>        <span class="prelude-val">None</span>,
+<a href=#74 id=74 data-nosnippet>74</a>        ctx.no_commit,
+<a href=#75 id=75 data-nosnippet>75</a>    )<span class="question-mark">?</span>;
+<a href=#76 id=76 data-nosnippet>76</a>    items::report(
+<a href=#77 id=77 data-nosnippet>77</a>        <span class="macro">json!</span>({<span class="string">"item"</span>: item, <span class="string">"from"</span>: from.token(), <span class="string">"to"</span>: to.token()}),
+<a href=#78 id=78 data-nosnippet>78</a>        committed,
+<a href=#79 id=79 data-nosnippet>79</a>        ctx.json,
+<a href=#80 id=80 data-nosnippet>80</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{id}: {from} → {to}"</span>),
+<a href=#81 id=81 data-nosnippet>81</a>    )
+<a href=#82 id=82 data-nosnippet>82</a>}
+<a href=#83 id=83 data-nosnippet>83</a>
+<a href=#84 id=84 data-nosnippet>84</a><span class="attr">#[cfg(test)]
+<a href=#85 id=85 data-nosnippet>85</a></span><span class="kw">mod </span>tests {
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="attr">#[test]
+<a href=#89 id=89 data-nosnippet>89</a>    </span><span class="kw">fn </span>proposal_status_mapping() {
+<a href=#90 id=90 data-nosnippet>90</a>        <span class="macro">assert_eq!</span>(proposal_status(<span class="string">"draft"</span>), <span class="prelude-val">Ok</span>(Status::Open));
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="macro">assert_eq!</span>(proposal_status(<span class="string">"accepted"</span>), <span class="prelude-val">Ok</span>(Status::Done));
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="macro">assert_eq!</span>(proposal_status(<span class="string">"rejected"</span>), <span class="prelude-val">Ok</span>(Status::Deferred));
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="macro">assert_eq!</span>(proposal_status(<span class="string">"blocked"</span>), <span class="prelude-val">Ok</span>(Status::Blocked));
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="macro">assert!</span>(proposal_status(<span class="string">"wip"</span>).is_err());
+<a href=#95 id=95 data-nosnippet>95</a>    }
+<a href=#96 id=96 data-nosnippet>96</a>}
 </code></pre></div></section></main></body></html>

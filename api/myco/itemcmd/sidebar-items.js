@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["h_set","h_show"]};
+window.SIDEBAR_ITEMS = {"fn":["h_reorder","h_set","h_show"]};

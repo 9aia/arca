@@ -52,81 +52,82 @@
 <a href=#52 id=52 data-nosnippet>52</a>    items::require_kind(id, ItemKind::Issue, <span class="string">"issue resolve"</span>)<span class="question-mark">?</span>;
 <a href=#53 id=53 data-nosnippet>53</a>    <span class="kw">let </span><span class="kw-2">mut </span>file = items::item_for_edit(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
 <a href=#54 id=54 data-nosnippet>54</a>    items::walk_to(<span class="kw-2">&amp;mut </span>file.meta, Status::Done)<span class="question-mark">?</span>;
-<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(res) = a.opt(<span class="string">"resolution"</span>) {
-<a href=#56 id=56 data-nosnippet>56</a>        templates::append_to_section(<span class="kw-2">&amp;mut </span>file.body, <span class="string">"## Resolution"</span>, res);
-<a href=#57 id=57 data-nosnippet>57</a>        file.body = myco_core::canonical_body(<span class="kw-2">&amp;</span>file.body).to_string();
-<a href=#58 id=58 data-nosnippet>58</a>    }
-<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span>item = file.meta.clone();
-<a href=#60 id=60 data-nosnippet>60</a>    store.save_item(<span class="kw-2">&amp;</span>file).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">let </span>committed = items::commit(
-<a href=#62 id=62 data-nosnippet>62</a>        <span class="kw-2">&amp;</span>proj.worktree,
-<a href=#63 id=63 data-nosnippet>63</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: resolve {id}"</span>),
-<a href=#64 id=64 data-nosnippet>64</a>        <span class="prelude-val">None</span>,
-<a href=#65 id=65 data-nosnippet>65</a>        ctx.no_commit,
-<a href=#66 id=66 data-nosnippet>66</a>    )<span class="question-mark">?</span>;
-<a href=#67 id=67 data-nosnippet>67</a>    items::report(
-<a href=#68 id=68 data-nosnippet>68</a>        <span class="macro">json!</span>({<span class="string">"item"</span>: item}),
-<a href=#69 id=69 data-nosnippet>69</a>        committed,
-<a href=#70 id=70 data-nosnippet>70</a>        ctx.json,
-<a href=#71 id=71 data-nosnippet>71</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"resolved {id}"</span>),
-<a href=#72 id=72 data-nosnippet>72</a>    )
-<a href=#73 id=73 data-nosnippet>73</a>}
-<a href=#74 id=74 data-nosnippet>74</a>
-<a href=#75 id=75 data-nosnippet>75</a><span class="doccomment">/// The `issue archive` verb.
-<a href=#76 id=76 data-nosnippet>76</a></span><span class="kw">pub fn </span>h_archive(ctx: <span class="kw-2">&amp;</span>Ctx, a: <span class="kw-2">&amp;</span>Args) -&gt; <span class="prelude-ty">Result</span>&lt;i32, String&gt; {
-<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">let </span>(proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())<span class="question-mark">?</span>;
-<a href=#78 id=78 data-nosnippet>78</a>    <span class="kw">let </span>id = a.req::&lt;ItemId&gt;(<span class="string">"id"</span>)<span class="question-mark">?</span>;
-<a href=#79 id=79 data-nosnippet>79</a>    items::require_kind(id, ItemKind::Issue, <span class="string">"issue archive"</span>)<span class="question-mark">?</span>;
-<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">let </span>file = items::item_for_edit(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
-<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">if </span>file.meta.status != Status::Done {
-<a href=#82 id=82 data-nosnippet>82</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(
-<a href=#83 id=83 data-nosnippet>83</a>            <span class="string">"{id} must be done before archiving (status: {}) — resolve it first"</span>,
-<a href=#84 id=84 data-nosnippet>84</a>            file.meta.status
-<a href=#85 id=85 data-nosnippet>85</a>        ));
-<a href=#86 id=86 data-nosnippet>86</a>    }
-<a href=#87 id=87 data-nosnippet>87</a>    store.archive_item(id).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#88 id=88 data-nosnippet>88</a>    <span class="comment">// asked after the move so the impl reports the
-<a href=#89 id=89 data-nosnippet>89</a>    // archive-scope path itself
-<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="kw">let </span>rel = items::item_rel_path(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>file.meta)<span class="question-mark">?</span>;
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">let </span>committed = items::commit(
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw-2">&amp;</span>proj.worktree,
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: archive {id}"</span>),
-<a href=#94 id=94 data-nosnippet>94</a>        <span class="prelude-val">None</span>,
-<a href=#95 id=95 data-nosnippet>95</a>        ctx.no_commit,
-<a href=#96 id=96 data-nosnippet>96</a>    )<span class="question-mark">?</span>;
-<a href=#97 id=97 data-nosnippet>97</a>    items::report(
-<a href=#98 id=98 data-nosnippet>98</a>        <span class="macro">json!</span>({<span class="string">"item"</span>: file.meta, <span class="string">"archived_to"</span>: rel}),
-<a href=#99 id=99 data-nosnippet>99</a>        committed,
-<a href=#100 id=100 data-nosnippet>100</a>        ctx.json,
-<a href=#101 id=101 data-nosnippet>101</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"archived {id} → {rel}"</span>),
-<a href=#102 id=102 data-nosnippet>102</a>    )
-<a href=#103 id=103 data-nosnippet>103</a>}
-<a href=#104 id=104 data-nosnippet>104</a>
-<a href=#105 id=105 data-nosnippet>105</a><span class="doccomment">/// The `issue comment` verb.
-<a href=#106 id=106 data-nosnippet>106</a></span><span class="kw">pub fn </span>h_comment(ctx: <span class="kw-2">&amp;</span>Ctx, a: <span class="kw-2">&amp;</span>Args) -&gt; <span class="prelude-ty">Result</span>&lt;i32, String&gt; {
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">let </span>(proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())<span class="question-mark">?</span>;
-<a href=#108 id=108 data-nosnippet>108</a>    <span class="kw">let </span>id = a.req::&lt;ItemId&gt;(<span class="string">"id"</span>)<span class="question-mark">?</span>;
-<a href=#109 id=109 data-nosnippet>109</a>    items::require_kind(id, ItemKind::Issue, <span class="string">"issue comment"</span>)<span class="question-mark">?</span>;
-<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span><span class="kw-2">mut </span>file = items::item_for_edit(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>line = <span class="macro">format!</span>(
-<a href=#112 id=112 data-nosnippet>112</a>        <span class="string">"- {} {}"</span>,
-<a href=#113 id=113 data-nosnippet>113</a>        myco_core::date::render(items::today()),
-<a href=#114 id=114 data-nosnippet>114</a>        a.text(<span class="string">"text"</span>)<span class="question-mark">?
-<a href=#115 id=115 data-nosnippet>115</a>    </span>);
-<a href=#116 id=116 data-nosnippet>116</a>    templates::append_to_section(<span class="kw-2">&amp;mut </span>file.body, <span class="string">"## Comments"</span>, <span class="kw-2">&amp;</span>line);
-<a href=#117 id=117 data-nosnippet>117</a>    file.body = myco_core::canonical_body(<span class="kw-2">&amp;</span>file.body).to_string();
-<a href=#118 id=118 data-nosnippet>118</a>    store.save_item(<span class="kw-2">&amp;</span>file).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">let </span>committed = items::commit(
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw-2">&amp;</span>proj.worktree,
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: comment {id}"</span>),
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="prelude-val">None</span>,
-<a href=#123 id=123 data-nosnippet>123</a>        ctx.no_commit,
-<a href=#124 id=124 data-nosnippet>124</a>    )<span class="question-mark">?</span>;
-<a href=#125 id=125 data-nosnippet>125</a>    items::report(
-<a href=#126 id=126 data-nosnippet>126</a>        <span class="macro">json!</span>({<span class="string">"item"</span>: file.meta}),
-<a href=#127 id=127 data-nosnippet>127</a>        committed,
-<a href=#128 id=128 data-nosnippet>128</a>        ctx.json,
-<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"commented on {id}"</span>),
-<a href=#130 id=130 data-nosnippet>130</a>    )
-<a href=#131 id=131 data-nosnippet>131</a>}
+<a href=#55 id=55 data-nosnippet>55</a>    items::stamp_done(<span class="kw-2">&amp;mut </span>file.meta);
+<a href=#56 id=56 data-nosnippet>56</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(res) = a.opt(<span class="string">"resolution"</span>) {
+<a href=#57 id=57 data-nosnippet>57</a>        templates::append_to_section(<span class="kw-2">&amp;mut </span>file.body, <span class="string">"## Resolution"</span>, res);
+<a href=#58 id=58 data-nosnippet>58</a>        file.body = myco_core::canonical_body(<span class="kw-2">&amp;</span>file.body).to_string();
+<a href=#59 id=59 data-nosnippet>59</a>    }
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">let </span>item = file.meta.clone();
+<a href=#61 id=61 data-nosnippet>61</a>    store.save_item(<span class="kw-2">&amp;</span>file).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">let </span>committed = items::commit(
+<a href=#63 id=63 data-nosnippet>63</a>        <span class="kw-2">&amp;</span>proj.worktree,
+<a href=#64 id=64 data-nosnippet>64</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: resolve {id}"</span>),
+<a href=#65 id=65 data-nosnippet>65</a>        <span class="prelude-val">None</span>,
+<a href=#66 id=66 data-nosnippet>66</a>        ctx.no_commit,
+<a href=#67 id=67 data-nosnippet>67</a>    )<span class="question-mark">?</span>;
+<a href=#68 id=68 data-nosnippet>68</a>    items::report(
+<a href=#69 id=69 data-nosnippet>69</a>        <span class="macro">json!</span>({<span class="string">"item"</span>: item}),
+<a href=#70 id=70 data-nosnippet>70</a>        committed,
+<a href=#71 id=71 data-nosnippet>71</a>        ctx.json,
+<a href=#72 id=72 data-nosnippet>72</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"resolved {id}"</span>),
+<a href=#73 id=73 data-nosnippet>73</a>    )
+<a href=#74 id=74 data-nosnippet>74</a>}
+<a href=#75 id=75 data-nosnippet>75</a>
+<a href=#76 id=76 data-nosnippet>76</a><span class="doccomment">/// The `issue archive` verb.
+<a href=#77 id=77 data-nosnippet>77</a></span><span class="kw">pub fn </span>h_archive(ctx: <span class="kw-2">&amp;</span>Ctx, a: <span class="kw-2">&amp;</span>Args) -&gt; <span class="prelude-ty">Result</span>&lt;i32, String&gt; {
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="kw">let </span>(proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())<span class="question-mark">?</span>;
+<a href=#79 id=79 data-nosnippet>79</a>    <span class="kw">let </span>id = a.req::&lt;ItemId&gt;(<span class="string">"id"</span>)<span class="question-mark">?</span>;
+<a href=#80 id=80 data-nosnippet>80</a>    items::require_kind(id, ItemKind::Issue, <span class="string">"issue archive"</span>)<span class="question-mark">?</span>;
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">let </span>file = items::item_for_edit(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">if </span>file.meta.status != Status::Done {
+<a href=#83 id=83 data-nosnippet>83</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(
+<a href=#84 id=84 data-nosnippet>84</a>            <span class="string">"{id} must be done before archiving (status: {}) — resolve it first"</span>,
+<a href=#85 id=85 data-nosnippet>85</a>            file.meta.status
+<a href=#86 id=86 data-nosnippet>86</a>        ));
+<a href=#87 id=87 data-nosnippet>87</a>    }
+<a href=#88 id=88 data-nosnippet>88</a>    store.archive_item(id).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="comment">// asked after the move so the impl reports the
+<a href=#90 id=90 data-nosnippet>90</a>    // archive-scope path itself
+<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="kw">let </span>rel = items::item_rel_path(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>file.meta)<span class="question-mark">?</span>;
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">let </span>committed = items::commit(
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw-2">&amp;</span>proj.worktree,
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: archive {id}"</span>),
+<a href=#95 id=95 data-nosnippet>95</a>        <span class="prelude-val">None</span>,
+<a href=#96 id=96 data-nosnippet>96</a>        ctx.no_commit,
+<a href=#97 id=97 data-nosnippet>97</a>    )<span class="question-mark">?</span>;
+<a href=#98 id=98 data-nosnippet>98</a>    items::report(
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="macro">json!</span>({<span class="string">"item"</span>: file.meta, <span class="string">"archived_to"</span>: rel}),
+<a href=#100 id=100 data-nosnippet>100</a>        committed,
+<a href=#101 id=101 data-nosnippet>101</a>        ctx.json,
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"archived {id} → {rel}"</span>),
+<a href=#103 id=103 data-nosnippet>103</a>    )
+<a href=#104 id=104 data-nosnippet>104</a>}
+<a href=#105 id=105 data-nosnippet>105</a>
+<a href=#106 id=106 data-nosnippet>106</a><span class="doccomment">/// The `issue comment` verb.
+<a href=#107 id=107 data-nosnippet>107</a></span><span class="kw">pub fn </span>h_comment(ctx: <span class="kw-2">&amp;</span>Ctx, a: <span class="kw-2">&amp;</span>Args) -&gt; <span class="prelude-ty">Result</span>&lt;i32, String&gt; {
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="kw">let </span>(proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())<span class="question-mark">?</span>;
+<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw">let </span>id = a.req::&lt;ItemId&gt;(<span class="string">"id"</span>)<span class="question-mark">?</span>;
+<a href=#110 id=110 data-nosnippet>110</a>    items::require_kind(id, ItemKind::Issue, <span class="string">"issue comment"</span>)<span class="question-mark">?</span>;
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span><span class="kw-2">mut </span>file = items::item_for_edit(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
+<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">let </span>line = <span class="macro">format!</span>(
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="string">"- {} {}"</span>,
+<a href=#114 id=114 data-nosnippet>114</a>        myco_core::date::render(items::today()),
+<a href=#115 id=115 data-nosnippet>115</a>        a.text(<span class="string">"text"</span>)<span class="question-mark">?
+<a href=#116 id=116 data-nosnippet>116</a>    </span>);
+<a href=#117 id=117 data-nosnippet>117</a>    templates::append_to_section(<span class="kw-2">&amp;mut </span>file.body, <span class="string">"## Comments"</span>, <span class="kw-2">&amp;</span>line);
+<a href=#118 id=118 data-nosnippet>118</a>    file.body = myco_core::canonical_body(<span class="kw-2">&amp;</span>file.body).to_string();
+<a href=#119 id=119 data-nosnippet>119</a>    store.save_item(<span class="kw-2">&amp;</span>file).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">let </span>committed = items::commit(
+<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw-2">&amp;</span>proj.worktree,
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: comment {id}"</span>),
+<a href=#123 id=123 data-nosnippet>123</a>        <span class="prelude-val">None</span>,
+<a href=#124 id=124 data-nosnippet>124</a>        ctx.no_commit,
+<a href=#125 id=125 data-nosnippet>125</a>    )<span class="question-mark">?</span>;
+<a href=#126 id=126 data-nosnippet>126</a>    items::report(
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="macro">json!</span>({<span class="string">"item"</span>: file.meta}),
+<a href=#128 id=128 data-nosnippet>128</a>        committed,
+<a href=#129 id=129 data-nosnippet>129</a>        ctx.json,
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"commented on {id}"</span>),
+<a href=#131 id=131 data-nosnippet>131</a>    )
+<a href=#132 id=132 data-nosnippet>132</a>}
 </code></pre></div></section></main></body></html>

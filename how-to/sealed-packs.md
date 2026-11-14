@@ -14,6 +14,12 @@ registry-published, installed on every machine — instead of living
 in one vault. `cuora://<pack>/<secret>` refs then resolve through
 the installed pack everywhere vault refs do.
 
+Sealed packs are the right home for **env-agnostic, read-only**
+secrets — they carry no env axis, so one sealed copy serves every
+env. Secrets that need vault writes (`rotate`/`deploy`) or are
+genuinely per-env stay in the vault; see the
+[env-agnostic convention](add-a-secret.md#env-agnostic-secrets--pick-a-home-first).
+
 ## Author: seal a payload
 
 Plaintext files in, `sealed/` ciphertext out:

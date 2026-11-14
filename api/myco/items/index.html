@@ -58,7 +58,12 @@ indents children 2 spaces per level under their parent.</dd><dt><a class="fn" hr
 <code>(item, archived)</code> pairs. Non-CLI front-ends (<code>myco serve</code>)
 shape it themselves — <a href="fn.marked_json.html" title="fn myco::items::marked_json"><code>marked_json</code></a> is the list shape.</dd><dt><a class="fn" href="fn.report.html" title="fn myco::items::report">report</a></dt><dd>Standard mutation output: <code>--json</code> gets <code>payload</code> plus a
 <code>committed</code> key; human output is one line.</dd><dt><a class="fn" href="fn.require_kind.html" title="fn myco::items::require_kind">require_<wbr>kind</a></dt><dd>Verbs are kind-locked — <code>myco issue resolve T-001</code> is a usage
-error, not a lookup failure.</dd><dt><a class="fn" href="fn.save_done.html" title="fn myco::items::save_done">save_<wbr>done</a></dt><dd>Write <code>DONE.md</code> back through the store.</dd><dt><a class="fn" href="fn.save_ledger.html" title="fn myco::items::save_ledger">save_<wbr>ledger</a></dt><dd>Write both ledger docs back through the store.</dd><dt><a class="fn" href="fn.status_path.html" title="fn myco::items::status_path">status_<wbr>path</a></dt><dd>The shortest legal path <code>from → to</code>, or the transition error
+error, not a lookup failure.</dd><dt><a class="fn" href="fn.save_done.html" title="fn myco::items::save_done">save_<wbr>done</a></dt><dd>Write <code>DONE.md</code> back through the store.</dd><dt><a class="fn" href="fn.save_ledger.html" title="fn myco::items::save_ledger">save_<wbr>ledger</a></dt><dd>Write both ledger docs back through the store.</dd><dt><a class="fn" href="fn.stamp_done.html" title="fn myco::items::stamp_done">stamp_<wbr>done</a></dt><dd><code>done:</code> archive stamp — write-once: set when the item sits at
+<code>Done</code> with no stamp; a stamp already present is never
+rewritten (undo/redo restores, re-archives). Callers run it
+after status mutations that can land on <code>Done</code>; the reopen
+direction clears the field instead (see <code>walk_to</code> /
+<code>item set</code>’s apply path).</dd><dt><a class="fn" href="fn.status_path.html" title="fn myco::items::status_path">status_<wbr>path</a></dt><dd>The shortest legal path <code>from → to</code>, or the transition error
 naming the valid targets.</dd><dt><a class="fn" href="fn.targets.html" title="fn myco::items::targets">targets</a></dt><dd><code>"claimed, in-progress, deferred"</code> / <code>"none (terminal)"</code> — the
 valid-targets suffix on transition errors.</dd><dt><a class="fn" href="fn.today.html" title="fn myco::items::today">today</a></dt><dd>Today’s date — <code>created:</code> values and comment timestamps.</dd><dt><a class="fn" href="fn.tree_view.html" title="fn myco::items::tree_view">tree_<wbr>view</a></dt><dd>Depth-tagged pre-order view — list UIs indent children under
 their parent by it. Iterative (explicit stack, children pushed
@@ -69,6 +74,9 @@ BACKLOG.md, and children park/unpark with their parent. Nodes
 already at <code>to</code> are left alone (identity isn’t a transition).
 All-or-nothing: the whole subtree is validated before any
 status moves, so an unreachable target can’t leave earlier
-siblings half-transitioned.</dd><dt><a class="fn" href="fn.walk_to.html" title="fn myco::items::walk_to">walk_to</a></dt><dd>Walk <code>item</code> along <a href="fn.status_path.html" title="fn myco::items::status_path"><code>status_path</code></a> to <code>to</code>, validating each hop.</dd></dl><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><dl class="item-table"><dt><a class="type" href="type.LockedStore.html" title="type myco::items::LockedStore">Locked<wbr>Store</a></dt><dd>The store the CLI’s verbs share — <code>myco_ops</code>’s lock-holding
+siblings half-transitioned.</dd><dt><a class="fn" href="fn.walk_to.html" title="fn myco::items::walk_to">walk_to</a></dt><dd>Walk <code>item</code> along <a href="fn.status_path.html" title="fn myco::items::status_path"><code>status_path</code></a> to <code>to</code>, validating each hop.
+The <code>done:</code> archive stamp tracks completion: leaving <code>Done</code>
+clears it (a re-archive stamps the new date); reaching <code>Done</code>
+leaves stamping to the caller — the walk is pure, no clock.</dd></dl><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><dl class="item-table"><dt><a class="type" href="type.LockedStore.html" title="type myco::items::LockedStore">Locked<wbr>Store</a></dt><dd>The store the CLI’s verbs share — <code>myco_ops</code>’s lock-holding
 handle specialized to <code>MdStore</code> (the composition root names
 the impl).</dd></dl></section></div></main></body></html>
