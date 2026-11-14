@@ -42,6 +42,22 @@ printf prod-token  | cuora put cuora://prod/billing/stripe   # env pin
 `cuora://prod/…` pins the env regardless of `--env`/`CUORA_ENV`;
 the bare form resolves under the selected env.
 
+## Env-agnostic secrets — pick a home first
+
+Some secrets have one value regardless of environment (registry
+tokens, signing material, machine credentials). Don't replicate
+them across envs by default — choose deliberately:
+
+| Kind | Home |
+| ---- | ---- |
+| env-agnostic, **read-only** for consumers (tokens, keys) | a sealed pack (`cuora://<pack>/<name>` — no env axis at all; see [sealed packs](sealed-packs.md)) |
+| env-agnostic, needs `rotate`/`deploy`/vault writes | vault **`prod` only** — convention: publisher/operator credentials resolve under `--env prod`; consumers that need them run in prod context |
+| genuinely per-env values | every env that needs it, as above |
+
+There is no `put --env all`: replication is a deliberate act
+(`get --env prod … | put --env <e> …` per extra env), which keeps
+env drift visible instead of silently fanning out.
+
 ## Upsert semantics
 
 `put` is an upsert: a new ref starts at `version = 1`; re-putting
